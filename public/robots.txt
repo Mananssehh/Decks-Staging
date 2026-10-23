@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dj
+Disallow: /dj/
+Disallow: /auth/callback
+Disallow: /profile
+Disallow: /event/
+
+Sitemap: https://linku99.com/sitemap.xml

@@ -1,0 +1,380 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Archive as ArchiveIcon, Copy, Loader2, Plus, QrCode, Radio, Settings, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { AppHeader } from "@/components/AppHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { PayoutStatusCard } from "@/components/PayoutStatusCard";
+import { eventSchema } from "@/lib/validation";
+import { EventQR } from "@/components/EventQR";
+import { logCritical } from "@/lib/errorLogger";
+
+interface EventRow {
+  id: string;
+  name: string;
+  venue: string | null;
+  dj_name: string;
+  room_code: string;
+  is_active: boolean;
+  created_at: string;
+  requests_status?: string;
+}
+
+interface CreateForm {
+  name: string;
+  venue: string;
+  dj_name: string;
+
+  allow_explicit: boolean;
+  require_approval: boolean;
+  cooldown_seconds: number;
+  rules_text: string;
+}
+
+const DJDashboard = () => {
+  const { user, isDJ, loading: authLoading, profile } = useAuth();
+  const navigate = useNavigate();
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [qrEvent, setQrEvent] = useState<EventRow | null>(null);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      navigate("/auth?role=dj", { replace: true, state: { from: "/dj" } });
+    } else if (!isDJ) {
+      navigate("/auth?role=dj", { replace: true });
+    }
+  }, [user, isDJ, authLoading, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("events")
+        .select("*")
+        .eq("dj_id", user.id)
+        .order("created_at", { ascending: false });
+      setEvents(data ?? []);
+      setLoading(false);
+    })();
+  }, [user]);
+
+  const { active, past } = useMemo(() => {
+    const a: EventRow[] = [];
+    const p: EventRow[] = [];
+    for (const e of events) (e.is_active ? a : p).push(e);
+    return { active: a, past: p };
+  }, [events]);
+
+  const handleCreate = async (form: CreateForm) => {
+    const parsed = eventSchema.safeParse({ name: form.name, venue: form.venue, dj_name: form.dj_name });
+    if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+    if (!user) throw new Error("Not signed in");
+
+    // Atomic, DJ-only creation: the room code is generated and reserved
+    // server-side, so the app never probes whether a code already exists.
+    const { data: created, error } = await (supabase as any).rpc("create_event", {
+      _name: parsed.data.name,
+      _venue: parsed.data.venue || null,
+      _dj_name: parsed.data.dj_name,
+      _allow_explicit: form.allow_explicit,
+      _require_approval: form.require_approval,
+      _cooldown_seconds: Math.max(0, Math.min(600, Math.floor(form.cooldown_seconds))),
+      _rules_text: form.rules_text.trim() || null,
+    });
+    if (error) {
+      logCritical("DJDashboard.createEvent", error.message, { djId: user.id });
+      throw error;
+    }
+    const row = Array.isArray(created) ? created[0] : created;
+    if (!row) throw new Error("Could not create the event. Please try again.");
+
+    setEvents((prev) => [
+      {
+        id: row.id,
+        name: row.name,
+        venue: parsed.data.venue || null,
+        dj_name: parsed.data.dj_name,
+        room_code: row.room_code,
+        is_active: true,
+        requests_status: "live",
+        created_at: row.created_at,
+      } as EventRow,
+      ...prev,
+    ]);
+    setCreateOpen(false);
+    toast.success("Event created!");
+    navigate(`/dj/${row.id}`);
+  };
+
+
+  const copyJoinLink = (code: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/join?code=${code}`);
+    toast.success("Join link copied");
+  };
+
+  const toggleActive = async (ev: EventRow) => {
+    const next = ev.is_active ? "ended" : "live";
+    const { error } = await supabase.from("events").update({ requests_status: next }).eq("id", ev.id);
+    if (error) return toast.error(error.message);
+    setEvents((prev) => prev.map((e) => (e.id === ev.id ? { ...e, is_active: !ev.is_active } : e)));
+    toast.success(next === "live" ? "Event reopened" : "Event ended");
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader />
+        <div className="container py-20 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <AppHeader />
+      <div className="container max-w-5xl py-8">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">DJ Dashboard</h1>
+            <p className="text-muted-foreground">Welcome back, {profile?.nickname}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link to="/dj/archive"><ArchiveIcon className="mr-1 h-4 w-4" /> Archive</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/dj/earnings"><Zap className="mr-1 h-4 w-4" /> Earnings</Link>
+            </Button>
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button variant="premium">
+                  <Plus className="mr-1 h-4 w-4" /> New event
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create live event</DialogTitle>
+                </DialogHeader>
+                <CreateEventForm defaultDJ={profile?.nickname ?? ""} onCreate={handleCreate} />
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <StatCard label="Active events" value={active.length} />
+          <StatCard label="Past events" value={past.length} />
+          <StatCard label="Total" value={events.length} />
+        </div>
+
+        <div className="mb-8">
+          <PayoutStatusCard />
+        </div>
+
+
+        {events.length === 0 ? (
+          <div className="text-center py-16 sm:py-20 rounded-2xl glass px-4">
+            <Radio className="h-12 w-12 text-primary mx-auto mb-3" />
+            <h2 className="text-xl font-semibold">No events yet</h2>
+            <p className="text-muted-foreground mt-1 mb-6">Create your first session to start receiving requests.</p>
+            <Button onClick={() => setCreateOpen(true)} variant="premium">
+              <Plus className="mr-1 h-4 w-4" /> New event
+            </Button>
+          </div>
+        ) : (
+          <>
+            {active.length > 0 && (
+              <Section title="Active events">
+                <Grid>
+                  {active.map((ev) => (
+                    <EventCard key={ev.id} ev={ev} onCopy={copyJoinLink} onQR={() => setQrEvent(ev)} onToggle={() => toggleActive(ev)} />
+                  ))}
+                </Grid>
+              </Section>
+            )}
+            {past.length > 0 && (
+              <Section title="Past events">
+                <Grid>
+                  {past.map((ev) => (
+                    <EventCard key={ev.id} ev={ev} onCopy={copyJoinLink} onQR={() => setQrEvent(ev)} onToggle={() => toggleActive(ev)} />
+                  ))}
+                </Grid>
+              </Section>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* QR dialog */}
+      <Dialog open={!!qrEvent} onOpenChange={(o) => !o && setQrEvent(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Scan to join</DialogTitle>
+          </DialogHeader>
+          {qrEvent && <EventQR roomCode={qrEvent.room_code} size={260} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-8">
+      <h2 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function Grid({ children }: { children: React.ReactNode }) {
+  return <div className="grid sm:grid-cols-2 gap-4">{children}</div>;
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <Card className="bg-card/60">
+      <CardContent className="py-4">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="text-2xl font-bold tabular-nums mt-1">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EventCard({ ev, onCopy, onQR, onToggle }: { ev: EventRow; onCopy: (c: string) => void; onQR: () => void; onToggle: () => void }) {
+  return (
+    <div className="p-5 rounded-2xl glass hover:border-primary/40 transition-all">
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-lg truncate">{ev.name}</h3>
+          <p className="text-sm text-muted-foreground truncate">
+            {ev.venue ? `${ev.venue} · ` : ""}DJ {ev.dj_name}
+          </p>
+        </div>
+        <Badge variant={ev.is_active ? "default" : "secondary"} className={ev.is_active ? "bg-success text-success-foreground" : ""}>
+          {ev.is_active ? "Live" : "Ended"}
+        </Badge>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xs text-muted-foreground">CODE</span>
+        <span className="font-mono font-bold tracking-widest">{ev.room_code}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button asChild className="flex-1 min-w-[120px]">
+          <Link to={`/dj/${ev.id}`}>
+            <Settings className="mr-1 h-4 w-4" /> Manage
+          </Link>
+        </Button>
+        <Button variant="outline" size="icon" onClick={() => onCopy(ev.room_code)} title="Copy join link">
+          <Copy className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="icon" onClick={onQR} title="Show QR code">
+          <QrCode className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" onClick={onToggle}>
+          {ev.is_active ? "End" : "Reopen"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CreateEventForm({ defaultDJ, onCreate }: { defaultDJ: string; onCreate: (f: CreateForm) => Promise<void> }) {
+  const [form, setForm] = useState<CreateForm>({
+    name: "",
+    venue: "",
+    dj_name: defaultDJ,
+    
+    allow_explicit: true,
+    require_approval: false,
+    cooldown_seconds: 30,
+    rules_text: "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  const update = <K extends keyof CreateForm>(k: K, v: CreateForm[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await onCreate(form);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+      <div className="space-y-2">
+        <Label htmlFor="name">Event name</Label>
+        <Input id="name" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Saturday Night Sessions" required />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="venue">Venue</Label>
+          <Input id="venue" value={form.venue} onChange={(e) => update("venue", e.target.value)} placeholder="Club Neon" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dj">DJ name</Label>
+          <Input id="dj" value={form.dj_name} onChange={(e) => update("dj_name", e.target.value)} placeholder="DJ Sparkles" required />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">A unique room code is generated automatically when you create the event.</p>
+
+
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <div>
+          <Label className="text-sm">Allow explicit songs</Label>
+          <p className="text-xs text-muted-foreground">Off blocks explicit tracks at request time.</p>
+        </div>
+        <Switch checked={form.allow_explicit} onCheckedChange={(v) => update("allow_explicit", v)} />
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label className="text-sm">Require approval</Label>
+          <p className="text-xs text-muted-foreground">New requests appear as pending until you approve.</p>
+        </div>
+        <Switch checked={form.require_approval} onCheckedChange={(v) => update("require_approval", v)} />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="cooldown">Request cooldown (seconds)</Label>
+        <Input id="cooldown" type="number" min={0} max={600} value={form.cooldown_seconds} onChange={(e) => update("cooldown_seconds", Number(e.target.value) || 0)} />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="rules">Event rules (shown to guests)</Label>
+        <Textarea id="rules" rows={3} value={form.rules_text} onChange={(e) => update("rules_text", e.target.value)} placeholder="e.g. House &amp; techno only — no top 40." />
+      </div>
+
+      <Button type="submit" disabled={loading} variant="premium" className="w-full">
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Create event
+      </Button>
+    </form>
+  );
+}
+
+export default DJDashboard;
