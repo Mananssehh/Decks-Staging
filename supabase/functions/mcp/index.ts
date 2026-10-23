@@ -126,7 +126,7 @@ var list_recent_tips_default = defineTool4({
 });
 
 // src/lib/mcp/index.ts
-var projectRef = "rwdgnapajxcxktmewlxb";
+var projectRef = "ldxgejbzmpvsvozqmpfe";
 var mcp_default = defineMcp({
   name: "decks-mcp",
   title: "Decks",
