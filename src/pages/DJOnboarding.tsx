@@ -33,14 +33,12 @@ const DJOnboarding = () => {
       const { error } = await supabase.rpc("claim_dj_role");
       if (error) throw new Error(error.message);
       await refreshProfile();
-      const email = user?.email;
-      if (email) {
-        supabase.functions.invoke("send-transactional-email", {
+      if (user?.email) {
+        supabase.functions.invoke("send-welcome-email", {
           body: {
-            templateName: "dj-welcome",
-            recipientEmail: email,
+            kind: "dj",
+            nickname: (user!.user_metadata as any)?.nickname ?? "there",
             idempotencyKey: `dj-welcome:${user!.id}`,
-            templateData: { djName: (user!.user_metadata as any)?.nickname ?? "there" },
           },
         }).catch(() => undefined);
       }
