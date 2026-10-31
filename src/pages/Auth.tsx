@@ -91,12 +91,11 @@ const Auth = () => {
           });
           await refreshProfile();
           // Fire-and-forget welcome email after anonymous upgrade.
-          supabase.functions.invoke("send-transactional-email", {
+          supabase.functions.invoke("send-welcome-email", {
             body: {
-              templateName: "guest-welcome",
-              recipientEmail: emailParse.data,
+              kind: "guest",
+              nickname: nickParse.data,
               idempotencyKey: `guest-welcome:${emailParse.data.toLowerCase()}`,
-              templateData: { nickname: nickParse.data },
             },
           }).catch(() => undefined);
           toast.success("Account created — your nickname, points, and history are saved.");
@@ -123,12 +122,11 @@ const Auth = () => {
           }
 
           // Auto-confirm was on (or user was already confirmed): welcome + go.
-          supabase.functions.invoke("send-transactional-email", {
+          supabase.functions.invoke("send-welcome-email", {
             body: {
-              templateName: "guest-welcome",
-              recipientEmail: emailParse.data,
+              kind: "guest",
+              nickname: nickParse.data,
               idempotencyKey: `guest-welcome:${emailParse.data.toLowerCase()}`,
-              templateData: { nickname: nickParse.data },
             },
           }).catch(() => undefined);
           toast.success("Account created! Welcome to Decks.");
