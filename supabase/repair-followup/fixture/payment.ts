@@ -99,5 +99,14 @@ try {
  check('retry returns original financial evidence after event ends',frozen[0].tip_id,retries[0][0].tip_id);
  // Authorization and current consent are checked before new reservation; retry does not mutate consent evidence.
  check('no balance mutations introduced',(await db`select points from public.profiles where id=${user}`)[0].points,2);
+
+ for(const table of ['followup_tip_reservations','followup_payment_events','followup_tip_financial_state','followup_account_evidence']){
+  check('service direct UPDATE closed '+table,(await db`select has_table_privilege('service_role',${'public.'+table},'update') b`)[0].b,false);
+  check('private RLS enabled '+table,(await db`select relrowsecurity b from pg_class where oid=${'public.'+table}::regclass`)[0].b,true);
+ }
+ await Promise.all(Array.from({length:8},()=>service(q=>q`select public.followup_sync_account(${q.json({account_id:'acct_fake',created:200,payouts_enabled:true,charges_enabled:true,details_submitted:true,livemode:false})})`)));
+ await service(q=>q`select public.followup_sync_account(${q.json({account_id:'acct_fake',created:100,payouts_enabled:false,charges_enabled:false,details_submitted:false,livemode:false})})`);
+ check('old account event cannot revert authoritative payouts',(await db`select payouts_enabled from public.dj_payout_accounts where user_id=${dj}`)[0].payouts_enabled,true);
+ check('notification remains domain blocked not sent',(await db`select notification_state from public.followup_account_evidence where account_id='acct_fake'`)[0].notification_state,'domain_not_configured');
  console.log(`RESULT ${count} payment assertions passed with real concurrent connections`);
 }finally{await db.end();}
