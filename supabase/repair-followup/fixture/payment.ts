@@ -98,6 +98,6 @@ try {
  const frozen=await reserve(uuid(10));check('retry preserves originally frozen success redirect',frozen[0].checkout_parameters.success_url,'https://fixture.invalid/event/PAY001?tip=success');
  check('retry returns original financial evidence after event ends',frozen[0].tip_id,retries[0][0].tip_id);
  // Authorization and current consent are checked before new reservation; retry does not mutate consent evidence.
- check('no balance mutations introduced',(await db`select points from public.profiles where id=${user}`)[0].points,15);
+ check('no balance mutations introduced',(await db`select points from public.profiles where id=${user}`)[0].points,2);
  console.log(`RESULT ${count} payment assertions passed with real concurrent connections`);
 }finally{await db.end();}

@@ -14,18 +14,18 @@
 - [x] PKCE code exchange and local redirect regression tests.
 - [x] Zero-warning lint, frontend behavior and mocked Edge tests.
 - [ ] Production-bundle verification blocked on production build artifact; nine assertions fail honestly.
-- [ ] Complete reserved/legacy webhook and refund/reconcile integration before payment candidate deployment (requires independently reviewed SQL).
+- [x] Complete canonical reserved/legacy webhook and refund/reconcile integration in source; independent SQL install/deployment remain gated.
 - [ ] Official managed sender and durable business-event retry integration blocked on domain configuration and supported delivery design.
 - [ ] Authenticated UI E2E blocked on authorized staging session; own-account mint found no matching account.
 - [ ] Independent review/install follow-up SQL before deploying dependent functions.
 
 ## Backlog
 - [ ] Replace hard-coded $100 tip limits ($50 single / $100 per 24h / $100 per event, currently constants inside `check_tip_cap` and `src/lib/purchaseCaps.ts`) with configurable, server-enforced limits (e.g. `app_config` row read by the cap function, admin-editable). Do not change current limit values as part of D3.
-- [ ] Durable email outbox + reconciliation for the accepted D1 crash window: if the process dies between claiming the Stripe payout activation (false→true) and enqueuing `dj-stripe-connected:${acct.id}`, the confirmation email is never sent. Add a persisted outbox row written in the same transaction as the claim, plus a periodic reconciler that re-enqueues unsent notifications.
+- [ ] Provider-blocked notification replay from financial/account evidence after owner-domain setup and official managed sender scaffolding; SQL email queues are prohibited.
 
 
 ## Payment integration completion (source-only)
-- [ ] Canonical reserved/legacy checkout, webhook and reconciliation boundaries.
-- [ ] Immutable redirects, retry lifecycle and evidence-backed ambiguity review.
-- [ ] Parallel PostgreSQL and canonical Edge integration regressions; lint/frontend checks.
-- [ ] Ordered review/install/deployment and containment documentation.
+- [x] Canonical reserved/legacy checkout, webhook and reconciliation boundaries.
+- [x] Immutable redirects, retry lifecycle and evidence-backed ambiguity review.
+- [x] Parallel PostgreSQL and canonical Edge integration regressions; lint/frontend behavior checks.
+- [x] Ordered review/install/deployment and containment documentation.
