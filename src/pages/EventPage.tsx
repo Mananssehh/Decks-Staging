@@ -179,7 +179,9 @@ const EventPage = () => {
 
 
 
-  // Realtime: songs + event lifecycle, with mobile-friendly reconnect
+  // Realtime: published songs + event lifecycle, with mobile-friendly reconnect.
+  // Vote mutations update song counters; that feed refreshes the coherent
+  // songs/my-votes snapshot without subscribing to the unpublished votes table.
   useEffect(() => {
     const eventId = eventInfo?.id;
     const userId = user?.id;
@@ -219,7 +221,6 @@ const EventPage = () => {
           { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventId}` },
           refetch,
         )
-        .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `user_id=eq.${userId}` }, refetch)
         .subscribe((status) => {
           if (cancelled || generation !== channelGeneration) return;
           if (status === "SUBSCRIBED") {
