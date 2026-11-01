@@ -7,6 +7,7 @@ CREATE TABLE public.followup_payment_events (
  event_id text PRIMARY KEY, tip_id uuid REFERENCES public.dj_tips(id), event_type text NOT NULL,
  evidence jsonb NOT NULL, received_at timestamptz NOT NULL DEFAULT now()
 );
+REVOKE ALL ON public.followup_payment_events FROM service_role;
 GRANT SELECT ON public.followup_payment_events TO service_role;
 REVOKE ALL ON public.followup_payment_events FROM PUBLIC,anon,authenticated;
 ALTER TABLE public.followup_payment_events ENABLE ROW LEVEL SECURITY;
@@ -15,6 +16,7 @@ CREATE TABLE public.followup_tip_financial_state (
  dispute_id text, dispute_state text, dispute_closed_at bigint, review_reason text,
  notification_state text NOT NULL DEFAULT 'domain_not_configured'
 );
+REVOKE ALL ON public.followup_tip_financial_state FROM service_role;
 GRANT SELECT ON public.followup_tip_financial_state TO service_role;
 REVOKE ALL ON public.followup_tip_financial_state FROM PUBLIC,anon,authenticated;
 ALTER TABLE public.followup_tip_financial_state ENABLE ROW LEVEL SECURITY;
@@ -25,6 +27,7 @@ CREATE TABLE public.followup_account_evidence (
  account_id text PRIMARY KEY, provider_created bigint NOT NULL, evidence jsonb NOT NULL,
  notification_state text NOT NULL DEFAULT 'domain_not_configured'
 );
+REVOKE ALL ON public.followup_account_evidence FROM service_role;
 GRANT SELECT ON public.followup_account_evidence TO service_role;
 REVOKE ALL ON public.followup_account_evidence FROM PUBLIC,anon,authenticated;
 ALTER TABLE public.followup_account_evidence ENABLE ROW LEVEL SECURITY;

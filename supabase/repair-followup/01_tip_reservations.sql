@@ -9,6 +9,7 @@ CREATE TABLE public.followup_tip_reservations (
  session_id text UNIQUE, session_url text, state text NOT NULL DEFAULT 'reserved',
  UNIQUE(user_id,request_key), CHECK(state IN ('reserved','attached','ambiguous','succeeded','failed','expired','review'))
 );
+REVOKE ALL ON public.followup_tip_reservations FROM service_role;
 GRANT SELECT ON public.followup_tip_reservations TO service_role;
 REVOKE ALL ON public.followup_tip_reservations FROM PUBLIC,anon,authenticated;
 ALTER TABLE public.followup_tip_reservations ENABLE ROW LEVEL SECURITY;
@@ -42,13 +43,13 @@ BEGIN
   IF s.id IS NULL THEN RAISE EXCEPTION 'Invalid song request'; END IF; END IF;
  -- Reserved/ambiguous are never aged out by elapsed time: a checkout may exist or be paid.
  -- All reservation-backed pending remains counted until signed/retrieved terminal evidence.
- -- Existing unreserved pending follows the original cap oracle. No price/cap changes.
+ -- Unresolved legacy pending also retains quota until authoritative evidence. Dollar caps unchanged.
  SELECT coalesce(sum(d.gross_amount_cents),0) INTO day_spend FROM public.dj_tips d
  WHERE d.user_id=_user_id AND ((d.status='succeeded' AND d.created_at>now()-interval '24 hours')
- OR (d.status='pending' AND (true)));
+ OR d.status='pending');
  SELECT coalesce(sum(d.gross_amount_cents),0) INTO event_spend FROM public.dj_tips d
  WHERE d.user_id=_user_id AND d.event_id=e.id AND (d.status='succeeded'
- OR (d.status='pending' AND (true)));
+ OR d.status='pending');
  IF day_spend+_amount_cents>10000 OR event_spend+_amount_cents>10000 THEN RAISE EXCEPTION 'Tip limit reached' USING ERRCODE='22023'; END IF;
  IF _origin IS NULL OR _origin !~ '^https://[A-Za-z0-9.-]+(:[0-9]+)?$' THEN RAISE EXCEPTION 'Invalid APP_ORIGIN'; END IF;
  fee:=floor(_amount_cents*3000::numeric/10000)::integer;

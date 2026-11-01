@@ -25,4 +25,5 @@ it('double click and ambiguous retry reuse one logical key; definitive terminal 
  await waitFor(()=>expect(button).not.toBeDisabled());fireEvent.click(button);
  await waitFor(()=>expect(calls.length).toBe(3));expect(calls[2].request_key).not.toBe(calls[0].request_key);
  if(!finish)throw Error('request missing');finish({data:{error_code:'RECONCILIATION_REQUIRED'},error:null});
+ await waitFor(()=>expect(button).not.toBeDisabled());
 });
