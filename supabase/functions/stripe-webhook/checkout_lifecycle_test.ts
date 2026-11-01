@@ -286,6 +286,30 @@ Deno.test({
 });
 
 Deno.test({
+  name: "late unpaid completed and failed never downgrade succeeded or refunded",
+  ...opts,
+  async fn() {
+    for (const terminal of ["succeeded", "refunded", "partially_refunded", "disputed"]) {
+      const row = seed(terminal);
+      assertEquals(await post("checkout.session.completed", {id:"cs_test_1",status:"complete",payment_status:"unpaid"}),200);
+      assertEquals(row.status,terminal);
+      assertEquals(await post("checkout.session.async_payment_failed", {id:"cs_test_1",status:"complete",payment_status:"unpaid"}),200);
+      assertEquals(row.status,terminal);
+    }
+  },
+});
+
+Deno.test({
+  name: "zero-payment completed never fulfills a tip",
+  ...opts,
+  async fn() {
+    const row=seed();
+    assertEquals(await post("checkout.session.completed",{id:"cs_test_1",status:"complete",payment_status:"no_payment_required"}),200);
+    assertEquals(row.status,"pending");
+  },
+});
+
+Deno.test({
   name: "teardown",
   ...opts,
   async fn() {
