@@ -275,7 +275,7 @@ Deno.serve(async (req) => {
     const sessionStatus = s?.status as string | undefined;         // open | complete | expired
     const paymentStatus = s?.payment_status as string | undefined; // paid | unpaid | no_payment_required
     if (sessionStatus === "expired") return "expired";
-    if (paymentStatus === "paid" || paymentStatus === "no_payment_required") return "succeeded";
+    if (sessionStatus === "complete" && paymentStatus === "paid") return "succeeded";
     return "pending";
   }
 
@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
               ? { checkout_expires_at: new Date(s.expires_at * 1000).toISOString() }
               : {}),
           },
-          (q) => q.eq("stripe_checkout_session_id", s.id),
+          (q) => q.eq("stripe_checkout_session_id", s.id).in("status", next === "succeeded" ? ["pending", "expired", "failed"] : ["pending"]),
           { type: event.type, session_id: s.id, next },
         );
         if (next === "succeeded") {
@@ -344,7 +344,7 @@ Deno.serve(async (req) => {
             livemode: !!event.livemode,
             ...(chargeId ? { stripe_charge_id: chargeId } : {}),
           },
-          (q) => q.eq("stripe_payment_intent_id", pi.id),
+          (q) => q.eq("stripe_payment_intent_id", pi.id).in("status", ["pending", "expired", "failed"]),
           { type: event.type, payment_intent: pi.id },
         );
         const { data: tipRow, error: tipErr } = await admin
@@ -364,7 +364,7 @@ Deno.serve(async (req) => {
             status: "failed",
             failure_reason: pi.last_payment_error?.message ?? "payment_failed",
           },
-          (q) => q.eq("stripe_payment_intent_id", pi.id),
+          (q) => q.eq("stripe_payment_intent_id", pi.id).eq("status", "pending"),
           { type: event.type, payment_intent: pi.id },
         );
         break;

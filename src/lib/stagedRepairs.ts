@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 
-/** Source-only contracts: generated hosted types remain unchanged until SQL is applied. */
+/** Narrow adapter contracts; hosted types were regenerated after independent core installation. */
 type RepairContracts = {
   set_song_vote: { args: { _song_request_id: string; _value: number | null }; result: null };
   dj_transition_request: { args: { _event_id: string; _song_request_id: string; _status: string }; result: null };
