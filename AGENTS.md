@@ -10,3 +10,4 @@
 - Shared Edge payment evidence lives under `supabase/functions/_shared`; sibling function imports are not bundled by deployment.
 - Event song counters and user-selected votes are read with one left-embedded relational statement; split HTTP reads can observe different transaction snapshots.
 - The MCP Vite plugin owns its generated function output; exclude that exact artifact from lint while keeping all authored MCP inputs linted.
+- Stripe key format validation lives in an SDK-free shared helper used by all Stripe constructors and mode inference; this keeps restricted-key compatibility consistent and testable without provider calls.

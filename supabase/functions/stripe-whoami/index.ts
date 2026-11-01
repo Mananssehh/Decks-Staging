@@ -1,6 +1,7 @@
 // Public diagnostic: inspects STRIPE_SECRET_KEY shape and calls Stripe.
-// Never prints the full key.
-import Stripe from "https://esm.sh/stripe@17.5.0?target=denonext";
+// Never prints key material.
+import { getStripe } from "../_shared/stripe.ts";
+import { parseStripeKey } from "../_shared/stripe-key.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -19,11 +20,15 @@ Deno.serve(async (req) => {
 
   const raw = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
   const trimmed = raw.trim();
+  const parsedKey = parseStripeKey(raw);
 
   const shape = {
-    present: raw.length > 0,
+    present: trimmed.length > 0,
     starts_with_sk_live: trimmed.startsWith("sk_live_"),
     starts_with_sk_test: trimmed.startsWith("sk_test_"),
+    starts_with_rk_live: trimmed.startsWith("rk_live_"),
+    starts_with_rk_test: trimmed.startsWith("rk_test_"),
+    mode: parsedKey?.mode ?? "unknown",
     length: trimmed.length,
     raw_length: raw.length,
     has_leading_space: raw.length > 0 && raw[0] !== trimmed[0],
@@ -37,11 +42,10 @@ Deno.serve(async (req) => {
     return jsonResp({ shape, error: "STRIPE_SECRET_KEY not set" }, 200);
   }
 
-  // Use trimmed key for the API call so a stray newline doesn't itself cause the error.
-  const stripe = new Stripe(trimmed, {
-    apiVersion: "2024-12-18.acacia",
-    httpClient: Stripe.createFetchHttpClient(),
-  });
+  if (!parsedKey) {
+    return jsonResp({ shape, error: "STRIPE_SECRET_KEY format invalid" }, 200);
+  }
+  const stripe = getStripe();
 
   try {
     const acct = await stripe.accounts.retrieve();

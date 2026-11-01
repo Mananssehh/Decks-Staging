@@ -39,4 +39,8 @@
 ## Final staging lifecycle repair
 - [x] Remove the unpublished votes binding; preserve published song_requests/events feeds and all coherent refresh/optimistic/cleanup behavior.
 - [x] Existing refresh/snapshot/event-entry regressions: 11 passed; zero-warning lint passed; runtime catch and source evidence recorded.
-- [ ] Root repeats actual hosted end-event lifecycle validation after this source-only repair; no deployment or SQL changes authorized.
+- [x] Root verified both tabs paused/live/ended without reload and ended-vote toast; reviewer evidence, no agent session access.
+
+## Final staging Stripe key compatibility
+- [ ] Validate secret/restricted test/live keys with pure no-provider tests and zero-warning lint.
+- [ ] Deploy all inventoried shared-helper dependents to staging and record exact evidence; no provider operations.

@@ -5,8 +5,8 @@
 // payload (status, request id, type, code, message, endpoint) instead of a
 // friendly wrapper, so we can diagnose Connect configuration issues.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, json } from "../_shared/stripe.ts";
-import Stripe from "https://esm.sh/stripe@17.5.0?target=denonext";
+import { corsHeaders, getStripe, json } from "../_shared/stripe.ts";
+import { parseStripeKey } from "../_shared/stripe-key.ts";
 import type { StripeErrorView } from "../_shared/stripe-error.ts";
 
 function fail(code: string, message: string, extra: Record<string, unknown> = {}, status = 200) {
@@ -76,21 +76,15 @@ Deno.serve(async (req) => {
 
     step = "stripe_key";
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-    const hasKey = stripeKey.length > 0;
-    const isTest = stripeKey.startsWith("sk_test_");
-    const isLive = stripeKey.startsWith("sk_live_");
-    // Last 4 chars only — never log the full key.
-    console.log("[stripe-connect-onboard] stripe key present:", hasKey, "test:", isTest, "live:", isLive);
-    if (!hasKey) {
+    const parsedKey = parseStripeKey(stripeKey);
+    if (!stripeKey.trim()) {
       return fail("STRIPE_NOT_CONFIGURED", "Stripe isn't configured on the server yet.");
     }
-    if (!isTest && !isLive) {
-      return fail("STRIPE_KEY_INVALID", "Expected sk_test_ or sk_live_ key.");
+    if (!parsedKey) {
+      return fail("STRIPE_KEY_INVALID", "Expected a valid secret or restricted test/live key.");
     }
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: "2024-12-18.acacia",
-      httpClient: Stripe.createFetchHttpClient(),
-    });
+    const isLive = parsedKey.mode === "live";
+    const stripe = getStripe();
 
     // Identify the Stripe account this key belongs to BEFORE attempting
     // anything else. This tells us which account is actually in use.
@@ -203,7 +197,6 @@ Deno.serve(async (req) => {
           account_create_result: accountCreateResult,
           account_link_result: "not_attempted",
           stripe_error: se,
-          stripe_key_tail: keyTail,
           stripe_account_in_use: stripeAccountInfo,
           message: se.message,
         }, 200);
@@ -238,7 +231,6 @@ Deno.serve(async (req) => {
         account_link_result: "failed",
         account_id: accountId,
         stripe_error: se,
-        stripe_key_tail: keyTail,
         stripe_account_in_use: stripeAccountInfo,
         message: se.message,
       }, 200);
