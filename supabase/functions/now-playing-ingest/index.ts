@@ -195,16 +195,6 @@ Deno.serve(async (req) => {
           if (sp === "spotify" && !row.spotify_url) row.spotify_url = ext;
         }
 
-        const { error: markErr } = await supabase
-          .from("song_requests")
-          .update({
-            status: "played",
-            played_at: new Date().toISOString(),
-            played_by_source: "decks_bridge",
-          })
-          .eq("id", matchedRequestId)
-          .in("status", ["pending", "approved"]);
-        if (markErr) console.error("[bridge-match] mark played failed:", markErr);
       } else {
         console.log("[bridge-match] no confident match");
       }
@@ -293,31 +283,14 @@ Deno.serve(async (req) => {
     matched_request_id: matchedRequestId,
   });
 
-  // Find existing now_playing row for this event (one row per event in practice).
-  const { data: existing } = await supabase
-    .from("now_playing")
-    .select("id")
-    .eq("event_id", integration.event_id)
-    .maybeSingle();
-
-  if (existing?.id) {
-    const { error } = await supabase.from("now_playing").update(rowWithMatch).eq("id", existing.id);
-    if (error) {
-      console.error("now_playing update failed:", error);
-      return jsonResponse({ error: "Internal server error" }, 500);
-    }
-  } else {
-    const { error } = await supabase.from("now_playing").insert(rowWithMatch);
-    if (error) {
-      console.error("now_playing insert failed:", error);
-      return jsonResponse({ error: "Internal server error" }, 500);
-    }
-  }
-
-  await supabase
-    .from("event_integrations")
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq("id", integration.id);
+  const { error: writeError } = await supabase.rpc("repair_write_broadcast", {
+    _event_id: integration.event_id,
+    _row: Object.fromEntries(Object.entries(row).filter(([key]) => !["event_id", "updated_at"].includes(key))),
+    _request_id: matchedRequestId,
+    _integration_id: integration.id,
+    _token: token,
+  });
+  if (writeError) return jsonResponse({ error: "Internal server error" }, 500);
 
   return jsonResponse({ ok: true, matched_request_id: matchedRequestId });
 });
