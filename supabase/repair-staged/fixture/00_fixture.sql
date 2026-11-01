@@ -9,6 +9,7 @@ CREATE EXTENSION pgcrypto WITH SCHEMA extensions;
 CREATE EXTENSION pg_trgm WITH SCHEMA public;
 CREATE TABLE auth.users(id uuid PRIMARY KEY,raw_user_meta_data jsonb DEFAULT '{}',is_anonymous boolean NOT NULL DEFAULT false);
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT current_setting('request.jwt.claim.role',true) $$;
 GRANT USAGE ON SCHEMA auth,public,extensions TO anon,authenticated,service_role;
 CREATE TYPE public.app_role AS ENUM('dj','guest','admin');
 CREATE TYPE public.error_severity AS ENUM('critical','warning','info');
