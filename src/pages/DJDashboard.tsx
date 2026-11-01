@@ -84,7 +84,7 @@ const DJDashboard = () => {
 
     // Atomic, DJ-only creation: the room code is generated and reserved
     // server-side, so the app never probes whether a code already exists.
-    const { data: created, error } = await (supabase as any).rpc("create_event", {
+    const { data: created, error } = await supabase.rpc("create_event", {
       _name: parsed.data.name,
       _venue: parsed.data.venue || null,
       _dj_name: parsed.data.dj_name,

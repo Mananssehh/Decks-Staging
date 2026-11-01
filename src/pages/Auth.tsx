@@ -86,7 +86,7 @@ const Auth = () => {
             password: passParse.data,
           });
           if (error) throw error;
-          await (supabase as any).rpc("upgrade_anonymous_profile", {
+          await supabase.rpc("upgrade_anonymous_profile", {
             p_nickname: nickParse.data,
           });
           await refreshProfile();

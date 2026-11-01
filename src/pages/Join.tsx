@@ -95,7 +95,7 @@ const Join = () => {
       // so we no longer depend on the handle_new_user trigger having created
       // the profile (it occasionally misses for anonymous sign-ins, which
       // caused the displayed name to fall back to "Guest").
-      const { error: ensureErr } = await (supabase as any).rpc("ensure_profile", {
+      const { error: ensureErr } = await supabase.rpc("ensure_profile", {
         p_nickname: nickParse.data,
       });
       if (ensureErr) throw new Error(ensureErr.message || "Could not save nickname");

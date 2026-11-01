@@ -108,7 +108,8 @@ Deno.serve(async (req) => {
         capabilities: acct.capabilities,
       };
       console.log("[stripe-connect-onboard] whoami:", JSON.stringify(stripeAccountInfo));
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       const se = serializeStripeError(e);
       console.error("[stripe-connect-onboard] whoami failed", se);
       stripeAccountInfo = { error: se };
@@ -145,7 +146,8 @@ Deno.serve(async (req) => {
         await admin.from("dj_payout_accounts")
           .update({ livemode: isLive })
           .eq("user_id", userId);
-      } catch (e: any) {
+      } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
         console.warn("[stripe-connect-onboard] existing account unreachable — discarding", serializeStripeError(e));
         await admin.from("dj_payout_accounts").delete().eq("user_id", userId);
         accountId = undefined;
@@ -189,7 +191,8 @@ Deno.serve(async (req) => {
             stripe_account_id: accountId,
           });
         }
-      } catch (e: any) {
+      } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
         accountCreateResult = "failed";
         const se = serializeStripeError(e);
         console.error("[stripe-connect-onboard][RAW accounts.create error]", JSON.stringify(se));
@@ -223,7 +226,8 @@ Deno.serve(async (req) => {
         account_link_result: "success",
         stripe_account_in_use: stripeAccountInfo,
       });
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       const se = serializeStripeError(e);
       console.error("[stripe-connect-onboard][RAW accountLinks.create error]", JSON.stringify(se));
       return json({
@@ -239,7 +243,8 @@ Deno.serve(async (req) => {
         message: se.message,
       }, 200);
     }
-  } catch (e: any) {
+  } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
     const msg = e?.message ?? "Onboarding failed";
     console.error("[stripe-connect-onboard][UNCAUGHT]", step, msg, e);
     return fail("UNEXPECTED", `Unexpected error at step "${step}": ${msg}`, { step });

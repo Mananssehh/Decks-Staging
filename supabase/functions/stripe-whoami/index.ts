@@ -65,7 +65,8 @@ Deno.serve(async (req) => {
           country: a.country,
           email: a.email,
         };
-      } catch (e: any) {
+      } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
         probe = { error: e?.message, code: e?.code, type: e?.type };
       }
     }
@@ -83,7 +84,8 @@ Deno.serve(async (req) => {
       },
       probe,
     });
-  } catch (e: any) {
+  } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
     return jsonResp({
       shape,
       stripe_ok: false,

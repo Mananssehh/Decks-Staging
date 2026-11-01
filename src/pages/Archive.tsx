@@ -62,7 +62,7 @@ const Archive = () => {
   const duplicate = async (ev: EventRow) => {
     if (!user) return;
     // Server-side atomic creation reserves a fresh room code for the copy.
-    const { data, error } = await (supabase as any).rpc("create_event", {
+    const { data, error } = await supabase.rpc("create_event", {
       _name: `${ev.name} (copy)`,
       _venue: ev.venue,
       _dj_name: ev.dj_name,

@@ -31,7 +31,8 @@ export function PayoutStatusCard() {
       if (data?.mode === "live" || data?.mode === "test") setMode(data.mode);
       if (data?.key_mode === "live" || data?.key_mode === "test") setKeyMode(data.key_mode);
       setModeMismatch(Boolean(data?.mode_mismatch));
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       console.error(e);
       setStatus("not_started");
     }
@@ -76,7 +77,8 @@ export function PayoutStatusCard() {
         : payload?.message || payload?.error || (error as any)?.message || "Couldn't start onboarding";
       toast.error(detail, { duration: 12000 });
       setBusy(false);
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       console.error(e);
       toast.error(e?.message ?? "Couldn't start onboarding");
       setBusy(false);

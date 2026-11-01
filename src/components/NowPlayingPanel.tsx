@@ -58,7 +58,8 @@ export function NowPlayingPanel({ eventId, prefill }: Props) {
         source: "dj-panel",
       });
       toast.success("Now Playing updated for guests 🎶");
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       toast.error(e?.message ?? "Could not update Now Playing");
     } finally {
       setSaving(false);

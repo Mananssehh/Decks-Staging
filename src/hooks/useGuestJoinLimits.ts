@@ -23,7 +23,7 @@ export async function fetchGuestJoinLimits(): Promise<GuestJoinLimits> {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const { data } = await (supabase as any).rpc("get_guest_join_limits");
+      const { data } = await supabase.rpc("get_guest_join_limits");
       const v = (data ?? {}) as Partial<GuestJoinLimits>;
       cache = { ...DEFAULTS, ...v };
     } catch {
@@ -38,7 +38,7 @@ export async function fetchGuestJoinLimits(): Promise<GuestJoinLimits> {
 
 export async function fetchGuestEventCount(): Promise<number> {
   try {
-    const { data } = await (supabase as any).rpc("get_guest_event_count");
+    const { data } = await supabase.rpc("get_guest_event_count");
     return typeof data === "number" ? data : 0;
   } catch {
     return 0;

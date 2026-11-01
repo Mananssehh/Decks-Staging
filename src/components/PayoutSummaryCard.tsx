@@ -63,7 +63,8 @@ export function PayoutSummaryCard() {
         const { data, error } = await supabase.functions.invoke("stripe-payout-summary");
         if (error) throw error;
         if (!cancelled) setData(data as Summary);
-      } catch (e: any) {
+      } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
         if (!cancelled) setError(e?.message ?? "Failed to load payout summary");
       } finally {
         if (!cancelled) setLoading(false);

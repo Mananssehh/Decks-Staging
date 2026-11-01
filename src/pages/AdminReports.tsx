@@ -56,7 +56,7 @@ export default function AdminReports() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("reports")
       .select("*")
       .eq("status", filter)
@@ -67,7 +67,7 @@ export default function AdminReports() {
   };
 
   const updateStatus = async (id: string, status: Status) => {
-    const { error } = await (supabase as any).from("reports").update({ status }).eq("id", id);
+    const { error } = await supabase.from("reports").update({ status }).eq("id", id);
     if (error) toast.error(error.message);
     else {
       toast.success("Report updated");

@@ -57,7 +57,7 @@ export function DJReportsPanel({ eventId, onRemoveRequest }: Props) {
     if (isInitial) setLoading(true);
     let rows: Report[] = [];
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("reports")
         .select("*")
         .eq("event_id", eventId)
@@ -72,7 +72,8 @@ export function DJReportsPanel({ eventId, onRemoveRequest }: Props) {
       rows = (data ?? []) as Report[];
       setReports(rows);
       setErrorMsg(null);
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       console.error("[DJReportsPanel] base reports query threw:", e, { eventId });
       setErrorMsg(e?.message || "Failed to load reports");
       setReports([]);
@@ -94,7 +95,7 @@ export function DJReportsPanel({ eventId, onRemoveRequest }: Props) {
 
       const songsPromise =
         requestIds.size > 0
-          ? (supabase as any)
+          ? supabase
               .from("song_requests")
               .select("id, title, artist, requested_by")
               .in("id", Array.from(requestIds))
@@ -104,7 +105,7 @@ export function DJReportsPanel({ eventId, onRemoveRequest }: Props) {
 
       const songMap: Record<string, SongInfo> = {};
       if (songsResult.status === "fulfilled") {
-        const { data: srData, error: srErr } = songsResult.value as any;
+        const { data: srData, error: srErr } = songsResult.value;
         if (srErr) {
           console.error("[DJReportsPanel] song_requests enrichment query failed:", srErr.message, {
             ids: Array.from(requestIds),
@@ -142,7 +143,7 @@ export function DJReportsPanel({ eventId, onRemoveRequest }: Props) {
   }, [eventId]);
 
   const updateStatus = async (id: string, status: Status) => {
-    const { error } = await (supabase as any).from("reports").update({ status }).eq("id", id);
+    const { error } = await supabase.from("reports").update({ status }).eq("id", id);
     if (error) toast.error(error.message);
     else {
       toast.success("Report updated");

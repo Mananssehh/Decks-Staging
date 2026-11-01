@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     for (const delay of delays) {
       if (delay) await new Promise((r) => setTimeout(r, delay));
       const [pRes, rRes] = await Promise.all([
-        (supabase as any).rpc("get_my_profile"),
+        supabase.rpc("get_my_profile"),
         supabase.from("user_roles").select("role").eq("user_id", uid),
       ]);
       prof = (pRes.data as Profile | null) ?? null;
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, isDJ, isAnonymous: (user as any)?.is_anonymous === true, loading, signOut, refreshProfile, adjustProfilePoints }}>
+    <AuthContext.Provider value={{ session, user, profile, isDJ, isAnonymous: user?.is_anonymous === true, loading, signOut, refreshProfile, adjustProfilePoints }}>
       {children}
     </AuthContext.Provider>
   );

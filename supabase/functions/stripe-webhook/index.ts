@@ -411,7 +411,7 @@ Deno.serve(async (req) => {
       case "refund.updated": {
         const r: any = event.data.object;
         // Resolve the charge to learn cumulative amount_refunded.
-        let chargeId: string | null = typeof r.charge === "string" ? r.charge : r.charge?.id ?? null;
+        const chargeId: string | null = typeof r.charge === "string" ? r.charge : r.charge?.id ?? null;
         let chargeAmount = 0;
         let amountRefunded = r.amount ?? 0;
         let paymentIntent: string | null = null;

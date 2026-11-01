@@ -132,7 +132,7 @@ const DJEventManage = () => {
         .in("status", ["succeeded", "partially_refunded"]);
       if (cancelled) return;
       const map: Record<string, { cents: number; count: number }> = {};
-      for (const t of (data ?? []) as any[]) {
+      for (const t of (data ?? [])) {
         if (!t.song_request_id) continue;
         const eff = Math.max(0, (t.gross_amount_cents ?? 0) - (t.refunded_amount_cents ?? 0));
         if (eff <= 0) continue;

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 function detectPlatform() {
   if (typeof navigator === "undefined") return { isMac: false, isMobile: false };
   const ua = navigator.userAgent;
-  const platform = (navigator as any).userAgentData?.platform ?? navigator.platform ?? "";
+  const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform ?? "";
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
   const isMac = !isMobile && /Mac|Macintosh|Mac OS X/i.test(platform + " " + ua);
   return { isMac, isMobile };

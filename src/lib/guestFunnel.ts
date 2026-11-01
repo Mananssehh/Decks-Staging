@@ -21,7 +21,7 @@ export async function logGuestFunnel(
     const { data: sessRes } = await supabase.auth.getSession();
     const uid = sessRes.session?.user?.id;
     if (!uid) return;
-    await supabase.from("guest_funnel_events" as any).insert({
+    await supabase.from("guest_funnel_events").insert({
       user_id: uid,
       event_id: opts.eventId ?? null,
       event_type: eventType,

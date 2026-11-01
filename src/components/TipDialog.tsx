@@ -176,7 +176,8 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
       if (error) throw error;
       if (!payload?.url) throw new Error("Checkout session missing URL — please try again.");
       window.location.href = payload.url as string;
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       toast.error(e?.message ?? "Couldn't process tip");
     } finally {
       setSubmitting(false);

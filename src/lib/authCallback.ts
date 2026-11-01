@@ -1,5 +1,5 @@
 export function localNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || /[\\\u0000-\u0020]/.test(raw)) return "/";
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || ([...raw].some(c => c.charCodeAt(0) <= 32) || raw.includes("\\"))) return "/";
   const parsed = new URL(raw, "https://local.invalid");
   return parsed.origin === "https://local.invalid" ? parsed.pathname + parsed.search + parsed.hash : "/";
 }

@@ -15,7 +15,7 @@ function db(ctx) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 }
-var list_my_events_default = defineTool({
+const list_my_events_default = defineTool({
   name: "list_my_events",
   title: "List my events",
   description: "List Decks events owned by the signed-in DJ (most recent first).",
@@ -44,7 +44,7 @@ function db2(ctx) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 }
-var list_event_requests_default = defineTool2({
+const list_event_requests_default = defineTool2({
   name: "list_event_requests",
   title: "List song requests for an event",
   description: "List song requests for a Decks event you can access, ordered by score then newest.",
@@ -77,7 +77,7 @@ function db3(ctx) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 }
-var get_now_playing_default = defineTool3({
+const get_now_playing_default = defineTool3({
   name: "get_now_playing",
   title: "Get now playing",
   description: "Return the current Now Playing track for a Decks event.",
@@ -106,7 +106,7 @@ function db4(ctx) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 }
-var list_recent_tips_default = defineTool4({
+const list_recent_tips_default = defineTool4({
   name: "list_recent_tips",
   title: "List recent tips",
   description: "List recent tips received by the signed-in DJ (most recent first).",
@@ -126,8 +126,8 @@ var list_recent_tips_default = defineTool4({
 });
 
 // src/lib/mcp/index.ts
-var projectRef = "ldxgejbzmpvsvozqmpfe";
-var mcp_default = defineMcp({
+const projectRef = "ldxgejbzmpvsvozqmpfe";
+const mcp_default = defineMcp({
   name: "decks-mcp",
   title: "Decks",
   version: "0.1.0",

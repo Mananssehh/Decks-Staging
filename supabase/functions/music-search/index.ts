@@ -158,7 +158,7 @@ function norm(s: string): string {
   return (s ?? "")
     .toLowerCase()
     .replace(/\b(featuring|feat\.?|ft\.?|with)\b/g, " ")
-    .replace(/[\(\)\[\]\{\}]/g, " ")
+    .replace(/[()[\]{}]/g, " ")
     .replace(/&/g, " and ")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
