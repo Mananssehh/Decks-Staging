@@ -33,7 +33,7 @@ export function NowPlayingPanel({ eventId, prefill }: Props) {
       setAlbumArt(nowPlaying.album_art ?? "");
       setStatus((nowPlaying.status as NowPlayingStatus) ?? "playing");
     }
-  }, [nowPlaying?.id]);
+  }, [nowPlaying]);
 
   const useTopRequest = () => {
     if (!prefill?.title) return;

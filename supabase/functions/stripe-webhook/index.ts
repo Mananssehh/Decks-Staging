@@ -252,7 +252,7 @@ Deno.serve(async (req) => {
   // update that matches zero rows is NOT a failure — it is logged and acked.
   async function updateTips(
     patch: Record<string, unknown>,
-    apply: (q: ReturnType<ReturnType<ReturnType<typeof admin.from>["update"]>["select"]>) => PromiseLike<{data: {id:string}[] | null;error:{message:string}|null}>,
+    apply: (q: ReturnType<ReturnType<ReturnType<typeof admin.from>["update"]>["select"]>) => PromiseLike<{data: unknown[] | null;error:{message:string}|null}>,
     ctx: Record<string, unknown>,
   ) {
     const { data, error } = await apply(

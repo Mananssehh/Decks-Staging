@@ -34,7 +34,7 @@ const Join = () => {
       hasUser: !!user,
       isAnonymous,
     });
-  }, []);
+  }, [params, user, isAnonymous]);
 
   // Prefill nickname only once when profile first loads, and only if the user hasn't started editing.
   useEffect(() => {

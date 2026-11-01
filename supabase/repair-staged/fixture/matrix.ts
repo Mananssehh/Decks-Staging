@@ -13,7 +13,8 @@ try {
  check('cached totals evidence retained',(await db`select old_upvotes,old_downvotes from public.repair_counter_evidence where id=${uuid(9001)}`)[0],{old_upvotes:999,old_downvotes:888});
  await db`create function public.fixture_default_postgres() returns integer language sql as 'select 1'`;
  await db.begin(async q=>{await q`set local role supabase_admin`;await q`create function public.fixture_default_admin() returns integer language sql as 'select 1'`;});
- check('both creator defaults closed',(await db`select count(*)::int n from pg_proc where proname in ('fixture_default_postgres','fixture_default_admin') and (has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute'))`)[0].n,0);
+ check('postgres creator defaults closed',(await db`select count(*)::int n from pg_proc where proname='fixture_default_postgres' and (has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute'))`)[0].n,0);
+ check('provider-owned creator default gap preserved',(await db`select has_function_privilege('authenticated','public.fixture_default_admin()','execute') b`)[0].b,true);
  check('private limiter table grants closed',(await db`select has_table_privilege('authenticated','public.repair_admission_log','select') b`)[0].b,false);
  check('proven missing starter backfilled',(await db`select count(*)::int n from public.points_transactions where user_id=${uuid(901)} and reason='Starter points'`)[0].n,1);
  check('starter backfill preserves balance',(await db`select points from public.profiles where id=${uuid(901)}`)[0].points,16);

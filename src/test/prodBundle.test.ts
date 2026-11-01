@@ -4,16 +4,16 @@ import path from "path";
 
 /**
  * D4 evidence: the production bundle must not contain developer tooling.
- * Skipped when dist/ has not been built in this environment.
+ * Requires the production build; absence is a real failed verification, never skipped.
  */
 const distDir = path.resolve(__dirname, "../../dist/assets");
-const hasBuild = existsSync(distDir);
-
-describe.skipIf(!hasBuild)("production bundle", () => {
-  const bundle = readdirSync(distDir)
+describe("production bundle", () => {
+  const bundle = existsSync(distDir) ? readdirSync(distDir)
     .filter((f) => f.endsWith(".js"))
     .map((f) => readFileSync(path.join(distDir, f), "utf8"))
-    .join("\n");
+    .join("\n") : null;
+
+  it("has actual compiled production assets", () => expect(bundle?.length).toBeGreaterThan(0));
 
   it.each([
     "DJDevTools",
@@ -24,11 +24,13 @@ describe.skipIf(!hasBuild)("production bundle", () => {
     "Bridge & ingest debug",
     "now-playing-ingest",
   ])("contains no developer tooling reference: %s", (needle) => {
-    expect(bundle.includes(needle)).toBe(false);
+    expect(bundle).not.toBeNull();
+    expect(bundle?.includes(needle)).toBe(false);
   });
 
   it("contains no /dj/:id/dev route path", () => {
-    expect(bundle.includes("/dj/:id/dev")).toBe(false);
+    expect(bundle).not.toBeNull();
+    expect(bundle?.includes("/dj/:id/dev")).toBe(false);
   });
 });
 

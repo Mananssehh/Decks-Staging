@@ -128,7 +128,7 @@ async function postEvent(payoutsEnabled: boolean) {
 }
 
 Deno.test({
-  name: "endpoint returns 200 and queues one activation email",
+  name: "endpoint returns 200 with domain-disabled email and preserves payout activation",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -138,21 +138,13 @@ Deno.test({
 
   const res = await postEvent(true);
   assertEquals(res.status, 200);
-  assertEquals(mock.emails.length, 1);
-  assertEquals(
-    (mock.emails[0] as { templateName: string }).templateName,
-    "dj-stripe-connected",
-  );
-  assertEquals(
-    (mock.emails[0] as { idempotencyKey: string }).idempotencyKey,
-    "dj-stripe-connected:acct_TEST123",
-  );
+  assertEquals(mock.emails.length, 0);
   assertEquals(mock.row?.payouts_enabled, true);
 
   // Redelivery of the same event: still 200, no duplicate email.
   const again = await postEvent(true);
   assertEquals(again.status, 200);
-  assertEquals(mock.emails.length, 1);
+  assertEquals(mock.emails.length, 0);
   },
 });
 

@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", refresh);
       clearInterval(interval);
     };
-  }, [user?.id]);
+  }, [user]);
 
 
   const signOut = async () => {

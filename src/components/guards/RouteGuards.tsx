@@ -71,7 +71,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, loading]);
+  }, [user, loading]);
 
   if (loading || state === "loading") return <GuardLoading />;
   if (state === "denied") return <Navigate to="/" replace />;
@@ -108,7 +108,7 @@ export function RequireEventOwner({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, isDJ, loading, id]);
+  }, [user, isDJ, loading, id]);
 
   if (loading || state === "loading") return <GuardLoading />;
   if (state === "denied") {

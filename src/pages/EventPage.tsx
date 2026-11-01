@@ -113,7 +113,6 @@ const EventPage = () => {
       if (ev.requests_status === "ended") {
         toast.info("This event has ended — you can still browse the played tracks.");
       }
-      setEventInfo(ev);
 
       // Show welcome hint once per event per browser
       const hintKey = `decks-hint-${ev.id}`;
@@ -133,11 +132,12 @@ const EventPage = () => {
       setMyVotes(
         Object.fromEntries((votes ?? []).map((v) => [v.song_request_id, v.value as 1 | -1])),
       );
+      setEventInfo(ev); // Subscribe only after the initial snapshot commits.
       setLoading(false);
     })();
 
     return () => { cancelled = true; };
-  }, [code, user, navigate, profile?.nickname]);
+  }, [code, user, navigate, profile?.nickname, navNickname]);
 
   // Restore scroll position when returning from a user profile page (Back button).
   // Source of truth in priority order: location.state.scrollY, then sessionStorage.
