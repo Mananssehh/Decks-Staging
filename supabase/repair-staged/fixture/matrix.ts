@@ -63,7 +63,8 @@ try {
  check('play mirror linked',(await db`select now_playing_request_id from public.now_playing where event_id=${eid}`)[0].now_playing_request_id,song);
  await db`update public.events set cooldown_seconds=0 where id=${eid}`;
  const s2=(await request(guest,'105'))[0].request_id;
- await Promise.all([asUser(owner,q=>q`select public.dj_transition_request(${eid},${song},'playing')`),asUser(owner,q=>q`select public.dj_transition_request(${eid},${s2},'playing')`)]);
+ const plays=await Promise.allSettled([asUser(owner,q=>q`select public.dj_transition_request(${eid},${song},'playing')`),asUser(owner,q=>q`select public.dj_transition_request(${eid},${s2},'playing')`)]);
+ check('parallel stale playback fails closed',plays.every(p=>p.status==='fulfilled'||(p.reason instanceof postgres.PostgresError && p.reason.code==='42501')),true);
  check('parallel DJ only one playing',(await db`select count(*)::int n from public.song_requests where event_id=${eid} and status='playing'`)[0].n,1);
  check('old played timestamp preserved',(await db`select played_at is not null b from public.song_requests where id=${song}`)[0].b,true);
  // Force mirror failure and prove transaction restores both previous and selected rows.
