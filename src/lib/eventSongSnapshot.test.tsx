@@ -1,0 +1,22 @@
+import {it,expect,vi,afterEach} from 'vitest';
+import {render,screen,cleanup} from '@testing-library/react';
+import {MemoryRouter} from 'react-router-dom';
+import {loadEventSongs} from './eventSongSnapshot';
+import {SongRequestCard} from '@/components/SongRequestCard';
+import type {supabase} from '@/integrations/supabase/client';
+afterEach(cleanup);
+it('one left-embedded statement keeps counters and selected vote coherent, preserving unvoted songs',async()=>{
+ const song={id:'s',title:'Fixture',artist:'Artist',album_art:null,external_url:null,upvotes:1,downvotes:0,boost:0,status:'approved',requester_name:'Guest',created_at:'2026-01-01'};
+ let rows=[{...song,votes:[{user_id:'u',value:1}]},{...song,id:'unvoted',votes:[]}];
+ const filters:[string,string][]=[];
+ const eq=vi.fn((key:string,value:string)=>{filters.push([key,value]);return {eq,then:(resolve:(value:unknown)=>void)=>Promise.resolve({data:rows,error:null}).then(resolve)};});
+ const select=vi.fn(()=>({eq}));const from=vi.fn(()=>({select}));const db={from} as unknown as typeof supabase;
+ let snapshot=await loadEventSongs('e','u',db);
+ expect(from).toHaveBeenCalledExactlyOnceWith('song_requests');expect(select).toHaveBeenCalledWith('*, votes!left(user_id,value)');expect(filters).toEqual([['event_id','e'],['votes.user_id','u']]);
+ expect(snapshot.songs.map(s=>s.id)).toEqual(['s','unvoted']);expect(snapshot.votes).toEqual({s:1});
+ const view=render(<MemoryRouter><SongRequestCard song={snapshot.songs[0]} myVote={snapshot.votes.s} onVote={()=>{}}/></MemoryRouter>);
+ expect(screen.getByRole('button',{name:'Upvote'})).toHaveAttribute('aria-pressed','true');expect(screen.getByText('+1')).toBeInTheDocument();
+ rows=[{...song,upvotes:0,votes:[]}];snapshot=await loadEventSongs('e','u',db);
+ view.rerender(<MemoryRouter><SongRequestCard song={snapshot.songs[0]} myVote={snapshot.votes.s??0} onVote={()=>{}}/></MemoryRouter>);
+ expect(screen.getByRole('button',{name:'Upvote'})).toHaveAttribute('aria-pressed','false');expect(screen.getByText('0')).toBeInTheDocument();
+});
