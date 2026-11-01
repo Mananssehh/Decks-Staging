@@ -2,6 +2,7 @@
 // Never prints key material.
 import { getStripe } from "../_shared/stripe.ts";
 import { parseStripeKey } from "../_shared/stripe-key.ts";
+import type Stripe from "https://esm.sh/stripe@17.5.0?target=denonext";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
