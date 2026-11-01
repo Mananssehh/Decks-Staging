@@ -40,7 +40,7 @@ interface Props {
   topTippers?: TopTipper[]
 }
 
-const Email = ({
+export const Email = ({
   djName = 'there',
   weekStart = '',
   weekEnd = '',

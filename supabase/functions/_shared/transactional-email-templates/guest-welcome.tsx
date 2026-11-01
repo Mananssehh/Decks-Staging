@@ -24,7 +24,7 @@ interface Props {
   nickname?: string
 }
 
-const Email = ({ nickname = 'there' }: Props) => (
+export const Email = ({ nickname = 'there' }: Props) => (
   <Html lang="en" dir="ltr">
     <Head />
     <Preview>Welcome to Decks — request songs and tip the DJ live</Preview>

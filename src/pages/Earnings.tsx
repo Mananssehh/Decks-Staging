@@ -3,7 +3,7 @@ import { Navigate, Link } from "react-router-dom";
 import { Loader2, CircleDollarSign, Users, Music, TrendingUp, ArrowLeft } from "lucide-react";
 import { PayoutSummaryCard } from "@/components/PayoutSummaryCard";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

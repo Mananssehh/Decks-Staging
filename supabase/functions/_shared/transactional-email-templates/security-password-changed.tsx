@@ -24,7 +24,7 @@ interface Props {
   changedAt?: string
 }
 
-const Email = ({ nickname = 'there', changedAt }: Props) => (
+export const Email = ({ nickname = 'there', changedAt }: Props) => (
   <Html lang="en" dir="ltr">
     <Head />
     <Preview>Your Decks password was changed</Preview>

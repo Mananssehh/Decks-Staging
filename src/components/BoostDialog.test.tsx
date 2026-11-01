@@ -25,7 +25,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/contexts/auth-state", () => ({
   useAuth: () => ({
     profile: { id: "u1", nickname: "Tester", points: 21, is_premium: false },
     refreshProfile: mockRefreshProfile,

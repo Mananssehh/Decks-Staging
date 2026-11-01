@@ -30,7 +30,7 @@ interface Props {
   roomCode?: string
 }
 
-const Email = ({
+export const Email = ({
   djName = 'your DJ',
   eventName = 'the event',
   songTitle,

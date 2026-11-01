@@ -30,7 +30,7 @@ interface Props {
   netAmountCents?: number
 }
 
-const Email = ({
+export const Email = ({
   djName = 'there',
   guestName = 'Anonymous',
   eventName = 'your event',

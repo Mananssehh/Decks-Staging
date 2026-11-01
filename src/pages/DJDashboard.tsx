@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Archive as ArchiveIcon, Copy, Loader2, Plus, QrCode, Radio, Settings, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

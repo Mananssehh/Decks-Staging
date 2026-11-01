@@ -28,7 +28,7 @@ interface Props {
   receiptUrl?: string
 }
 
-const Email = ({
+export const Email = ({
   djName = 'your DJ',
   eventName = 'the event',
   grossAmountCents = 0,

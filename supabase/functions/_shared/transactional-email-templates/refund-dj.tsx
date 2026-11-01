@@ -30,7 +30,7 @@ interface Props {
   fullyRefunded?: boolean
 }
 
-const Email = ({
+export const Email = ({
   djName = 'there',
   guestName = 'A guest',
   eventName = 'your event',

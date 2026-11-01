@@ -24,7 +24,7 @@ interface Props {
   djName?: string
 }
 
-const Email = ({ djName = 'there' }: Props) => (
+export const Email = ({ djName = 'there' }: Props) => (
   <Html lang="en" dir="ltr">
     <Head />
     <Preview>Payouts are enabled — you're ready to receive tips</Preview>

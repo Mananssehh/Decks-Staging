@@ -8,7 +8,7 @@ const authState = {
   loading: false,
 };
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/contexts/auth-state", () => ({
   useAuth: () => authState,
 }));
 
