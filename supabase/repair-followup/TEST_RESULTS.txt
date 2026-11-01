@@ -1,4 +1,13 @@
-FINAL STAGING DEPLOYMENT TURN — actual results (November 1 2026 UTC)
+FINAL SOURCE-ONLY LIFECYCLE REPAIR — November 1 2026 UTC
+- Starting HEAD: f74250ed5ab49d4cb3bdacc3e8b77b36ebe6dd99.
+- Reviewer evidence, not agent-executed: final build/typecheck/lint/all107 tests passed; authenticated two-tab own-vote state synchronized. Both tabs still stayed LIVE after QA event ended. Published table inventory excludes votes; unsupported binding can invalidate handshake. Cross-tab storage success is not server-channel proof.
+- Source repair: removed EventPage votes binding only; published songs/events bindings, coherent snapshot, reconnect/online/visibility/storage, optimistic guards and cleanup preserved.
+- Inspected all current src postgres_changes bindings against reviewer inventory: remaining targets song_requests/events/now_playing/dj_tips/error_logs are published. No other invalid binding evidenced.
+- bunx vitest run src/lib/eventRefresh.test.ts src/lib/eventSongSnapshot.test.tsx src/lib/eventEntry.test.ts: PASS 11 tests / 3 files. Existing React Router v7 future-flag notices; no test failures or skips.
+- bunx eslint . --max-warnings 0: PASS zero errors/warnings. Generated MCP file and exact exclusion unchanged.
+- No manual build, authenticated browser session, SQL/schema/publication change, Edge deployment, provider/email/payment/Auth operation. Root repeats hosted handshake and end-event UI validation; not claimed passed here.
+
+PRIOR FINAL STAGING DEPLOYMENT TURN — actual results (November 1 2026 UTC)
 - Hosted catalog read confirmed followup_payment_contract body payment-v3 and service-only function ACL; direct query execution denied by intended private ACL. No grants or SQL changed.
 - supabase.get_types: regenerated actual installed hosted types.
 - supabase.test_edge_functions functions=[stripe-webhook,tip-reconcile,tip-create-checkout]: 27 passed, 0 failed after shared evidence bundling fix. Local fake backend/provider tests, not real Stripe or hosted payment requests.

@@ -38,5 +38,5 @@
 
 ## Final staging lifecycle repair
 - [x] Remove the unpublished votes binding; preserve published song_requests/events feeds and all coherent refresh/optimistic/cleanup behavior.
-- [ ] Run existing refresh/snapshot regressions and zero-warning lint; record runtime catch and source evidence.
+- [x] Existing refresh/snapshot/event-entry regressions: 11 passed; zero-warning lint passed; runtime catch and source evidence recorded.
 - [ ] Root repeats actual hosted end-event lifecycle validation after this source-only repair; no deployment or SQL changes authorized.

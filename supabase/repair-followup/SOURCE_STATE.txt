@@ -1,3 +1,8 @@
+Final lifecycle repair requested and observed starting HEAD: f74250ed5ab49d4cb3bdacc3e8b77b36ebe6dd99
+Source-only removal of unpublished EventPage votes binding; no SQL or Edge deployment this turn.
+Root owns final hosted handshake/lifecycle validation; source tests and lint recorded in TEST_RESULTS.txt.
+
+Prior deployment-turn source evidence:
 User requested continuation: 274333307bb020852c6e651949933fd3564f06c7
 Observed starting platform HEAD: c9f409296e01d882387691e9ff15c937596158f8
 Observed HEAD before final evidence refresh: 1a6f117eb9d1e7c22e245bffbf0c7fce28527f43
