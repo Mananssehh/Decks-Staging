@@ -29,3 +29,9 @@
 - [x] Immutable redirects, retry lifecycle and evidence-backed ambiguity review.
 - [x] Parallel PostgreSQL and canonical Edge integration regressions; lint/frontend behavior checks.
 - [x] Ordered review/install/deployment and containment documentation.
+
+## Final staging payment activation
+- [ ] Verify installed contract and regenerate hosted types; deploy webhook/reconcile before checkout.
+- [ ] Read-only honest readiness and exact staging-origin fallback regressions.
+- [ ] Narrow generated MCP lint exclusion; preview refresh and source cross-tab diagnosis.
+- [ ] Update installed/deployed evidence and remaining provider gates.
