@@ -9,6 +9,7 @@ CREATE TABLE public.repair_admission_log (
 GRANT ALL ON public.repair_admission_log TO service_role;
 REVOKE ALL ON public.repair_admission_log FROM anon,authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.repair_admission_log_id_seq TO service_role;
+REVOKE ALL ON SEQUENCE public.repair_admission_log_id_seq FROM anon,authenticated;
 ALTER TABLE public.repair_admission_log ENABLE ROW LEVEL SECURITY;
 CREATE INDEX repair_admission_user_time ON public.repair_admission_log(user_id,created_at);
 CREATE INDEX repair_admission_retention ON public.repair_admission_log(created_at);

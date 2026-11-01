@@ -9,6 +9,12 @@ async function asUser<T>(id:string,fn:(q:postgres.TransactionSql)=>Promise<T>){r
 async function denied(label:string,fn:()=>Promise<unknown>){try{await fn();throw new Error(label+' unexpectedly accepted');}catch(e){assert.ok(e instanceof postgres.PostgresError,label);checks++;console.log('PASS',label);}}
 async function request(id:string,sid:string,event=eid){return asUser(id,q=>q`select * from public.request_song(${event},'itunes',${sid},${'Track '+sid},'Artist')`);}
 try {
+ check('cached totals repaired',(await db`select upvotes,downvotes from public.song_requests where id=${uuid(9001)}`)[0],{upvotes:0,downvotes:0});
+ check('cached totals evidence retained',(await db`select old_upvotes,old_downvotes from public.repair_counter_evidence where id=${uuid(9001)}`)[0],{old_upvotes:999,old_downvotes:888});
+ await db`create function public.fixture_default_postgres() returns integer language sql as 'select 1'`;
+ await db.begin(async q=>{await q`set local role supabase_admin`;await q`create function public.fixture_default_admin() returns integer language sql as 'select 1'`;});
+ check('both creator defaults closed',(await db`select count(*)::int n from pg_proc where proname in ('fixture_default_postgres','fixture_default_admin') and (has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute'))`)[0].n,0);
+ check('private limiter table grants closed',(await db`select has_table_privilege('authenticated','public.repair_admission_log','select') b`)[0].b,false);
  check('proven missing starter backfilled',(await db`select count(*)::int n from public.points_transactions where user_id=${uuid(901)} and reason='Starter points'`)[0].n,1);
  check('starter backfill preserves balance',(await db`select points from public.profiles where id=${uuid(901)}`)[0].points,16);
  check('ambiguous offset quarantined',(await db`select classification from public.repair_points_reconciliation where user_id=${uuid(902)}`)[0].classification,'quarantined');
@@ -107,6 +113,13 @@ try {
  check('atomic bridge claim exactly one',claims.filter(r=>r[0].j.ok).length,1);
  await db`insert into public.bridge_pairing_codes(code,event_id,created_by,expires_at) values('654321',${eid},${owner},now()-interval '1 second')`;
  check('expired code denied',(await db`select public.repair_claim_bridge_code('654321','expired-ip') j`)[0].j.ok,false);
+ const [integration]=await db`select id,ingest_token from public.event_integrations where event_id=${eid}`;
+ const bridgeSong=(await request(guest,'777'))[0].request_id;
+ const bridgeWrite=()=>db.begin(async q=>{await q`set local role service_role`;await q`select set_config('request.jwt.claim.role','service_role',true)`;return q`select public.repair_write_broadcast(${eid},'{"title":"Track 777","artist":"Artist","status":"playing"}'::jsonb,${bridgeSong},${integration.id},${integration.ingest_token})`;});
+ await bridgeWrite();
+ check('service ingest atomically marks request played',(await db`select status,played_by_source from public.song_requests where id=${bridgeSong}`)[0],{status:'played',played_by_source:'decks_bridge'});
+ await asUser(owner,q=>q`select public.regenerate_ingest_token(${eid})`);
+ await denied('stale ingest token denied after rotation',bridgeWrite);
  await denied('client bridge claim denied',()=>asUser(guest,q=>q`select public.repair_claim_bridge_code('123456','same-ip')`));
  const fails=await Promise.all(Array.from({length:20},()=>db.begin(async q=>{await q`set local role service_role`;return q`select public.repair_claim_bridge_code('000000','fail-ip') j`;})));
  check('bridge failed attempt cap exact',(await db`select count(*)::int n from public.bridge_pair_attempts where ip='fail-ip'`)[0].n,10);

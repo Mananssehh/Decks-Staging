@@ -28,3 +28,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin REVOKE EXECUTE ON FUNCTIONS FRO
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
 -- email_queue_dispatch/email_queue_wake definitions intentionally unchanged (both no-op).
+-- Trigger creation requires EXECUTE for the migration creator. Invoker functions that call
+-- helpers require explicit dependency grants; do not grant trigger helpers to browsers by default.
