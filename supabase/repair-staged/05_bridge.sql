@@ -63,9 +63,9 @@ BEGIN
   DELETE FROM public.bridge_pairing_codes bpc
     WHERE bpc.event_id = _event_id AND bpc.claimed_at IS NULL;
 
-  -- Cleanup expired codes globally
+  -- Cleanup is scoped to the locked event to avoid cross-event lock inversion.
   DELETE FROM public.bridge_pairing_codes bpc
-    WHERE bpc.expires_at < now() - interval '1 hour';
+    WHERE bpc.event_id = _event_id AND bpc.expires_at < now() - interval '1 hour';
 
   LOOP
     _attempts := _attempts + 1;
@@ -113,7 +113,7 @@ $function$;
 CREATE OR REPLACE FUNCTION public.get_ingest_token(_event_id uuid)
  RETURNS text
  LANGUAGE plpgsql
- STABLE SECURITY DEFINER
+ VOLATILE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
