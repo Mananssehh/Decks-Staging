@@ -5,7 +5,9 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // The Vite MCP plugin owns this bundled output. Its authored src/lib/mcp/**
+  // inputs remain linted; generated output follows the same boundary as dist.
+  { ignores: ["dist", "supabase/functions/mcp/index.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
