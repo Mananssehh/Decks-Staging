@@ -13,7 +13,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, container, detailLabel, detailRow, footer,
   footerLink, footerTiny, formatUSD, h1, hr, lead, link, main, text, textMuted,
@@ -83,16 +82,3 @@ export const Email = ({
   </Html>
 )
 
-export const template = {
-  component: Email,
-  subject: 'Your tip was refunded',
-  displayName: 'Refund notification (guest)',
-  previewData: {
-    djName: 'Nova',
-    eventName: 'Friday Night Set',
-    grossAmountCents: 500,
-    refundedAmountCents: 500,
-    fullyRefunded: true,
-    receiptUrl: 'https://pay.stripe.com/receipts/example',
-  },
-} satisfies TemplateEntry

@@ -14,7 +14,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, amountBox, amountLabel, amountNumber, button,
   container, detailLabel, detailRow, footer, footerLink, footerTiny, formatUSD,
@@ -93,16 +92,3 @@ export const Email = ({
   </Html>
 )
 
-export const template = {
-  component: Email,
-  subject: '🎉 You received a new tip on Decks',
-  displayName: 'DJ tip notification',
-  previewData: {
-    djName: 'Nova',
-    guestName: 'Sam',
-    eventName: 'Friday Night Set',
-    songTitle: 'One More Time — Daft Punk',
-    grossAmountCents: 500,
-    netAmountCents: 350,
-  },
-} satisfies TemplateEntry

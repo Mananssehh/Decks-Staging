@@ -13,7 +13,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, container, detailLabel, detailRow, footer,
   footerLink, footerTiny, h1, hr, lead, link, main, text,
@@ -67,9 +66,3 @@ export const Email = ({ nickname = 'there', changedAt }: Props) => (
   </Html>
 )
 
-export const template = {
-  component: Email,
-  subject: 'Your Decks password was changed',
-  displayName: 'Security: password changed',
-  previewData: { nickname: 'Sam', changedAt: new Date().toUTCString() },
-} satisfies TemplateEntry

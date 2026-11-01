@@ -14,7 +14,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, amountBox, amountLabel, amountNumber, button,
   container, detailLabel, detailRow, footer, footerLink, footerTiny, formatUSD,
@@ -99,16 +98,3 @@ export const Email = ({
   )
 }
 
-export const template = {
-  component: Email,
-  subject: 'Thanks for supporting your DJ ❤️',
-  displayName: 'Guest tip thank-you',
-  previewData: {
-    djName: 'Nova',
-    eventName: 'Friday Night Set',
-    songTitle: 'One More Time — Daft Punk',
-    amountCents: 500,
-    receiptUrl: 'https://pay.stripe.com/receipts/example',
-    roomCode: 'NOVA01',
-  },
-} satisfies TemplateEntry
