@@ -4,7 +4,16 @@
 - [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.
 - [x] Switch join, bridge and DJ source callers to repaired boundaries without deployment.
 - [x] Run source tests and isolated database/concurrency fixtures; document unverified hosted behavior.
-- [ ] Independent review and execution of staged SQL (blocked on reviewer; no hosted migration application this turn).
+- [x] Independent reviewer installed core SQL; provider-owned supabase_admin defaults remain unavailable.
+
+## Staging follow-up
+- [x] Confirm core RPCs, regenerate hosted types, deploy matching core Edge functions.
+- [ ] Reconnect/cross-tab event and optimistic vote synchronization with regressions.
+- [ ] Safe disabled welcome sender; managed domain and durable delivery integration gate.
+- [ ] Source-only checkout reservation, monotonic webhook, isolated concurrency/retry fixtures and rollback.
+- [ ] PKCE code exchange and local redirect regression tests.
+- [ ] Fix lint/frontend/Edge tests; report unavailable production bundle checks.
+- [ ] Independent review/install follow-up SQL before deploying dependent functions.
 
 ## Backlog
 - [ ] Replace hard-coded $100 tip limits ($50 single / $100 per 24h / $100 per event, currently constants inside `check_tip_cap` and `src/lib/purchaseCaps.ts`) with configurable, server-enforced limits (e.g. `app_config` row read by the cap function, admin-editable). Do not change current limit values as part of D3.
