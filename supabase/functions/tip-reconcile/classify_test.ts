@@ -5,8 +5,8 @@ Deno.test("paid session -> succeeded", () => {
   assertEquals(classify({ status: "complete", payment_status: "paid" }), "succeeded");
 });
 
-Deno.test("no_payment_required -> succeeded", () => {
-  assertEquals(classify({ status: "complete", payment_status: "no_payment_required" }), "succeeded");
+Deno.test("no_payment_required does not fulfill a positive tip", () => {
+  assertEquals(classify({ status: "complete", payment_status: "no_payment_required" }), "unresolved");
 });
 
 Deno.test("expired session -> expired", () => {

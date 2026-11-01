@@ -51,6 +51,7 @@ BEGIN
  IF nullif(_e->>'tip_id','') IS NOT NULL AND (_e->>'tip_id')::uuid<>tid THEN RAISE EXCEPTION 'Tip identity mismatch'; END IF;
  -- Existing known IDs are immutable; absent IDs may be linked only by other verified identity.
  FOREACH k IN ARRAY ARRAY['session_id','payment_intent','charge_id'] LOOP
+  IF nullif(_e->>k,'') IS NOT NULL AND (_e->>k) !~ CASE k WHEN 'session_id' THEN '^cs_' WHEN 'payment_intent' THEN '^pi_' ELSE '^ch_' END THEN RAISE EXCEPTION 'Malformed provider identity'; END IF;
   v:=CASE k WHEN 'session_id' THEN d.stripe_checkout_session_id WHEN 'payment_intent' THEN d.stripe_payment_intent_id ELSE d.stripe_charge_id END;
   IF v IS NOT NULL AND nullif(_e->>k,'') IS NOT NULL AND v<>_e->>k THEN RAISE EXCEPTION 'Provider identity mismatch'; END IF;
  END LOOP;
@@ -74,6 +75,7 @@ BEGIN
   refunded:=greatest(refunded,(_e->>'refunded_amount_cents')::integer);
  END IF;
  IF kind LIKE 'dispute_%' THEN
+  IF f.dispute_state IN ('won','lost') AND kind<>'dispute_open' AND f.dispute_state<>CASE kind WHEN 'dispute_won' THEN 'won' ELSE 'lost' END THEN RAISE EXCEPTION 'Conflicting closed dispute: review'; END IF;
   IF nullif(_e->>'dispute_id','') IS NULL OR f.dispute_id IS NOT NULL AND f.dispute_id<>_e->>'dispute_id' THEN RAISE EXCEPTION 'Dispute identity mismatch'; END IF;
   dispute_time:=(_e->>'created')::bigint;
   IF dispute_time IS NULL THEN RAISE EXCEPTION 'Missing dispute timestamp'; END IF;
@@ -137,3 +139,13 @@ REVOKE ALL ON FUNCTION public.followup_payment_contract() FROM PUBLIC,anon,authe
 GRANT EXECUTE ON FUNCTION public.followup_payment_contract() TO service_role;
 -- Remove every alternate REST financial writer. Security-definer functions (postgres owned) retain writes.
 REVOKE INSERT,UPDATE,DELETE ON public.dj_tips FROM service_role,anon,authenticated;
+
+-- Immutable accounting identity and fee prevents even owner-side accidental changes after reservation.
+CREATE FUNCTION public.followup_tip_identity_guard() RETURNS trigger LANGUAGE plpgsql SET search_path='' AS $$
+BEGIN
+ IF (NEW.id,NEW.user_id,NEW.dj_id,NEW.event_id,NEW.gross_amount_cents,NEW.currency,NEW.platform_fee_cents,NEW.net_amount_cents,NEW.livemode,NEW.stripe_destination_account,NEW.created_at)
+ IS DISTINCT FROM (OLD.id,OLD.user_id,OLD.dj_id,OLD.event_id,OLD.gross_amount_cents,OLD.currency,OLD.platform_fee_cents,OLD.net_amount_cents,OLD.livemode,OLD.stripe_destination_account,OLD.created_at)
+ THEN RAISE EXCEPTION 'Immutable tip identity'; END IF; RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.followup_tip_identity_guard() FROM PUBLIC,anon,authenticated,service_role;
+CREATE TRIGGER followup_tip_identity_guard BEFORE UPDATE ON public.dj_tips FOR EACH ROW EXECUTE FUNCTION public.followup_tip_identity_guard();
