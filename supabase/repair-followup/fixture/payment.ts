@@ -7,7 +7,7 @@ const user=uuid(1),dj=uuid(2),event=uuid(100),otherEvent=uuid(101);
 const check=(label:string,value:unknown,want:unknown)=>{assert.deepEqual(value,want,label);count++;console.log('PASS',label);};
 async function denied(label:string,fn:()=>Promise<unknown>){try{await fn();throw Error('unexpected accept');}catch(e){assert.ok(e instanceof postgres.PostgresError,label);count++;console.log('PASS',label);}}
 const service=<T>(fn:(q:postgres.TransactionSql)=>Promise<T>)=>db.begin(async q=>{await q`set local role service_role`;await q`select set_config('request.jwt.claim.role','service_role',true)`;return fn(q);});
-const reserve=(key:string,amount=5000,e=event)=>service(q=>q`select (public.followup_reserve_tip(${user},${key},${e},${amount},null)).*`);
+const reserve=(key:string,amount=5000,e=event)=>service(q=>q`select (public.followup_reserve_tip(${user},${key},${e},${amount},null,'https://fixture.invalid')).*`);
 try {
  await db`insert into public.profiles(id,nickname) values(${user},'Guest'),(${dj},'DJ')`;
  await db`insert into public.events(id,dj_id,name,dj_name,room_code) values(${event},${dj},'Fixture','DJ','PAY001'),(${otherEvent},${dj},'Other','DJ','PAY002')`;
@@ -30,7 +30,7 @@ try {
  await db`update public.dj_tips set created_at=now()-interval '2 days',checkout_expires_at=now()-interval '1 day'`;
  await denied('ambiguous old reservation never frees cap by time alone',()=>reserve(uuid(51),100));
  const id=retries[0][0].id;
- const apply=(eventId:string,type:string,paid:boolean)=>service(q=>q`select public.followup_apply_tip_event(${eventId},${type},${id},'cs_fake','pi_fake',${paid},5000,'usd',false)`);
+ const apply=(eventId:string,type:string,paid:boolean)=>service(q=>q`select public.followup_apply_financial_event(${q.json({event_id:eventId,event_type:type,reservation_id:id,session_id:'cs_fake',payment_intent:'pi_fake',kind:paid?'paid':type.includes('expired')?'expired':type.includes('failed')?'failed':'pending',terminal:true,amount_cents:5000,currency:'usd',livemode:false})})`);
  await apply('evt_unpaid','checkout.session.completed',false);
  check('completed unpaid does not fulfill',(await db`select status from public.dj_tips where id=${retries[0][0].tip_id}`)[0].status,'pending');
  await apply('evt_expired','checkout.session.expired',false);
@@ -40,12 +40,13 @@ try {
  await apply('evt_failed','checkout.session.async_payment_failed',false);
  check('late unpaid failure never downgrades paid',(await db`select status from public.dj_tips where id=${retries[0][0].tip_id}`)[0].status,'succeeded');
  check('paid event recorded exactly once',(await db`select count(*)::int n from public.followup_payment_events where event_id='evt_paid'`)[0].n,1);
- await denied('signed mismatched amount cannot settle',()=>service(q=>q`select public.followup_apply_tip_event('evt_forged','checkout.session.completed',${id},'cs_fake','pi_fake',true,1,'usd',false)`));
+ await denied('signed mismatched amount cannot settle',()=>service(q=>q`select public.followup_apply_financial_event(${q.json({event_id:'evt_forged',event_type:'checkout.session.completed',reservation_id:id,session_id:'cs_fake',payment_intent:'pi_fake',kind:'paid',amount_cents:1,currency:'usd',livemode:false})})`));
  await denied('different session cannot attach',()=>service(q=>q`select public.followup_attach_tip_session(${id},'cs_other','https://checkout.stripe.com/c/pay/fake',now())`));
- await db`update public.dj_tips set status='refunded' where id=${retries[0][0].tip_id}`;
+ await service(q=>q`select public.followup_apply_financial_event(${q.json({event_id:'evt_refund',event_type:'charge.refunded',reservation_id:id,session_id:'cs_fake',payment_intent:'pi_fake',kind:'refund',refunded_amount_cents:5000,amount_cents:5000,currency:'usd',livemode:false})})`);
  await apply('evt_again','checkout.session.completed',true);
  check('paid redelivery preserves refunds',(await db`select status from public.dj_tips where id=${retries[0][0].tip_id}`)[0].status,'refunded');
- await denied('client reservation execute denied',()=>db.begin(async q=>{await q`set local role authenticated`;return q`select public.followup_reserve_tip(${user},${uuid(60)},${event},100,null)`;}));
+ await denied('client reservation execute denied',()=>db.begin(async q=>{await q`set local role authenticated`;return q`select public.followup_reserve_tip(${user},${uuid(60)},${event},100,null,'https://fixture.invalid')`;}));
  check('client reservation table grants closed',(await db`select has_table_privilege('authenticated','public.followup_tip_reservations','select') b`)[0].b,false);
+ await denied('service REST writes closed',()=>service(q=>q`update public.dj_tips set status='failed' where id=${retries[0][0].tip_id}`));
  console.log(`RESULT ${count} payment assertions passed with real concurrent connections`);
 }finally{await db.end();}
