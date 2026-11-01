@@ -111,7 +111,10 @@ supabase/repair-followup/00_preflight.sql
 supabase/repair-followup/01_tip_reservations.sql
 supabase/repair-followup/02_tip_lifecycle.sql
 supabase/repair-followup/03_verify.sql
+supabase/repair-followup/CHANGED_FILES.txt
 supabase/repair-followup/README.md
+supabase/repair-followup/SOURCE_STATE.txt
+supabase/repair-followup/TEST_RESULTS.txt
 supabase/repair-followup/fixture/payment.ts
 supabase/repair-followup/fixture/run.sh
 supabase/repair-followup/functions/stripe-webhook/handler.ts
