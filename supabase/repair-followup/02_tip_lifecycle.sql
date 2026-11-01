@@ -63,7 +63,7 @@ BEGIN
   IF r.id IS NOT NULL AND nullif(_e->>'expires_at','') IS NOT NULL AND (_e->>'expires_at')::bigint IS DISTINCT FROM (r.checkout_parameters->>'expires_at')::bigint THEN RAISE EXCEPTION 'Frozen expiry mismatch'; END IF;
  END IF;
  IF EXISTS(SELECT 1 FROM public.followup_payment_events WHERE event_id=eid) THEN
-  IF NOT EXISTS(SELECT 1 FROM public.followup_payment_events WHERE event_id=eid AND tip_id=tid AND evidence=_e) THEN RAISE EXCEPTION 'Event replay mismatch'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.followup_payment_events WHERE event_id=eid AND tip_id=tid AND (evidence=_e OR nullif(_e->>'event_fingerprint','') IS NOT NULL AND evidence->>'event_fingerprint'=_e->>'event_fingerprint')) THEN RAISE EXCEPTION 'Event replay mismatch'; END IF;
   RETURN tid;
  END IF;
  INSERT INTO public.followup_tip_financial_state(tip_id,paid) VALUES(tid,d.status IN ('succeeded','refunded','partially_refunded','disputed')) ON CONFLICT DO NOTHING;

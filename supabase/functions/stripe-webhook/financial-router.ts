@@ -12,7 +12,9 @@ export function sessionEvidence(s:Stripe.Checkout.Session):Evidence {
  terminal:s.status==='expired'&&(!pi||['canceled','requires_payment_method'].includes(pi.status))};
 }
 export async function routeFinancial(event:Stripe.Event,stripe:Stripe,db:RpcClient):Promise<boolean>{
- const base:Evidence={event_id:event.id,event_type:event.type,created:event.created};
+ const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(event)));
+ const fingerprint=Array.from(new Uint8Array(hash),n=>n.toString(16).padStart(2,'0')).join('');
+ const base:Evidence={event_id:event.id,event_type:event.type,created:event.created,event_fingerprint:fingerprint};
  let e:Evidence;
  if(event.type==='account.updated'){
   const supplied=event.data.object as Stripe.Account;

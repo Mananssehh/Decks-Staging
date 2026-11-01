@@ -70,7 +70,7 @@ Deno.serve(async req=>{
    const {data:r,error:re}=await db.from('followup_tip_reservations').select('id').eq('tip_id',row.id).maybeSingle();if(re)throw re;
    const e=await reconcileEvidence({...row,reservation_id:r?.id??null},{retrieve:id=>stripe.checkout.sessions.retrieve(id,{expand:['payment_intent']}),list:params=>stripe.checkout.sessions.list(params)});
    results.push({tip_id:row.id,resolution:e.kind});
-   if(apply)await paymentRpc(db,'followup_apply_financial_event',{_e:{...e,event_id:`reconcile:${row.id}:${await evidenceDigest(e)}`,event_type:'reconciliation',created:Math.floor(Date.now()/1000)}});
+   if(apply)await paymentRpc(db,'followup_apply_financial_event',{_e:{...e,event_id:`reconcile:${row.id}:${await evidenceDigest(e)}`,event_type:'reconciliation'}});
   }
   return json({dry_run:!apply,results,notifications:'domain_not_configured'});
  }catch{return json({error:'Authoritative reconciliation failed; amounts retained'},500);}

@@ -29,3 +29,9 @@ Deno.test('invalid amounts and keys never reserve or create',async()=>{
  const f=fixture();for(const amount of [99,5001,101.5])await assertRejects(()=>createReservedCheckout('verified-user',{...input,amount_cents:amount},f.deps));assertEquals(f.calls.length,0);
 });
 Deno.test('runtime origin change does not mutate frozen redirects',async()=>{const f=fixture();f.failAttach();await assertRejects(()=>createReservedCheckout('verified-user',input,f.deps));f.deps.origin='https://changed.invalid';await createReservedCheckout('verified-user',input,f.deps);assertEquals(f.calls[0].params,f.calls[1].params);});
+Deno.test('parallel creates after timeout and persistence failure use one fake-provider session',async()=>{
+ const f=fixture();const sessions=new Map<string,{id:string;url:string;expires_at:number}>();let creates=0;
+ f.deps.create=async(_,opts)=>{let s=sessions.get(opts.idempotencyKey);if(!s){creates++;s={id:'cs_once',url:'https://checkout.stripe.com/c/pay/once',expires_at:1900000000};sessions.set(opts.idempotencyKey,s);}return s;};
+ await Promise.all(Array.from({length:10},()=>createReservedCheckout('verified-user',input,f.deps)));
+ assertEquals(creates,1);assertEquals(sessions.size,1);
+});
