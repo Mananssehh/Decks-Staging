@@ -35,6 +35,7 @@ END $$;
 REVOKE ALL ON FUNCTION public.repair_claim_bridge_code(text,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.repair_claim_bridge_code(text,text) TO service_role;
 REVOKE INSERT,UPDATE,DELETE ON public.bridge_pairing_codes,public.bridge_pair_attempts FROM anon,authenticated;
+REVOKE INSERT,UPDATE,DELETE ON public.event_integrations FROM anon,authenticated;
 -- Existing owner-scoped token functions lock the event before integration/code writes.
 CREATE OR REPLACE FUNCTION public.generate_bridge_pairing_code(_event_id uuid)
  RETURNS TABLE(code text, expires_at timestamp with time zone)

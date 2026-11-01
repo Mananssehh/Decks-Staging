@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 import assert from 'node:assert/strict';
-const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT),username:'postgres',database:'decks_repair',max:24,onnotice:()=>{}});
+const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT),username:'postgres',database:'decks_repair',max:24,onnotice:()=>{},connection:{statement_timeout:10000,lock_timeout:5000}});
 let checks=0;
 function check(label:string,value:unknown,expected:unknown){assert.deepEqual(value,expected,label);checks++;console.log('PASS',label);}
 const uuid=(n:number)=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
@@ -9,9 +9,17 @@ async function asUser<T>(id:string,fn:(q:postgres.TransactionSql)=>Promise<T>){r
 async function denied(label:string,fn:()=>Promise<unknown>){try{await fn();throw new Error(label+' unexpectedly accepted');}catch(e){assert.ok(e instanceof postgres.PostgresError,label);checks++;console.log('PASS',label);}}
 async function request(id:string,sid:string,event=eid){return asUser(id,q=>q`select * from public.request_song(${event},'itunes',${sid},${'Track '+sid},'Artist')`);}
 try {
+ check('proven missing starter backfilled',(await db`select count(*)::int n from public.points_transactions where user_id=${uuid(901)} and reason='Starter points'`)[0].n,1);
+ check('starter backfill preserves balance',(await db`select points from public.profiles where id=${uuid(901)}`)[0].points,16);
+ check('ambiguous offset quarantined',(await db`select classification from public.repair_points_reconciliation where user_id=${uuid(902)}`)[0].classification,'quarantined');
+ check('quarantine leaves balance',(await db`select points from public.profiles where id=${uuid(902)}`)[0].points,22);
+ check('quarantine has no invented award',(await db`select count(*)::int n from public.points_transactions where user_id=${uuid(902)} and reason='Starter points'`)[0].n,0);
  await db`insert into auth.users(id) values(${owner}),(${guest}),(${other})`;
  check('bootstrap starter balance',(await db`select points from public.profiles where id=${guest}`)[0].points,15);
  check('bootstrap one starter ledger',(await db`select count(*)::int n from public.points_transactions where user_id=${guest} and reason='Starter points'`)[0].n,1);
+ check('bootstrap guest role',(await db`select count(*)::int n from public.user_roles where user_id=${guest} and role='guest'`)[0].n,1);
+ await asUser(guest,q=>q`select public.ensure_profile('SharedNick')`);
+ check('ensure profile no duplicate starter',(await db`select count(*)::int n from public.points_transactions where user_id=${guest} and reason='Starter points'`)[0].n,1);
  await db`insert into public.user_roles(user_id,role) values(${owner},'dj')`;
  await db`insert into public.events(id,dj_id,name,dj_name,room_code,cooldown_seconds) values(${eid},${owner},'Fixture','DJ','ROOM01',30)`;
  const join=()=>asUser(guest,q=>q`select public.join_event_by_code('ROOM01','SameNick') j`);
@@ -48,6 +56,9 @@ try {
  await db`delete from public.event_banned_guests where event_id=${eid}`;
  await denied('nonowner transition denied',()=>asUser(other,q=>q`select public.dj_transition_request(${eid},${song},'playing')`));
  await asUser(owner,q=>q`select public.dj_transition_request(${eid},${song},'approved')`);checks++;console.log('PASS owner approval');
+ await asUser(owner,q=>q`select public.dj_set_queue_position(${eid},${song},-10)`);
+ check('owner queue positive',(await db`select queue_position from public.song_requests where id=${song}`)[0].queue_position,-10);
+ await denied('nonowner queue denied',()=>asUser(other,q=>q`select public.dj_set_queue_position(${eid},${song},2)`));
  await asUser(owner,q=>q`select public.dj_transition_request(${eid},${song},'playing')`);
  check('play mirror linked',(await db`select now_playing_request_id from public.now_playing where event_id=${eid}`)[0].now_playing_request_id,song);
  await db`update public.events set cooldown_seconds=0 where id=${eid}`;
@@ -78,9 +89,16 @@ try {
  check('ended request denied',(await request(guest,'110'))[0].outcome,'unavailable');
  await db`update public.events set requests_status='live' where id=${eid}`;
  check('first ingest token usable',typeof (await asUser(owner,q=>q`select public.get_ingest_token(${eid}) t`))[0].t,'string');
+ await denied('nonowner ingest token denied',()=>asUser(other,q=>q`select public.get_ingest_token(${eid})`));
+ await denied('manual broadcast cannot forge request link',()=>asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":"Fake"}'::jsonb,${s2})`));
+ await denied('broadcast JSON type validation',()=>asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":42}'::jsonb)`));
+ await asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":"Manual","status":"mixing"}'::jsonb)`);
+ check('manual broadcast retires playing',(await db`select count(*)::int n from public.song_requests where event_id=${eid} and status='playing'`)[0].n,0);
  await db`insert into public.bridge_pairing_codes(code,event_id,created_by,expires_at) values('123456',${eid},${owner},now()+interval '5 minutes')`;
  const claims=await Promise.all(Array.from({length:12},(_,i)=>db.begin(async q=>{await q`set local role service_role`;return q`select public.repair_claim_bridge_code('123456',${'fixture-'+i}) j`;})));
  check('atomic bridge claim exactly one',claims.filter(r=>r[0].j.ok).length,1);
+ await db`insert into public.bridge_pairing_codes(code,event_id,created_by,expires_at) values('654321',${eid},${owner},now()-interval '1 second')`;
+ check('expired code denied',(await db`select public.repair_claim_bridge_code('654321','expired-ip') j`)[0].j.ok,false);
  await denied('client bridge claim denied',()=>asUser(guest,q=>q`select public.repair_claim_bridge_code('123456','same-ip')`));
  const fails=await Promise.all(Array.from({length:20},()=>db.begin(async q=>{await q`set local role service_role`;return q`select public.repair_claim_bridge_code('000000','fail-ip') j`;})));
  check('bridge failed attempt cap exact',(await db`select count(*)::int n from public.bridge_pair_attempts where ip='fail-ip'`)[0].n,10);
@@ -90,13 +108,14 @@ try {
  const crowd=await Promise.all(Array.from({length:100},(_,i)=>asUser(uuid(100+i),q=>q`select public.join_event_by_code('ROOM01',null) j`)));
  check('100 prepared identities all admitted',crowd.filter(r=>r[0].j.ok).length,100);
  await Promise.all(Array.from({length:100},(_,i)=>asUser(uuid(100+i),q=>q`select public.join_event_by_code('ROOM01',null)`)));
- await db`insert into public.repair_admission_settings(event_budget) values(100)`;
+ const remaining=await Promise.all(Array.from({length:210},(_,i)=>asUser(uuid(200+i),q=>q`select public.join_event_by_code('ROOM01',null) j`)));
+ check('default event budget exactly 300',(await db`select count(*)::int n from public.repair_admission_log where event_id=${eid} and admitted`)[0].n,300);
+ check('concurrent over-budget admissions denied',remaining.filter(r=>r[0].j.ok).length,198);
  check('event budget refuses new identity',(await asUser(uuid(200),q=>q`select public.join_event_by_code('ROOM01',null) j`))[0].j.ok,false);
  const attempts=()=>asUser(uuid(201),q=>q`select public.join_event_by_code('INVALID',null)`);
  await Promise.all(Array.from({length:20},attempts));
  check('guest concurrent attempt cap exact',(await db`select count(*)::int n from public.repair_admission_log where user_id=${uuid(201)}`)[0].n,10);
- await db`delete from public.repair_admission_settings`;
- const anon=uuid(300);await db`update auth.users set is_anonymous=true where id=${anon}`;
+ const anon=uuid(420);await db`update auth.users set is_anonymous=true where id=${anon}`;
  for(let i=1;i<=4;i++){await db`insert into public.events(dj_id,name,dj_name,room_code) values(${owner},'Guest limit','DJ',${'LIMIT'+i})`;const r=await asUser(anon,q=>q`select public.join_event_by_code(${'LIMIT'+i},null) j`);check('anonymous admission '+i,r[0].j.ok,i<4);}
  await db`insert into public.repair_admission_log(user_id,created_at) values(${guest},now()-interval '2 days')`;
  await db`select public.repair_prune_limiter_logs()`;

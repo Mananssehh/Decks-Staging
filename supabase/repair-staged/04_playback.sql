@@ -62,12 +62,17 @@ BEGIN
  IF ev.id IS NULL OR NOT ev.is_active OR ev.ended_at IS NOT NULL OR ev.requests_status='ended' THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
  IF _integration_id IS NULL THEN
    IF auth.uid() IS NULL OR ev.dj_id IS DISTINCT FROM auth.uid() THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
+   IF _request_id IS NOT NULL OR _token IS NOT NULL THEN RAISE EXCEPTION 'Invalid manual broadcast' USING ERRCODE='22023'; END IF;
  ELSE
    IF NOT service OR NOT EXISTS(SELECT 1 FROM public.event_integrations WHERE id=_integration_id AND event_id=ev.id AND ingest_token=_token) THEN
      RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
  END IF;
- IF jsonb_typeof(_row)<>'object' OR coalesce(length(btrim(_row->>'title')),0) NOT BETWEEN 1 AND 300
+ IF _row IS NULL OR jsonb_typeof(_row)<>'object' OR jsonb_typeof(_row->'title') IS DISTINCT FROM 'string'
+ OR coalesce(length(btrim(_row->>'title')),0) NOT BETWEEN 1 AND 300
  OR coalesce(length(_row->>'artist'),0)>300 OR coalesce(_row->>'status','playing') NOT IN ('playing','mixing','paused')
+ OR EXISTS(SELECT 1 FROM jsonb_each(_row) kv WHERE jsonb_typeof(kv.value) NOT IN ('string','null'))
+ OR coalesce(length(_row->>'album_art'),0)>2000 OR coalesce(length(_row->>'apple_url'),0)>2000
+ OR coalesce(length(_row->>'spotify_url'),0)>2000 OR coalesce(length(_row->>'source'),0)>40 OR coalesce(length(_row->>'source_track_id'),0)>200
  OR EXISTS(SELECT 1 FROM jsonb_object_keys(_row) k WHERE k NOT IN ('title','artist','album_art','apple_url','spotify_url','source','source_track_id','status','started_at')) THEN
  RAISE EXCEPTION 'Invalid broadcast' USING ERRCODE='22023'; END IF;
  -- Broadcast-only edits retire any manual playing selection so the two views cannot disagree.

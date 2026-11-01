@@ -10,6 +10,7 @@ GRANT ALL ON public.repair_admission_log TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.repair_admission_log_id_seq TO service_role;
 ALTER TABLE public.repair_admission_log ENABLE ROW LEVEL SECURITY;
 CREATE INDEX repair_admission_user_time ON public.repair_admission_log(user_id,created_at);
+CREATE INDEX repair_admission_retention ON public.repair_admission_log(created_at);
 CREATE INDEX repair_admission_event_time ON public.repair_admission_log(event_id,created_at) WHERE admitted;
 CREATE TABLE public.repair_admission_settings (
  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),

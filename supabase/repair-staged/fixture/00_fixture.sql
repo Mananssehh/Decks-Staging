@@ -23,3 +23,11 @@ ALTER TABLE public.song_requests ADD FOREIGN KEY(event_id) REFERENCES public.eve
 ALTER TABLE public.votes ADD FOREIGN KEY(song_request_id) REFERENCES public.song_requests(id) ON DELETE CASCADE;
 ALTER TABLE public.points_transactions ADD FOREIGN KEY(song_request_id) REFERENCES public.song_requests(id) ON DELETE SET NULL;
 ALTER TABLE public.votes ADD CONSTRAINT votes_value_check CHECK(value IN(-1,1));
+-- Pre-repair reconciliation examples: known missing starter, ambiguous offset, already reconciled.
+INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000901'),('00000000-0000-0000-0000-000000000902'),('00000000-0000-0000-0000-000000000903');
+INSERT INTO public.profiles(id,nickname,points) VALUES
+ ('00000000-0000-0000-0000-000000000901','Known',16),('00000000-0000-0000-0000-000000000902','Ambiguous',22),('00000000-0000-0000-0000-000000000903','Reconciled',15);
+INSERT INTO public.points_transactions(user_id,amount,type,reason) VALUES
+ ('00000000-0000-0000-0000-000000000901',1,'earned','Joined event'),
+ ('00000000-0000-0000-0000-000000000902',1,'earned','Joined event'),
+ ('00000000-0000-0000-0000-000000000903',15,'earned','Starter points');
