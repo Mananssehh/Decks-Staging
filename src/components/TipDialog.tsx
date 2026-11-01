@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { CircleDollarSign, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { PURCHASE_CAPS } from "@/lib/purchaseCaps";
 import { recordConsent, CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { ENABLE_LIVE_STRIPE } from "@/lib/featureFlags";
 import { supabase } from "@/integrations/supabase/client";
-import { tipRequestKey } from "@/lib/tipRequestKey";
+import { tipRequestKey, clearTerminalTipKey } from "@/lib/tipRequestKey";
 import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
 
 interface Props {
@@ -39,6 +39,7 @@ export const TIP_DISCLAIMER =
   "Tips support the DJ. Tips do not affect song placement and do not guarantee playback, prioritization, or any specific action by the DJ.";
 
 export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, songRequestId, songTitleMeta, artistMeta }: Props) {
+  const submitLock = useRef(false);
   const [selected, setSelected] = useState<number>(5);
   const [custom, setCustom] = useState<string>("");
   const [acknowledged, setAcknowledged] = useState(false);
@@ -97,7 +98,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
   };
 
   const submit = async () => {
-    if (submitting) return;
+    if (submitLock.current) return;
     if (!validAmount) {
       toast.error(`Tip must be between $${MIN_TIP_DOLLARS} and $${MAX_TIP_DOLLARS}.`);
       return;
@@ -107,6 +108,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
       return;
     }
 
+    submitLock.current = true;
     setSubmitting(true);
     try {
       // Record consent (server-side checkout re-verifies both consent and caps).
@@ -130,8 +132,6 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
           event_id: eventId,
           amount_cents: amountCents,
           song_request_id: songRequestId ?? null,
-          song_title: songTitleMeta ?? null,
-          artist: artistMeta ?? null,
         },
       });
 
@@ -146,8 +146,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
       }
 
       if (payload?.error_code) {
-        // Surface raw Stripe error detail when present so we don't hide the root cause.
-        console.error("[TipDialog] tip-create-checkout payload:", payload);
+        if (payload.terminal === true) clearTerminalTipKey(currentUser.user.id,eventId,songRequestId ?? null,amountCents,requestKey);
         const se = payload.stripe_error;
         const stripeDetail = se
           ? `Stripe ${se.http_status ?? "?"} ${se.stripe_type ?? ""} ${se.stripe_code ?? ""}: ${se.message ?? ""} (req ${se.request_id ?? "n/a"})`
@@ -162,6 +161,10 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
           STRIPE_CHECKOUT_FAILED: stripeDetail ?? payload.message ?? "Stripe rejected the checkout request.",
           UNAUTHORIZED: "Please sign in to tip.",
           INVALID_REQUEST: payload.message ?? "Invalid request.",
+          CHECKOUT_TERMINAL: "This checkout has ended. You can start another tip.",
+          CHECKOUT_AMBIGUOUS: "Checkout could not be confirmed. Retry this same tip; do not start another.",
+          RECONCILIATION_REQUIRED: "This checkout needs review. No new charge was started.",
+          REQUEST_CONFLICT: "Retry the original tip amount and song.",
           SERVICE_FAILED: "Something went wrong. Please try again.",
         };
         toast.error(friendly[payload.error_code] ?? payload.message ?? "Couldn't process tip", { duration: 12000 });
@@ -174,11 +177,14 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
 
       if (error) throw error;
       if (!payload?.url) throw new Error("Checkout session missing URL — please try again.");
-      window.location.href = payload.url as string;
+      const checkoutUrl = new URL(payload.url);
+      if (checkoutUrl.origin !== "https://checkout.stripe.com") throw Error("Invalid checkout URL");
+      window.location.href = checkoutUrl.href;
     } catch (caught: unknown) {
       const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       toast.error(e?.message ?? "Couldn't process tip");
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   };
@@ -187,7 +193,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (submitting) return;
+        if (submitLock.current) return;
         if (!o) reset();
         onOpenChange(o);
       }}

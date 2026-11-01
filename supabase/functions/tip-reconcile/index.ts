@@ -12,6 +12,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getStripe, json } from "../_shared/stripe.ts";
 
+import { paymentRpc,requirePaymentContract } from '../_shared/payment-contract.ts';
+import { reconcileEvidence } from './reconciliation.ts';
+async function evidenceDigest(e:unknown){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(e)));return Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join('');}
+
 export type Resolution = "expired" | "succeeded" | "failed" | "pending_live" | "unresolved";
 
 export interface SessionView {
@@ -27,7 +31,7 @@ export function classify(view: SessionView | null): Resolution {
   if (!view) return "unresolved";
   const { status, payment_status, payment_intent_status } = view;
 
-  if (payment_status === "paid" || payment_status === "no_payment_required") return "succeeded";
+  if (status === "complete" && payment_status === "paid") return "succeeded";
   if (payment_intent_status === "succeeded") return "succeeded";
 
   if (status === "expired") {
@@ -47,140 +51,27 @@ export function classify(view: SessionView | null): Resolution {
   return "unresolved";
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
-
-  const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  const anon = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
-  );
-  const { data: claims } = await anon.auth.getClaims(authHeader.replace("Bearer ", ""));
-  const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) return json({ error: "Unauthorized" }, 401);
-
-  const { data: isAdmin, error: roleErr } = await admin.rpc("has_role", {
-    _user_id: userId,
-    _role: "admin",
-  });
-  if (roleErr) {
-    console.error("[tip-reconcile] role check failed", roleErr.message);
-    return json({ error: "role_check_failed" }, 500);
+Deno.serve(async req=>{
+ if(req.method==='OPTIONS')return new Response('ok',{headers:corsHeaders});
+ if(req.method!=='POST')return json({error:'Method not allowed'},405);
+ const url=Deno.env.get('SUPABASE_URL'),key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+ if(!url||!key)return json({error:'Service unavailable'},503);
+ const db=createClient(url,key),token=req.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
+ if(!token)return json({error:'Unauthorized'},401);
+ const {data:u,error:a}=await db.auth.getUser(token);if(a||!u.user)return json({error:'Unauthorized'},401);
+ try{
+  if(!await paymentRpc<boolean>(db,'has_role',{_user_id:u.user.id,_role:'admin'}))return json({error:'Forbidden'},403);
+  await requirePaymentContract(db);
+  const body=await req.json();const apply=body.apply===true;
+  const limit=body.limit??100;if(!Number.isInteger(limit)||limit<1||limit>1000)return json({error:'Invalid limit'},400);
+  const {data:tips,error}=await db.from('dj_tips').select('id,stripe_checkout_session_id,created_at').eq('status','pending').order('created_at').limit(limit);if(error)throw error;
+  const stripe=getStripe();const results=[];
+  for(const row of tips??[]){
+   const {data:r,error:re}=await db.from('followup_tip_reservations').select('id').eq('tip_id',row.id).maybeSingle();if(re)throw re;
+   const e=await reconcileEvidence({...row,reservation_id:r?.id??null},{retrieve:id=>stripe.checkout.sessions.retrieve(id,{expand:['payment_intent']}),list:params=>stripe.checkout.sessions.list(params)});
+   results.push({tip_id:row.id,resolution:e.kind});
+   if(apply)await paymentRpc(db,'followup_apply_financial_event',{_e:{...e,event_id:`reconcile:${row.id}:${await evidenceDigest(e)}`,event_type:'reconciliation',created:Math.floor(Date.now()/1000)}});
   }
-  if (!isAdmin) return json({ error: "Forbidden" }, 403);
-
-  const body = await req.json().catch(() => ({}));
-  const apply = body?.apply === true;
-  const limit = Math.min(Math.max(Number(body?.limit ?? 500), 1), 1000);
-
-  const { data: rows, error: rowsErr } = await admin
-    .from("dj_tips")
-    .select("id, status, stripe_checkout_session_id, created_at, gross_amount_cents")
-    .eq("status", "pending")
-    .order("created_at", { ascending: true })
-    .limit(limit);
-  if (rowsErr) {
-    console.error("[tip-reconcile] pending lookup failed", rowsErr.message);
-    return json({ error: "db_lookup_failed" }, 500);
-  }
-
-  const stripe = getStripe();
-  const counts: Record<Resolution | "no_session_id", number> = {
-    expired: 0,
-    succeeded: 0,
-    failed: 0,
-    pending_live: 0,
-    unresolved: 0,
-    no_session_id: 0,
-  };
-  const changes: Array<{ id: string; from: string; to: Resolution }> = [];
-  // Sanitized diagnostics for rows we refuse to classify. No amounts, no
-  // user ids, no Stripe session ids — only the state that drove the decision.
-  const unresolvedDetails: Array<{
-    tip_id: string;
-    age_days: number;
-    retrieve_failed: boolean;
-    session_status: string | null;
-    payment_status: string | null;
-    payment_intent_status: string | null;
-  }> = [];
-
-
-  for (const row of rows ?? []) {
-    if (!row.stripe_checkout_session_id) {
-      counts.no_session_id += 1;
-      continue;
-    }
-    let view: SessionView | null = null;
-    try {
-      const s = await stripe.checkout.sessions.retrieve(row.stripe_checkout_session_id, {
-        expand: ["payment_intent"],
-      });
-      const pi = s.payment_intent;
-      view = {
-        status: s.status ?? null,
-        payment_status: s.payment_status ?? null,
-        payment_intent_status: pi && typeof pi === "object" ? pi.status ?? null : null,
-        payment_intent_id: pi ? (typeof pi === "string" ? pi : pi.id) : null,
-        expires_at: typeof s.expires_at === "number" ? s.expires_at : null,
-      };
-    } catch (e) {
-      console.warn("[tip-reconcile] session retrieve failed", {
-        tip_id: row.id,
-        message: (e as Error).message,
-      });
-    }
-
-    const resolution = classify(view);
-    counts[resolution] += 1;
-    if (resolution === "unresolved") {
-      unresolvedDetails.push({
-        tip_id: row.id,
-        age_days: Math.floor(
-          (Date.now() - new Date(row.created_at as string).getTime()) / 86400000,
-        ),
-        retrieve_failed: view === null,
-        session_status: view?.status ?? null,
-        payment_status: view?.payment_status ?? null,
-        payment_intent_status: view?.payment_intent_status ?? null,
-      });
-    }
-    if (resolution === "pending_live" || resolution === "unresolved") continue;
-    changes.push({ id: row.id, from: row.status, to: resolution });
-
-
-    if (apply) {
-      const patch: Record<string, unknown> = { status: resolution };
-      if (view?.payment_intent_id) patch.stripe_payment_intent_id = view.payment_intent_id;
-      if (view?.expires_at) {
-        patch.checkout_expires_at = new Date(view.expires_at * 1000).toISOString();
-      }
-      if (resolution === "failed") patch.failure_reason = "reconciled_unpaid";
-      const { error: upErr } = await admin
-        .from("dj_tips").update(patch).eq("id", row.id).eq("status", "pending");
-      if (upErr) {
-        console.error("[tip-reconcile] update failed", { tip_id: row.id, message: upErr.message });
-        return json({ error: "db_update_failed", applied_before_failure: changes.length }, 500);
-      }
-    }
-  }
-
-  return json({
-    dry_run: !apply,
-    inspected: rows?.length ?? 0,
-    counts,
-    proposed_changes: apply ? undefined : changes.length,
-    unresolved_details: apply ? undefined : unresolvedDetails,
-    applied: apply ? changes.length : 0,
-  });
+  return json({dry_run:!apply,results,notifications:'domain_not_configured'});
+ }catch{return json({error:'Authoritative reconciliation failed; amounts retained'},500);}
 });
-
