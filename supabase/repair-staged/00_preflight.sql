@@ -1,4 +1,5 @@
--- READ ONLY: run in the staging SQL interface. Stop if assertions fail; rerun fresh catalog capture.
+-- READ ONLY: original first-install guard. Once admission is installed, use 09_resume.sql.
+-- Do not blindly reapply core: reviewer installed 01..07 with provider defaults omitted.
 -- SQL cannot prove the frontend project UUID: operator MUST verify DECKS Staging before execution.
 DO $$ BEGIN
  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.request_song(uuid,text,text,text,text,text,text,integer,text,boolean,text)'::regprocedure)<>'9c4ca0d688f5b4300241c5da1d52e871' THEN
@@ -7,7 +8,7 @@ DO $$ BEGIN
  RAISE EXCEPTION 'join boundary drift'; END IF;
  IF EXISTS(SELECT 1 FROM public.song_requests WHERE status='playing' GROUP BY event_id HAVING count(*)>1) THEN RAISE EXCEPTION 'Multiple playing rows: preserve evidence and resolve independently'; END IF;
  IF EXISTS(SELECT 1 FROM public.event_integrations GROUP BY event_id HAVING count(*)>1) THEN RAISE EXCEPTION 'Multiple integration rows: preserve evidence and resolve independently'; END IF;
- IF EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND NOT tgisinternal AND tgenabled<>'D' AND tgfoid='public.handle_new_user()'::regprocedure) THEN RAISE EXCEPTION 'Bootstrap already attached: inspect trigger before proceeding'; END IF;
+ IF (SELECT count(*) FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND NOT tgisinternal AND tgenabled<>'D' AND tgfoid='public.handle_new_user()'::regprocedure)>1 THEN RAISE EXCEPTION 'Multiple bootstrap triggers: inspect before proceeding'; END IF;
  IF (SELECT prosrc FROM pg_proc WHERE oid='public.email_queue_dispatch()'::regprocedure) NOT LIKE '%BEGIN RETURN; END;%'
  OR (SELECT prosrc FROM pg_proc WHERE oid='public.email_queue_wake()'::regprocedure) NOT LIKE '%BEGIN RETURN NULL; END;%' THEN RAISE EXCEPTION 'Staging email dispatch is not disabled'; END IF;
 END $$;

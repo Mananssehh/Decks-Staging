@@ -5,13 +5,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { handleWelcome } from "./handler.ts";
 
-const TEMPLATE_BY_KIND = {
-  guest: "guest-welcome",
-  dj: "dj-welcome",
-} as const;
-
-type Kind = keyof typeof TEMPLATE_BY_KIND;
-
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,

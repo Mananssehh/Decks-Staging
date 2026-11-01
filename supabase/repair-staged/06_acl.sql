@@ -23,10 +23,12 @@ GRANT EXECUTE ON FUNCTION public.get_public_nicknames(uuid[]),public.get_public_
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
--- Preflight identifies other public function creators; apply to existing supabase_admin defaults too.
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
+-- PROVIDER-OWNED GAP: managed role supabase_admin defaults cannot be changed by
+-- the staging SQL operator. These statements failed and were omitted by reviewer.
+-- Do not execute/escalate them. Existing application ACLs are contained separately.
+-- ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
+-- ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC,anon,authenticated;
+-- ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
 -- email_queue_dispatch/email_queue_wake definitions intentionally unchanged (both no-op).
 -- Trigger creation requires EXECUTE for the migration creator. Invoker functions that call
 -- helpers require explicit dependency grants; do not grant trigger helpers to browsers by default.
