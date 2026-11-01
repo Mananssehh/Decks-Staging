@@ -1,4 +1,15 @@
-FINAL SOURCE-ONLY LIFECYCLE REPAIR — November 1 2026 UTC
+FINAL STRIPE KEY COMPATIBILITY — November 1 2026 UTC
+- Starting source: 4996a367ec81587db745df346976ac13c191a30e.
+- nix run nixpkgs#deno -- test supabase/functions/_shared/stripe-key_test.ts: PASS 7 tests, no network/env permissions or Stripe SDK imports.
+- nix run nixpkgs#deno -- test --allow-env --allow-net=localhost,0.0.0.0 supabase/functions/_shared/stripe-key_test.ts supabase/functions/tip-create-checkout/readiness_test.ts supabase/functions/tip-create-checkout/endpoint_test.ts supabase/functions/tip-create-checkout/checkout_test.ts supabase/functions/stripe-webhook/endpoint_test.ts supabase/functions/stripe-webhook/checkout_lifecycle_test.ts supabase/functions/stripe-webhook/account_updated_test.ts supabase/functions/tip-reconcile/classify_test.ts supabase/functions/tip-reconcile/reconciliation_test.ts: PASS 34 tests. Fake keys/providers, local HTTP only; Stripe network calls not permitted. Earlier narrower port permission run failed at local Deno.serve binding, corrected and rerun; no tests skipped.
+- nix run nixpkgs#deno -- check supabase/functions/tip-create-checkout/index.ts supabase/functions/stripe-webhook/index.ts supabase/functions/tip-reconcile/index.ts supabase/functions/stripe-connect-onboard/index.ts supabase/functions/stripe-connect-refresh/index.ts supabase/functions/stripe-payout-summary/index.ts supabase/functions/stripe-whoami/index.ts: PASS all seven after restoring whoami type-only SDK import.
+- bunx eslint . --max-warnings 0: PASS zero errors/warnings; MCP generated ownership/exact exclusion unchanged.
+- bunx vitest run src/lib src/components: PASS 95 tests / 12 files. Existing React Router future notices; no skips or assertion weakening.
+- Deployment tool success: stripe-webhook, tip-reconcile, stripe-connect-onboard, stripe-connect-refresh, stripe-payout-summary, stripe-whoami; then tip-create-checkout. No endpoint probes, financial/provider/Auth operations or email. Automatic preview log: build OK.
+- Root latest independently verified both authenticated tabs paused/live/ended, ended vote blocked, real AppleMusic results, hosted core/payment fixtures and prior-head build/typecheck/lint/all107 tests. Not agent-executed or rerun here.
+- No SQL/schema, secrets/key changes, provider settings, pricing, SDK/API version change or publishing. Actual restricted-key permission/provider configuration not verified. Boosts/email/Auth limits/provider default ACL gap unchanged.
+
+PRIOR FINAL SOURCE-ONLY LIFECYCLE REPAIR — November 1 2026 UTC
 - Starting HEAD: f74250ed5ab49d4cb3bdacc3e8b77b36ebe6dd99.
 - Reviewer evidence, not agent-executed: final build/typecheck/lint/all107 tests passed; authenticated two-tab own-vote state synchronized. Both tabs still stayed LIVE after QA event ended. Published table inventory excludes votes; unsupported binding can invalidate handshake. Cross-tab storage success is not server-channel proof.
 - Source repair: removed EventPage votes binding only; published songs/events bindings, coherent snapshot, reconnect/online/visibility/storage, optimistic guards and cleanup preserved.

@@ -1,4 +1,19 @@
-FINAL LIFECYCLE REPAIR FILES:
+FINAL KEY COMPATIBILITY FILES:
+AGENTS.md
+roadmap.md
+supabase/functions/_shared/stripe-key.ts
+supabase/functions/_shared/stripe-key_test.ts
+supabase/functions/_shared/stripe.ts
+supabase/functions/stripe-connect-onboard/index.ts
+supabase/functions/stripe-whoami/index.ts
+supabase/functions/tip-create-checkout/endpoint_test.ts
+supabase/functions/stripe-webhook/endpoint_test.ts
+supabase/repair-followup/README.md
+supabase/repair-followup/SOURCE_STATE.txt
+supabase/repair-followup/TEST_RESULTS.txt
+supabase/repair-followup/CHANGED_FILES.txt
+
+PRIOR FINAL LIFECYCLE REPAIR FILES:
 src/pages/EventPage.tsx
 roadmap.md
 supabase/repair-followup/README.md

@@ -42,5 +42,5 @@
 - [x] Root verified both tabs paused/live/ended without reload and ended-vote toast; reviewer evidence, no agent session access.
 
 ## Final staging Stripe key compatibility
-- [ ] Validate secret/restricted test/live keys with pure no-provider tests and zero-warning lint.
-- [ ] Deploy all inventoried shared-helper dependents to staging and record exact evidence; no provider operations.
+- [x] Validate secret/restricted test/live keys: 7 SDK-free tests, 34 combined Edge tests, 95 frontend tests and zero-warning lint.
+- [x] Deploy all seven inventoried shared-helper dependents to staging; checkout last. No provider operations; evidence recorded.

@@ -1,5 +1,15 @@
 # DECKS Staging payment integration — independently installed and deployed
 
+## Final restricted Stripe key compatibility — November 1, 2026
+
+Starting source `4996a367ec81587db745df346976ac13c191a30e`. `_shared/stripe-key.ts` is pure and SDK-free: accepts only `sk_test_`, `sk_live_`, `rk_test_`, `rk_live_` followed by a nonempty alphanumeric payload, trims surrounding whitespace, rejects missing/unknown/malformed/internal-whitespace inputs, and never logs key material. `_shared/stripe.ts` uses it for both mode inference and SDK construction; env name, SDK 17.5.0, API 2024-12-18.acacia and financial mode checks remain unchanged. Connect onboarding and whoami now use the same validation/constructor; removed stale undefined key-tail response fields in onboarding without exposing replacement key material.
+
+Import inventory: checkout, webhook, reconcile, Connect onboarding, Connect refresh and payout summary imported `_shared/stripe.ts`; whoami had a separate constructor and now imports the shared helper too. All seven successfully deployed to this staging backend: `stripe-webhook`, `tip-reconcile`, `stripe-connect-onboard`, `stripe-connect-refresh`, `stripe-payout-summary`, `stripe-whoami`, then `tip-create-checkout`. Deployment is not provider verification; no deployed endpoint was invoked this turn.
+
+Agent results: 7 permission-free SDK-free tests; 34 combined local Edge tests (including those 7), restricted test-key readiness/signature coverage and live-mode mismatch rejection; Deno check for all seven functions; zero-warning lint; 95 existing frontend behavior tests. Full production build/bundle suite remains independently run by root. No SQL, credentials/settings, pricing, publication, provider API/session/payment/refund, email or Auth operations. Boosts paused, email disabled/domain_not_configured, Auth quota and provider-owned defaults unresolved. Key compatibility does not establish sufficient restricted-key permissions or working provider configuration.
+
+Latest reviewer evidence (not agent-executed): both authenticated tabs observed paused/live/ended without reload, ended voting was blocked with toast, AppleMusic search returned real results, and final prior-head 107 frontend tests/build/typecheck/lint plus core/payment hosted fixtures passed. No sessions accessed here. Earlier lifecycle/browser pending statements below are historical.
+
 ## Final source-only lifecycle correction — November 1, 2026
 
 Starting source: `f74250ed5ab49d4cb3bdacc3e8b77b36ebe6dd99`. Independent reviewer subsequently verified build/typecheck/lint/all 107 tests and authenticated two-tab own-vote selection, but caught an independent live lifecycle failure: both member tabs remained LIVE after QA event `a0ad2bac-caba-461f-b259-b5a54f324746` ended at `2026-11-01T07:56:35.478128+00:00`. Reviewer publication inventory contains only `song_requests`, `events`, `now_playing`, `dj_tips`, `error_logs`; `votes` is not published. Cross-tab storage refresh success did not establish a working server subscription.
