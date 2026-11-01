@@ -7,3 +7,6 @@
 - Tip reservations and settlement use a per-user advisory mutex before tip locks and immutable provider parameters; ambiguous provider calls retain quota until evidence-backed reconciliation.
 - Shared React hooks/context and visual variants live outside component files; this preserves fast-refresh boundaries without disabling lint rules.
 - Managed app-email sending remains a fail-closed no-network adapter until official sender-domain scaffolding; never create project email queues or fabricate provider APIs.
+- Shared Edge payment evidence lives under `supabase/functions/_shared`; sibling function imports are not bundled by deployment.
+- Event song counters and user-selected votes are read with one left-embedded relational statement; split HTTP reads can observe different transaction snapshots.
+- The MCP Vite plugin owns its generated function output; exclude that exact artifact from lint while keeping all authored MCP inputs linted.
