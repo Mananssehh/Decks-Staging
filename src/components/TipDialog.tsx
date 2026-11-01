@@ -16,6 +16,7 @@ import { recordConsent, CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { ENABLE_LIVE_STRIPE } from "@/lib/featureFlags";
 import { supabase } from "@/integrations/supabase/client";
 import { tipRequestKey } from "@/lib/tipRequestKey";
+import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
 
 interface Props {
   open: boolean;
@@ -59,12 +60,11 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         body: { event_id: eventId, check_only: true },
       });
       if (cancelled) return;
-      let payload: any = data;
-      if (!payload && error && (error as any).context) {
-        const ctx = (error as any).context;
+      let payload: FunctionPayload | null = data;
+      if (!payload && functionContext(error)) {
+        const ctx = functionContext(error);
         try {
-          if (typeof ctx.json === "function") payload = await ctx.json();
-          else if (typeof ctx.text === "function") payload = JSON.parse(await ctx.text());
+          if (ctx) payload = await ctx.json();
         } catch { /* ignore */ }
       }
       if (payload?.ready) {
@@ -137,12 +137,11 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
 
       // supabase-js can wrap a structured-error body in `error` (FunctionsHttpError)
       // even when the function returned 200. Recover the JSON from error.context.
-      let payload: any = data;
-      if (!payload && error && (error as any).context) {
-        const ctx = (error as any).context;
+      let payload: FunctionPayload | null = data;
+      if (!payload && functionContext(error)) {
+        const ctx = functionContext(error);
         try {
-          if (typeof ctx.json === "function") payload = await ctx.json();
-          else if (typeof ctx.text === "function") payload = JSON.parse(await ctx.text());
+          if (ctx) payload = await ctx.json();
         } catch { /* ignore */ }
       }
 

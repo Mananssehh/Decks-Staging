@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     }
     let view: SessionView | null = null;
     try {
-      const s: any = await stripe.checkout.sessions.retrieve(row.stripe_checkout_session_id, {
+      const s = await stripe.checkout.sessions.retrieve(row.stripe_checkout_session_id, {
         expand: ["payment_intent"],
       });
       const pi = s.payment_intent;

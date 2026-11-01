@@ -36,18 +36,19 @@ export default function OAuthConsent() {
     }
     (async () => {
       try {
-        const oauth = (supabase.auth as any).oauth;
+        const oauth = supabase.auth.oauth;
         const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
         if (error) {
           setError(error.message ?? "Could not load authorization request");
           return;
         }
-        const immediate = data?.redirect_url ?? data?.redirect_to;
-        if (immediate && !data?.client) {
+        const details = data as Details | null;
+        const immediate = details?.redirect_url ?? details?.redirect_to;
+        if (immediate && !details?.client) {
           window.location.href = immediate;
           return;
         }
-        setDetails(data ?? {});
+        setDetails(details ?? {});
       } catch (caught: unknown) {
       const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
         setError(e?.message ?? "Could not load authorization request");
@@ -58,12 +59,12 @@ export default function OAuthConsent() {
   async function decide(approve: boolean) {
     setBusy(true);
     try {
-      const oauth = (supabase.auth as any).oauth;
+      const oauth = supabase.auth.oauth;
       const { data, error } = approve
         ? await oauth.approveAuthorization(authorizationId)
         : await oauth.denyAuthorization(authorizationId);
       if (error) throw new Error(error.message);
-      const target = data?.redirect_url ?? data?.redirect_to;
+      const target = data?.redirect_url;
       if (!target) throw new Error("No redirect returned by the authorization server.");
       window.location.href = target;
     } catch (caught: unknown) {

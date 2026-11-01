@@ -44,7 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.rpc("get_my_profile"),
         supabase.from("user_roles").select("role").eq("user_id", uid),
       ]);
-      prof = (pRes.data as Profile | null) ?? null;
+      const candidate = pRes.data;
+      prof = candidate && typeof candidate === "object" && !Array.isArray(candidate)
+        && typeof candidate.id === "string" && typeof candidate.nickname === "string"
+        && typeof candidate.points === "number" && typeof candidate.is_premium === "boolean"
+        ? { id: candidate.id, nickname: candidate.nickname, points: candidate.points, is_premium: candidate.is_premium } : null;
       roles = rRes.data ?? null;
       if (prof || !retryUntilFound) break;
     }

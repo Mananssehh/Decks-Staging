@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
 
 type Status = "not_started" | "pending" | "action_required" | "ready" | "mode_mismatch" | "loading";
 
@@ -49,10 +50,10 @@ export function PayoutStatusCard() {
       });
 
       // Recover structured error body if supabase-js wrapped a non-2xx response
-      let payload: any = data;
+      let payload: FunctionPayload | null = data;
       if (error) {
         try {
-          const ctx: any = (error as any).context;
+          const ctx = functionContext(error);
           if (ctx?.json) payload = await ctx.json();
           else if (ctx?.text) {
             const t = await ctx.text();
@@ -74,7 +75,7 @@ export function PayoutStatusCard() {
       const se = payload?.stripe_error;
       const detail = se
         ? `Stripe ${se.http_status ?? "?"} ${se.stripe_type ?? ""} ${se.stripe_code ?? ""}: ${se.message ?? ""} (req ${se.request_id ?? "n/a"})`
-        : payload?.message || payload?.error || (error as any)?.message || "Couldn't start onboarding";
+        : payload?.message || payload?.error || error?.message || "Couldn't start onboarding";
       toast.error(detail, { duration: 12000 });
       setBusy(false);
     } catch (caught: unknown) {

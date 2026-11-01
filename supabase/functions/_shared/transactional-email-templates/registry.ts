@@ -13,11 +13,11 @@ import { template as securityPasswordChanged } from './security-password-changed
 
 export interface TemplateEntry {
   // deno-lint-ignore no-explicit-any
-  component: React.ComponentType<any>
+  component: React.ComponentType<never>
   subject: string | ((data: Record<string, unknown>) => string)
   displayName?: string
   // deno-lint-ignore no-explicit-any
-  previewData?: Record<string, any>
+  previewData?: Record<string, unknown>
   to?: string | ((data: Record<string, unknown>) => string)
 }
 

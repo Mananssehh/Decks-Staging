@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     let currency: string | null = null;
     let active_tip_count = 0;
     for (const tRow of tips ?? []) {
-      const t = tRow as any;
+      const t = tRow;
       const gross = t.gross_amount_cents || 0;
       const refunded = t.refunded_amount_cents || 0;
       if (refunded >= gross) continue; // safety
@@ -98,8 +98,8 @@ Deno.serve(async (req) => {
       const sum = (arr: { amount: number; currency: string }[] | undefined) =>
         (arr ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + b.amount, 0);
       base.balance = {
-        available_cents: sum(bal.available as any),
-        pending_cents: sum(bal.pending as any),
+        available_cents: sum(bal.available),
+        pending_cents: sum(bal.pending),
         currency: cur,
       };
       if (!base.currency) base.currency = cur;
@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
 
     try {
       const acct = await stripe.accounts.retrieve(acctId);
-      const sch = (acct as any).settings?.payouts?.schedule;
+      const sch = acct.settings?.payouts?.schedule;
       if (sch) {
         base.schedule = {
           interval: sch.interval,

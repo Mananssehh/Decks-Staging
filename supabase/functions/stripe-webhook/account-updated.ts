@@ -196,8 +196,7 @@ export async function handleAccountUpdated(
 }
 
 /** Supabase-backed PayoutStore. */
-// deno-lint-ignore no-explicit-any
-export function createPayoutStore(admin: any): PayoutStore {
+export function createPayoutStore(admin: import("https://esm.sh/@supabase/supabase-js@2").SupabaseClient): PayoutStore {
   return {
     async getPrevious(stripeAccountId) {
       const { data, error } = await admin

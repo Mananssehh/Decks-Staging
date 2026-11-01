@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export type GuestFunnelEvent =
   | "guest_prompt_shown"
@@ -15,7 +16,7 @@ export type GuestFunnelEvent =
  */
 export async function logGuestFunnel(
   eventType: GuestFunnelEvent,
-  opts: { eventId?: string | null; metadata?: Record<string, unknown> } = {},
+  opts: { eventId?: string | null; metadata?: Record<string, Json> } = {},
 ): Promise<void> {
   try {
     const { data: sessRes } = await supabase.auth.getSession();
