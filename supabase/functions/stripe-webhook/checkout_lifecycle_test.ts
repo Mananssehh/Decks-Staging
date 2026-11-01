@@ -29,7 +29,7 @@ function matches(row: TipRow, params: URLSearchParams) {
     if (!v.startsWith("eq.")) continue;
     const want = v.slice(3);
     // deno-lint-ignore no-explicit-any
-    const got = (row as any)[k];
+    const got = row[k as keyof TipRow];
     if (k === "select" || k === "order" || k === "limit") continue;
     if (String(got) !== want) return false;
   }
@@ -85,14 +85,14 @@ Deno.env.set("SUPABASE_ANON_KEY", "anon-test-key");
 const originalServe = Deno.serve.bind(Deno);
 let fnServer: { shutdown: () => Promise<void> } | null = null;
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = (handler: any) => {
+Deno.serve = ((handler: Deno.ServeHandler) => {
   const s = originalServe({ port: FN_PORT }, handler);
   fnServer = s;
   return s;
-};
+}) as typeof Deno.serve;
 await import("./index.ts");
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = originalServe;
+Deno.serve = originalServe;
 
 const stripe = new Stripe("sk_test_dummy_key_for_local_tests", {
   apiVersion: "2024-12-18.acacia",

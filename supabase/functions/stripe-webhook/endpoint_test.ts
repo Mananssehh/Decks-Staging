@@ -45,7 +45,7 @@ const mockServer = Deno.serve({ port: MOCK_PORT }, async (req) => {
       const filterPayouts = url.searchParams.get("payouts_enabled");
       let matched = !!mock.row;
       if (matched && filterPayouts === "eq.false") {
-        matched = mock.row!.payouts_enabled === false;
+        matched = mock.row?.payouts_enabled === false;
       }
       if (matched && mock.row) {
         mock.row = { ...mock.row, ...body };
@@ -85,14 +85,14 @@ const originalServe = Deno.serve.bind(Deno);
 let fnServer: { shutdown: () => Promise<void> } | null = null;
 // Pin the function's server to a dedicated port.
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = (handler: any) => {
+Deno.serve = ((handler: Deno.ServeHandler) => {
   const s = originalServe({ port: FN_PORT }, handler);
   fnServer = s;
   return s;
-};
+}) as typeof Deno.serve;
 await import("./index.ts");
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = originalServe;
+Deno.serve = originalServe;
 
 const stripe = new Stripe("sk_test_dummy_key_for_local_tests", {
   apiVersion: "2024-12-18.acacia",

@@ -6,6 +6,7 @@
 // is reserved for auth failures and unexpected crashes.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { computeFee, corsHeaders, getStripe, json } from "../_shared/stripe.ts";
+import type { StripeErrorView } from "../_shared/stripe-error.ts";
 
 type ErrorCode =
   | "UNAUTHORIZED"
@@ -23,7 +24,7 @@ function err(code: ErrorCode, message: string, status = 200, extra: Record<strin
   return json({ error_code: code, error: message, message, ...extra }, status);
 }
 
-function serializeStripeError(e: any) {
+function serializeStripeError(e: StripeErrorView) {
   const raw = e?.raw ?? {};
   return {
     http_status: e?.statusCode ?? raw?.statusCode ?? null,

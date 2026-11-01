@@ -25,7 +25,6 @@ Deno.serve(async (req) => {
     starts_with_sk_live: trimmed.startsWith("sk_live_"),
     starts_with_sk_test: trimmed.startsWith("sk_test_"),
     length: trimmed.length,
-    last4: trimmed.slice(-4),
     raw_length: raw.length,
     has_leading_space: raw.length > 0 && raw[0] !== trimmed[0],
     has_trailing_whitespace: raw.length !== trimmed.length && raw.trimEnd().length !== raw.length,
@@ -48,14 +47,14 @@ Deno.serve(async (req) => {
     const acct = await stripe.accounts.retrieve();
     const url = new URL(req.url);
     const probeId = url.searchParams.get("account");
-    let probe: any = null;
+    let probe: Record<string, unknown> | null = null;
     if (probeId) {
       try {
         const a = await stripe.accounts.retrieve(probeId);
         probe = {
           id: a.id,
-          livemode: (a as any).livemode,
-          livemode_typeof: typeof (a as any).livemode,
+          livemode: (a as Stripe.Account & {livemode?:boolean}).livemode,
+          livemode_typeof: typeof (a as Stripe.Account & {livemode?:boolean}).livemode,
           has_livemode_key: Object.prototype.hasOwnProperty.call(a, "livemode"),
           all_keys: Object.keys(a),
           type: a.type,
@@ -78,7 +77,7 @@ Deno.serve(async (req) => {
         email: acct.email,
         country: acct.country,
         type: acct.type,
-        livemode: (acct as any).livemode ?? null,
+        livemode: (acct as Stripe.Account & {livemode?:boolean}).livemode ?? null,
         details_submitted: acct.details_submitted,
         charges_enabled: acct.charges_enabled,
       },
