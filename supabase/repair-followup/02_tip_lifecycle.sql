@@ -51,7 +51,7 @@ BEGIN
  IF nullif(_e->>'tip_id','') IS NOT NULL AND (_e->>'tip_id')::uuid<>tid THEN RAISE EXCEPTION 'Tip identity mismatch'; END IF;
  -- Existing known IDs are immutable; absent IDs may be linked only by other verified identity.
  FOREACH k IN ARRAY ARRAY['session_id','payment_intent','charge_id'] LOOP
-  IF nullif(_e->>k,'') IS NOT NULL AND (_e->>k) !~ CASE k WHEN 'session_id' THEN '^cs_' WHEN 'payment_intent' THEN '^pi_' ELSE '^ch_' END THEN RAISE EXCEPTION 'Malformed provider identity'; END IF;
+  IF nullif(_e->>k,'') IS NOT NULL AND (_e->>k) !~ (CASE k WHEN 'session_id' THEN '^cs_' WHEN 'payment_intent' THEN '^pi_' ELSE '^ch_' END) THEN RAISE EXCEPTION 'Malformed provider identity'; END IF;
   v:=CASE k WHEN 'session_id' THEN d.stripe_checkout_session_id WHEN 'payment_intent' THEN d.stripe_payment_intent_id ELSE d.stripe_charge_id END;
   IF v IS NOT NULL AND nullif(_e->>k,'') IS NOT NULL AND v<>_e->>k THEN RAISE EXCEPTION 'Provider identity mismatch'; END IF;
  END LOOP;
@@ -75,7 +75,7 @@ BEGIN
   refunded:=greatest(refunded,(_e->>'refunded_amount_cents')::integer);
  END IF;
  IF kind LIKE 'dispute_%' THEN
-  IF f.dispute_state IN ('won','lost') AND kind<>'dispute_open' AND f.dispute_state<>CASE kind WHEN 'dispute_won' THEN 'won' ELSE 'lost' END THEN RAISE EXCEPTION 'Conflicting closed dispute: review'; END IF;
+  IF f.dispute_state IN ('won','lost') AND kind<>'dispute_open' AND f.dispute_state<>(CASE kind WHEN 'dispute_won' THEN 'won' ELSE 'lost' END) THEN RAISE EXCEPTION 'Conflicting closed dispute: review'; END IF;
   IF nullif(_e->>'dispute_id','') IS NULL OR f.dispute_id IS NOT NULL AND f.dispute_id<>_e->>'dispute_id' THEN RAISE EXCEPTION 'Dispute identity mismatch'; END IF;
   dispute_time:=(_e->>'created')::bigint;
   IF dispute_time IS NULL THEN RAISE EXCEPTION 'Missing dispute timestamp'; END IF;
