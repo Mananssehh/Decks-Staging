@@ -8,11 +8,15 @@
 
 ## Staging follow-up
 - [x] Confirm core RPCs, regenerate hosted types, deploy matching core Edge functions.
-- [ ] Reconnect/cross-tab event and optimistic vote synchronization with regressions.
-- [ ] Safe disabled welcome sender; managed domain and durable delivery integration gate.
-- [ ] Source-only checkout reservation, monotonic webhook, isolated concurrency/retry fixtures and rollback.
-- [ ] PKCE code exchange and local redirect regression tests.
-- [ ] Fix lint/frontend/Edge tests; report unavailable production bundle checks.
+- [x] Reconnect/cross-tab event and optimistic vote synchronization with regressions.
+- [x] Safe disabled welcome sender deployed; domain absent explicitly reported.
+- [x] Source-only reservation/settlement foundations, concurrency/retry fixtures and rollback.
+- [x] PKCE code exchange and local redirect regression tests.
+- [x] Zero-warning lint, frontend behavior and mocked Edge tests.
+- [ ] Production-bundle verification blocked on production build artifact; nine assertions fail honestly.
+- [ ] Complete reserved/legacy webhook and refund/reconcile integration before payment candidate deployment (requires independently reviewed SQL).
+- [ ] Official managed sender and durable business-event retry integration blocked on domain configuration and supported delivery design.
+- [ ] Authenticated UI E2E blocked on authorized staging session; own-account mint found no matching account.
 - [ ] Independent review/install follow-up SQL before deploying dependent functions.
 
 ## Backlog
