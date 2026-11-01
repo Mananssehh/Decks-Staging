@@ -30,6 +30,7 @@ import { GuestUpgradePromptDialog } from "@/components/GuestUpgradePromptDialog"
 import { useNowPlaying } from "@/hooks/useNowPlaying";
 import { fetchMyProfile } from "@/lib/publicProfiles";
 import { resolveEventEntry } from "@/lib/eventEntry";
+import { setSongVote } from "@/lib/stagedRepairs";
 
 
 type SortMode = "top" | "trending" | "played";
@@ -364,22 +365,7 @@ const EventPage = () => {
     );
 
     try {
-      if (isToggleOff) {
-        const { error } = await supabase
-          .from("votes")
-          .delete()
-          .eq("song_request_id", songId)
-          .eq("user_id", user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("votes")
-          .upsert(
-            { song_request_id: songId, user_id: user.id, value },
-            { onConflict: "song_request_id,user_id" },
-          );
-        if (error) throw error;
-      }
+      await setSongVote(songId, isToggleOff ? null : value);
     } catch (err) {
       // Rollback optimistic state on failure
       setMyVotes((prev) => {

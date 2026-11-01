@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { writeBroadcast } from "@/lib/stagedRepairs";
 
 export type NowPlayingStatus = "playing" | "mixing" | "paused";
 
@@ -38,27 +39,11 @@ export async function updateNowPlaying({
 }: NowPlayingInput): Promise<NowPlayingRow> {
   if (!eventId || !title) throw new Error("eventId and title are required");
 
-  const { data, error } = await (supabase as any)
-    .from("now_playing")
-    .upsert(
-      {
-        event_id: eventId,
-        title,
-        artist,
-        album_art: albumArt,
-        apple_url: appleUrl,
-        spotify_url: spotifyUrl,
-        source,
-        status,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "event_id" }
-    )
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as NowPlayingRow;
+  const data = await writeBroadcast(eventId, {
+    title, artist, album_art: albumArt, apple_url: appleUrl,
+    spotify_url: spotifyUrl, source, status,
+  });
+  return data as unknown as NowPlayingRow;
 }
 
 export async function fetchNowPlaying(eventId: string): Promise<NowPlayingRow | null> {

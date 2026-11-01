@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { logCritical } from "@/lib/errorLogger";
 import { NowPlayingPanel } from "@/components/NowPlayingPanel";
 import { BridgePairing } from "@/components/BridgePairing";
-import { updateNowPlaying } from "@/lib/nowPlaying";
+import { transitionRequest, setQueuePosition as saveQueuePosition } from "@/lib/stagedRepairs";
 import { useNowPlaying } from "@/hooks/useNowPlaying";
 
 
@@ -210,48 +210,14 @@ const DJEventManage = () => {
   }), [songs, queueSongs]);
 
   const updateStatus = async (songId: string, status: Status) => {
-    if (status === "playing") {
-      const current = songs.find((s) => s.status === "playing");
-      if (current && current.id !== songId) {
-        await supabase.from("song_requests").update({ status: "played" }).eq("id", current.id);
-      }
-    }
-    const { error } = await supabase.from("song_requests").update({ status }).eq("id", songId);
-    if (error) {
-      toast.error(error.message);
-      logCritical("DJEventManage.updateStatus", error.message, { songId, status, eventId: event?.id });
-      return;
-    }
-    if (status === "playing") {
-      // Mirror the DJ's choice into the broadcast row so guests (and any connected
-      // bridge ingest) see the same track — title/artist/art written together.
-      const picked = songs.find((s) => s.id === songId);
-      if (picked && event?.id) {
-        const albumArt = picked.album_art || picked.album_art_url || "";
-        const sp = (picked.source_platform ?? "").toLowerCase();
-        const ext = (picked.external_url ?? "").trim();
-        const appleUrl = sp === "itunes" || sp === "apple_music" ? ext || null : null;
-        const spotifyUrl = sp === "spotify" ? ext || null : null;
-        console.log("[np-write] manual_dj", {
-          id: picked.id, title: picked.title, artist: picked.artist,
-          album_art: albumArt, apple_url: appleUrl, spotify_url: spotifyUrl,
-        });
-        try {
-          await updateNowPlaying({
-            eventId: event.id,
-            title: picked.title,
-            artist: picked.artist ?? "",
-            albumArt,
-            appleUrl,
-            spotifyUrl,
-            status: "playing",
-            source: "manual_dj",
-          });
-        } catch (e: any) {
-          logCritical("DJEventManage.updateNowPlaying", e?.message ?? String(e), { songId, eventId: event.id });
-        }
-      }
-      toast.success("Now Playing updated for guests 🎶");
+    if (!event) return;
+    try {
+      await transitionRequest(event.id, songId, status);
+      if (status === "playing") toast.success("Now Playing updated for guests 🎶");
+    } catch (error) {
+      const message = (error as { message?: string }).message ?? "Could not update request";
+      toast.error(message);
+      logCritical("DJEventManage.updateStatus", message, { songId, status, eventId: event.id });
     }
   };
 
@@ -262,8 +228,12 @@ const DJEventManage = () => {
   };
 
   const setQueuePosition = async (songId: string, position: number) => {
-    const { error } = await supabase.from("song_requests").update({ queue_position: position }).eq("id", songId);
-    if (error) toast.error(error.message);
+    if (!event) return;
+    try {
+      await saveQueuePosition(event.id, songId, position);
+    } catch (error) {
+      toast.error((error as { message?: string }).message ?? "Could not update queue");
+    }
   };
 
   const moveTo = async (song: SongRequestRow, direction: "top" | "up" | "down") => {
@@ -287,8 +257,7 @@ const DJEventManage = () => {
   };
 
   const remove = async (songId: string) => {
-    const { error } = await supabase.from("song_requests").delete().eq("id", songId);
-    if (error) toast.error(error.message);
+    await updateStatus(songId, "removed");
     setRemoveTarget(null);
   };
 
@@ -636,8 +605,7 @@ const DJEventManage = () => {
           <DJReportsPanel
             eventId={event.id}
             onRemoveRequest={async (songRequestId) => {
-              const { error } = await supabase.from("song_requests").delete().eq("id", songRequestId);
-              if (error) toast.error(error.message);
+              await updateStatus(songRequestId, "removed");
             }}
           />
         </div>
@@ -716,7 +684,7 @@ const DJEventManage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this request?</AlertDialogTitle>
             <AlertDialogDescription>
-              {removeTarget && <>&ldquo;{removeTarget.title}&rdquo; by {removeTarget.artist} will be deleted from the queue and votes will be lost.</>}
+              {removeTarget && <>&ldquo;{removeTarget.title}&rdquo; by {removeTarget.artist} will be removed from the queue.</>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
