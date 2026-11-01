@@ -23,14 +23,14 @@ export async function recordConsent(version: string = CURRENT_CONSENT_VERSION): 
   if (!u?.user) return null;
 
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : null;
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("purchase_consents")
     .insert({ user_id: u.user.id, version, user_agent: ua })
     .select("*")
     .maybeSingle();
 
   // 23505 = unique_violation: already consented to this version, treat as success
-  if (error && (error as any).code !== "23505") throw error;
+  if (error && error.code !== "23505") throw error;
   return (data as ConsentRow | null) ?? null;
 }
 
@@ -40,7 +40,7 @@ export async function recordConsent(version: string = CURRENT_CONSENT_VERSION): 
 export async function hasConsented(version: string = CURRENT_CONSENT_VERSION): Promise<boolean> {
   const { data: u } = await supabase.auth.getUser();
   if (!u?.user) return false;
-  const { data } = await (supabase as any)
+  const { data } = await supabase
     .from("purchase_consents")
     .select("id")
     .eq("user_id", u.user.id)

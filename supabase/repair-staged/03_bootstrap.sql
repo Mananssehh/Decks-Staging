@@ -12,8 +12,12 @@ BEGIN
  RETURN NEW;
 END $$;
 -- Existing handle_new_user is idempotent and protected by uniq_starter_points_per_user.
-CREATE TRIGGER repair_auth_bootstrap AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-CREATE TABLE public.repair_points_reconciliation (
+DO $$ DECLARE attached integer; BEGIN
+ SELECT count(*) INTO attached FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND NOT tgisinternal AND tgenabled<>'D' AND tgfoid='public.handle_new_user()'::regprocedure;
+ IF attached>1 THEN RAISE EXCEPTION 'Multiple bootstrap triggers: review before continuing'; END IF;
+ IF attached=0 THEN CREATE TRIGGER repair_auth_bootstrap AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user(); END IF;
+END $$;
+CREATE TABLE IF NOT EXISTS public.repair_points_reconciliation (
  user_id uuid PRIMARY KEY, balance integer NOT NULL, ledger_total bigint NOT NULL,
  difference bigint NOT NULL, classification text NOT NULL, captured_at timestamptz NOT NULL DEFAULT now()
 );
@@ -26,8 +30,11 @@ INSERT INTO public.repair_points_reconciliation(user_id,balance,ledger_total,dif
 SELECT p.id,p.points,coalesce(sum(t.amount),0),p.points-coalesce(sum(t.amount),0),
  CASE WHEN count(t.id) FILTER(WHERE t.reason='Starter points')=0 AND p.points-coalesce(sum(t.amount),0)=15 THEN 'missing_starter'
  WHEN p.points-coalesce(sum(t.amount),0)=0 THEN 'reconciled' ELSE 'quarantined' END
-FROM public.profiles p LEFT JOIN public.points_transactions t ON t.user_id=p.id GROUP BY p.id,p.points;
+FROM public.profiles p LEFT JOIN public.points_transactions t ON t.user_id=p.id GROUP BY p.id,p.points
+ON CONFLICT(user_id) DO NOTHING; -- Preserve first capture; never overwrite historical evidence on resume.
 -- Add only the exactly proven missing ledger award. Never change balances.
 INSERT INTO public.points_transactions(user_id,amount,type,reason)
-SELECT user_id,15,'earned','Starter points' FROM public.repair_points_reconciliation WHERE classification='missing_starter'
+SELECT r.user_id,15,'earned','Starter points' FROM public.repair_points_reconciliation r JOIN public.profiles p ON p.id=r.user_id
+WHERE r.classification='missing_starter'
+AND p.points-coalesce((SELECT sum(t.amount) FROM public.points_transactions t WHERE t.user_id=p.id),0)=15
 ON CONFLICT(user_id) WHERE reason='Starter points' DO NOTHING;

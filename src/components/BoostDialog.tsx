@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Sparkles, Loader2, Flame, Rocket, Zap, Crown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { ENABLE_BOOSTS } from "@/lib/featureFlags";
 
 interface Props {
   open: boolean;
@@ -50,6 +51,7 @@ export function BoostDialog({ open, onOpenChange, songRequestId, songTitle, onBo
   const amount = custom ? customAmount : selected;
 
   const submit = async () => {
+    if (!ENABLE_BOOSTS) { toast.error("Boosts are paused"); return; }
     if (loading || submittingRef.current) return;
     if (amount < 1) {
       toast.error("Pick a boost pack");
@@ -172,7 +174,7 @@ export function BoostDialog({ open, onOpenChange, songRequestId, songTitle, onBo
           <Button
             variant="premium"
             onClick={submit}
-            disabled={loading || amount < 1 || amount > balance}
+            disabled={!ENABLE_BOOSTS || loading || amount < 1 || amount > balance}
             className="flex-[2] h-11 text-base font-semibold"
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}

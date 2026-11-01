@@ -9,6 +9,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getStripe, json } from "../_shared/stripe.ts";
 import { createPayoutStore, handleAccountUpdated } from "./account-updated.ts";
+import type Stripe from "https://esm.sh/stripe@17.5.0?target=denonext";
+import { APP_EMAIL_TEMPLATES, sendTemplateEmail, type AppEmailTemplate } from "../_shared/transactional-email-templates/send-email.ts";
 
 
 Deno.serve(async (req) => {
@@ -31,7 +33,7 @@ Deno.serve(async (req) => {
   const stripe = getStripe();
   const raw = await req.text();
 
-  let event: any = null;
+  let event: Stripe.Event | null = null;
   let lastErr: unknown = null;
   for (const secret of secrets) {
     try {
@@ -75,7 +77,7 @@ Deno.serve(async (req) => {
 
   // Apply a refund event to a tip row.
   async function applyRefund(args: {
-    tip: any;
+    tip: {id:string;gross_amount_cents:number;refund_id?:string|null};
     chargeAmount: number;        // charge.amount (gross cents)
     amountRefunded: number;      // charge.amount_refunded (cumulative)
     refundId?: string | null;
@@ -94,7 +96,7 @@ Deno.serve(async (req) => {
     await admin.from("dj_tips").update(patch).eq("id", args.tip.id);
   }
 
-  // Send an app email through send-transactional-email. Failures never break
+  // Staging adapter is explicitly disabled until managed sender-domain scaffolding.
   // the webhook — Stripe must still get a 200 so it doesn't retry the payment
   // event. Idempotency keys make this safe to call multiple times.
   async function sendEmail(opts: {
@@ -110,18 +112,8 @@ Deno.serve(async (req) => {
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const e = opts.recipientEmail.trim().toLowerCase();
       if (!EMAIL_RE.test(e) || e.endsWith("@example.com")) return;
-      const { error } = await admin.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: opts.templateName,
-          recipientEmail: e,
-          idempotencyKey: opts.idempotencyKey,
-          templateData: opts.templateData,
-        },
-      });
-      if (error) {
-        console.warn("[stripe-webhook] sendEmail error", opts.templateName, error.message);
-        if (opts.throwOnError) throw new Error(error.message ?? "send failed");
-      }
+      if (!APP_EMAIL_TEMPLATES.includes(opts.templateName as AppEmailTemplate)) throw Error("Unsupported app email");
+      return await sendTemplateEmail(opts.templateName as AppEmailTemplate,e,{idempotencyKey:opts.idempotencyKey,templateData:opts.templateData});
     } catch (e) {
       if (opts.throwOnError) throw e;
       console.warn("[stripe-webhook] sendEmail threw", opts.templateName, (e as Error).message);
@@ -157,10 +149,10 @@ Deno.serve(async (req) => {
     if (!paymentIntentId) return null;
     try {
       const opts = account ? { stripeAccount: account } : undefined;
-      const pi: any = await stripe.paymentIntents.retrieve(
+      const pi = await stripe.paymentIntents.retrieve(
         paymentIntentId,
         { expand: ["latest_charge"] },
-        opts as any,
+        opts,
       );
       const ch = pi.latest_charge;
       if (ch && typeof ch === "object") return ch.receipt_url ?? null;
@@ -260,7 +252,7 @@ Deno.serve(async (req) => {
   // update that matches zero rows is NOT a failure — it is logged and acked.
   async function updateTips(
     patch: Record<string, unknown>,
-    apply: (q: any) => any,
+    apply: (q: ReturnType<ReturnType<ReturnType<typeof admin.from>["update"]>["select"]>) => PromiseLike<{data: unknown[] | null;error:{message:string}|null}>,
     ctx: Record<string, unknown>,
   ) {
     const { data, error } = await apply(
@@ -279,11 +271,11 @@ Deno.serve(async (req) => {
   // Map a Checkout Session to a tip status. Session status and payment status
   // are distinct; a complete session is not necessarily paid when delayed
   // payment methods are in play.
-  function statusFromSession(s: any): "succeeded" | "pending" | "expired" | null {
+  function statusFromSession(s: Stripe.Checkout.Session): "succeeded" | "pending" | "expired" | null {
     const sessionStatus = s?.status as string | undefined;         // open | complete | expired
     const paymentStatus = s?.payment_status as string | undefined; // paid | unpaid | no_payment_required
     if (sessionStatus === "expired") return "expired";
-    if (paymentStatus === "paid" || paymentStatus === "no_payment_required") return "succeeded";
+    if (sessionStatus === "complete" && paymentStatus === "paid") return "succeeded";
     return "pending";
   }
 
@@ -291,7 +283,7 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded": {
-        const s: any = event.data.object;
+        const s = event.data.object as Stripe.Checkout.Session;
         const next = statusFromSession(s);
         await updateTips(
           {
@@ -302,7 +294,7 @@ Deno.serve(async (req) => {
               ? { checkout_expires_at: new Date(s.expires_at * 1000).toISOString() }
               : {}),
           },
-          (q: any) => q.eq("stripe_checkout_session_id", s.id),
+          (q) => q.eq("stripe_checkout_session_id", s.id).in("status", next === "succeeded" ? ["pending", "expired", "failed"] : ["pending"]),
           { type: event.type, session_id: s.id, next },
         );
         if (next === "succeeded") {
@@ -317,16 +309,16 @@ Deno.serve(async (req) => {
         break;
       }
       case "checkout.session.async_payment_failed": {
-        const s: any = event.data.object;
+        const s = event.data.object as Stripe.Checkout.Session;
         await updateTips(
           { status: "failed", failure_reason: "async_payment_failed" },
-          (q: any) => q.eq("stripe_checkout_session_id", s.id).eq("status", "pending"),
+          (q) => q.eq("stripe_checkout_session_id", s.id).eq("status", "pending"),
           { type: event.type, session_id: s.id },
         );
         break;
       }
       case "checkout.session.expired": {
-        const s: any = event.data.object;
+        const s = event.data.object as Stripe.Checkout.Session;
         // Only pending rows expire — never downgrade a paid/refunded tip.
         await updateTips(
           {
@@ -335,25 +327,24 @@ Deno.serve(async (req) => {
               ? { checkout_expires_at: new Date(s.expires_at * 1000).toISOString() }
               : {}),
           },
-          (q: any) => q.eq("stripe_checkout_session_id", s.id).eq("status", "pending"),
+          (q) => q.eq("stripe_checkout_session_id", s.id).eq("status", "pending"),
           { type: event.type, session_id: s.id },
         );
         break;
       }
       case "payment_intent.succeeded": {
-        const pi: any = event.data.object;
+        const pi = event.data.object as Stripe.PaymentIntent;
         // Capture the latest charge id so refund webhooks can locate the tip.
         let chargeId: string | null = null;
         if (typeof pi.latest_charge === "string") chargeId = pi.latest_charge;
         else if (pi.latest_charge?.id) chargeId = pi.latest_charge.id;
-        else if (pi.charges?.data?.[0]?.id) chargeId = pi.charges.data[0].id;
         await updateTips(
           {
             status: "succeeded",
             livemode: !!event.livemode,
             ...(chargeId ? { stripe_charge_id: chargeId } : {}),
           },
-          (q: any) => q.eq("stripe_payment_intent_id", pi.id),
+          (q) => q.eq("stripe_payment_intent_id", pi.id).in("status", ["pending", "expired", "failed"]),
           { type: event.type, payment_intent: pi.id },
         );
         const { data: tipRow, error: tipErr } = await admin
@@ -367,13 +358,13 @@ Deno.serve(async (req) => {
       }
 
       case "payment_intent.payment_failed": {
-        const pi: any = event.data.object;
+        const pi = event.data.object as Stripe.PaymentIntent;
         await updateTips(
           {
             status: "failed",
             failure_reason: pi.last_payment_error?.message ?? "payment_failed",
           },
-          (q: any) => q.eq("stripe_payment_intent_id", pi.id),
+          (q) => q.eq("stripe_payment_intent_id", pi.id).eq("status", "pending"),
           { type: event.type, payment_intent: pi.id },
         );
         break;
@@ -381,7 +372,7 @@ Deno.serve(async (req) => {
 
       case "charge.succeeded": {
         // Backfill charge id when we only have the PI.
-        const ch: any = event.data.object;
+        const ch = event.data.object as Stripe.Charge;
         if (ch.payment_intent) {
           await admin.from("dj_tips").update({ stripe_charge_id: ch.id })
             .eq("stripe_payment_intent_id", ch.payment_intent);
@@ -389,7 +380,7 @@ Deno.serve(async (req) => {
         break;
       }
       case "charge.refunded": {
-        const ch: any = event.data.object;
+        const ch = event.data.object as Stripe.Charge;
         const tip = await findTip({
           payment_intent: typeof ch.payment_intent === "string" ? ch.payment_intent : null,
           charge_id: ch.id,
@@ -409,9 +400,9 @@ Deno.serve(async (req) => {
 
       case "refund.created":
       case "refund.updated": {
-        const r: any = event.data.object;
+        const r = event.data.object as Stripe.Refund;
         // Resolve the charge to learn cumulative amount_refunded.
-        let chargeId: string | null = typeof r.charge === "string" ? r.charge : r.charge?.id ?? null;
+        const chargeId: string | null = typeof r.charge === "string" ? r.charge : r.charge?.id ?? null;
         let chargeAmount = 0;
         let amountRefunded = r.amount ?? 0;
         let paymentIntent: string | null = null;
@@ -419,7 +410,7 @@ Deno.serve(async (req) => {
         try {
           if (chargeId) {
             const opts = event.account ? { stripeAccount: event.account } : undefined;
-            const ch: any = await stripe.charges.retrieve(chargeId, opts as any);
+            const ch = await stripe.charges.retrieve(chargeId, opts);
             chargeAmount = ch.amount ?? 0;
             amountRefunded = ch.amount_refunded ?? amountRefunded;
             paymentIntent = typeof ch.payment_intent === "string" ? ch.payment_intent : null;
@@ -447,7 +438,7 @@ Deno.serve(async (req) => {
       }
 
       case "charge.dispute.created": {
-        const d: any = event.data.object;
+        const d = event.data.object as Stripe.Dispute;
         if (d.payment_intent) {
           await admin.from("dj_tips").update({ status: "disputed" })
             .eq("stripe_payment_intent_id", d.payment_intent);
@@ -458,7 +449,7 @@ Deno.serve(async (req) => {
         break;
       }
       case "charge.dispute.closed": {
-        const d: any = event.data.object;
+        const d = event.data.object as Stripe.Dispute;
         const next =
           d.status === "won" ? "succeeded" :
           d.status === "lost" ? "refunded" :
@@ -477,14 +468,12 @@ Deno.serve(async (req) => {
         break;
       }
       case "account.updated": {
-        const acct: any = event.data.object;
+        const acct = event.data.object as Stripe.Account;
         const result = await handleAccountUpdated(acct, {
           store: createPayoutStore(admin),
           getUserEmail: (id) => getUserEmail(id),
           getNickname: (id) => getNickname(id),
-          sendEmail: async (opts) => {
-            await sendEmail({ ...opts, throwOnError: true });
-          },
+          sendEmail: opts => sendEmail({ ...opts, throwOnError: true }),
         });
         if (!result.ok) {
           // Retryable: Stripe will redeliver this event.

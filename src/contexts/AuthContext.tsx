@@ -1,27 +1,7 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { AuthContext, type Profile } from "./auth-state";
+import { useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-
-interface Profile {
-  id: string;
-  nickname: string;
-  points: number;
-  is_premium: boolean;
-}
-
-interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
-  profile: Profile | null;
-  isDJ: boolean;
-  isAnonymous: boolean;
-  loading: boolean;
-  signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
-  adjustProfilePoints: (delta: number) => void;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -41,10 +21,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     for (const delay of delays) {
       if (delay) await new Promise((r) => setTimeout(r, delay));
       const [pRes, rRes] = await Promise.all([
-        (supabase as any).rpc("get_my_profile"),
+        supabase.rpc("get_my_profile"),
         supabase.from("user_roles").select("role").eq("user_id", uid),
       ]);
-      prof = (pRes.data as Profile | null) ?? null;
+      const candidate = pRes.data;
+      prof = candidate && typeof candidate === "object" && !Array.isArray(candidate)
+        && typeof candidate.id === "string" && typeof candidate.nickname === "string"
+        && typeof candidate.points === "number" && typeof candidate.is_premium === "boolean"
+        ? { id: candidate.id, nickname: candidate.nickname, points: candidate.points, is_premium: candidate.is_premium } : null;
       roles = rRes.data ?? null;
       if (prof || !retryUntilFound) break;
     }
@@ -99,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", refresh);
       clearInterval(interval);
     };
-  }, [user?.id]);
+  }, [user]);
 
 
   const signOut = async () => {
@@ -116,14 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, isDJ, isAnonymous: (user as any)?.is_anonymous === true, loading, signOut, refreshProfile, adjustProfilePoints }}>
+    <AuthContext.Provider value={{ session, user, profile, isDJ, isAnonymous: user?.is_anonymous === true, loading, signOut, refreshProfile, adjustProfilePoints }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}

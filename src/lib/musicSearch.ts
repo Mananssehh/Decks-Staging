@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { functionContext } from "./functionPayload";
 
 export interface MusicSearchResult {
   source_song_id: string | null;
@@ -39,15 +40,15 @@ export async function searchMusic(query: string): Promise<MusicSearchResponse> {
   );
   if (error) {
     // supabase-js FunctionsHttpError surfaces non-2xx; inspect context if present
-    const ctx: any = (error as any).context;
-    const status = ctx?.status ?? ctx?.response?.status;
+    const ctx = functionContext(error);
+    const status = ctx?.status;
     if (status === 429) {
-      const retryAfter = Number(ctx?.response?.headers?.get?.("Retry-After")) || 60;
+      const retryAfter = Number(ctx?.headers.get("Retry-After")) || 60;
       throw new RateLimitedError(retryAfter);
     }
     throw error;
   }
-  if ((data as any)?.error === "rate_limited") {
+  if (data?.error === "rate_limited") {
     throw new RateLimitedError(60);
   }
   return data ?? { provider: "none", results: [] };

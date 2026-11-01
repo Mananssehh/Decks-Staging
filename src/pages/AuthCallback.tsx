@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { completeCallback } from "@/lib/authCallback";
 
 /**
  * Dedicated OAuth callback route.
@@ -24,33 +25,12 @@ const AuthCallback = () => {
 
     const run = async () => {
       try {
-        const url = new URL(window.location.href);
-        const code = url.searchParams.get("code");
-        const errorDesc =
-          url.searchParams.get("error_description") ||
-          new URLSearchParams(url.hash.replace(/^#/, "")).get("error_description");
-
-        if (errorDesc) {
-          toast.error(decodeURIComponent(errorDesc));
-          finish("/auth");
-          return;
-        }
-
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (error) {
-            toast.error(error.message);
-            finish("/auth");
-            return;
-          }
-        }
-        // Implicit flow: supabase-js auto-detects the hash session on load.
-        // Give it a tick, then verify a session exists.
-        const { data } = await supabase.auth.getSession();
-        const next = url.searchParams.get("next") || "/";
-        finish(data.session ? next : "/auth");
-      } catch (e: any) {
-        toast.error(e?.message ?? "Sign-in failed");
+        const next = await completeCallback(window.location.href,
+          code => supabase.auth.exchangeCodeForSession(code),
+          async () => !!(await supabase.auth.getSession()).data.session);
+        finish(next);
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Sign-in failed");
         finish("/auth");
       }
     };

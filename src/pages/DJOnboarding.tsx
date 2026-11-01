@@ -4,7 +4,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { DecksLogo } from "@/components/DecksLogo";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 
@@ -37,8 +37,8 @@ const DJOnboarding = () => {
         supabase.functions.invoke("send-welcome-email", {
           body: {
             kind: "dj",
-            nickname: (user!.user_metadata as any)?.nickname ?? "there",
-            idempotencyKey: `dj-welcome:${user!.id}`,
+            nickname: user?.user_metadata?.nickname ?? "there",
+            idempotencyKey: `dj-welcome:${user?.id}`,
           },
         }).catch(() => undefined);
       }

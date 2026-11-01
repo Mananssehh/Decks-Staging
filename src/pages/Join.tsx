@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Headphones, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +34,7 @@ const Join = () => {
       hasUser: !!user,
       isAnonymous,
     });
-  }, []);
+  }, [params, user, isAnonymous]);
 
   // Prefill nickname only once when profile first loads, and only if the user hasn't started editing.
   useEffect(() => {
@@ -95,7 +95,7 @@ const Join = () => {
       // so we no longer depend on the handle_new_user trigger having created
       // the profile (it occasionally misses for anonymous sign-ins, which
       // caused the displayed name to fall back to "Guest").
-      const { error: ensureErr } = await (supabase as any).rpc("ensure_profile", {
+      const { error: ensureErr } = await supabase.rpc("ensure_profile", {
         p_nickname: nickParse.data,
       });
       if (ensureErr) throw new Error(ensureErr.message || "Could not save nickname");

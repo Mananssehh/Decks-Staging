@@ -6,6 +6,7 @@
 // is reserved for auth failures and unexpected crashes.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { computeFee, corsHeaders, getStripe, json } from "../_shared/stripe.ts";
+import type { StripeErrorView } from "../_shared/stripe-error.ts";
 
 type ErrorCode =
   | "UNAUTHORIZED"
@@ -23,7 +24,7 @@ function err(code: ErrorCode, message: string, status = 200, extra: Record<strin
   return json({ error_code: code, error: message, message, ...extra }, status);
 }
 
-function serializeStripeError(e: any) {
+function serializeStripeError(e: StripeErrorView) {
   const raw = e?.raw ?? {};
   return {
     http_status: e?.statusCode ?? raw?.statusCode ?? null,
@@ -250,7 +251,8 @@ Deno.serve(async (req) => {
         success_url: `${origin}/event/${ev.room_code ?? eventId}?tip=success`,
         cancel_url: `${origin}/event/${ev.room_code ?? eventId}?tip=cancel`,
       });
-    } catch (se: any) {
+    } catch (caught: unknown) {
+      const se = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       const stripe_error = serializeStripeError(se);
       console.error("[tip-create-checkout][RAW checkout.sessions.create error]", JSON.stringify(stripe_error));
       return err(

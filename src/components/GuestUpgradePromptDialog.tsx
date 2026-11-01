@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Gift } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { useGuestJoinLimits } from "@/hooks/useGuestJoinLimits";
 import { logGuestFunnel } from "@/lib/guestFunnel";
 

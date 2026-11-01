@@ -26,10 +26,14 @@ const mock = {
 
 function matches(row: TipRow, params: URLSearchParams) {
   for (const [k, v] of params) {
+    if (v.startsWith("in.(")) {
+      if (!v.slice(4,-1).split(",").includes(String(row[k as keyof TipRow]))) return false;
+      continue;
+    }
     if (!v.startsWith("eq.")) continue;
     const want = v.slice(3);
     // deno-lint-ignore no-explicit-any
-    const got = (row as any)[k];
+    const got = row[k as keyof TipRow];
     if (k === "select" || k === "order" || k === "limit") continue;
     if (String(got) !== want) return false;
   }
@@ -85,14 +89,14 @@ Deno.env.set("SUPABASE_ANON_KEY", "anon-test-key");
 const originalServe = Deno.serve.bind(Deno);
 let fnServer: { shutdown: () => Promise<void> } | null = null;
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = (handler: any) => {
+Deno.serve = ((handler: Deno.ServeHandler) => {
   const s = originalServe({ port: FN_PORT }, handler);
   fnServer = s;
   return s;
-};
+}) as typeof Deno.serve;
 await import("./index.ts");
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = originalServe;
+Deno.serve = originalServe;
 
 const stripe = new Stripe("sk_test_dummy_key_for_local_tests", {
   apiVersion: "2024-12-18.acacia",
@@ -278,6 +282,30 @@ Deno.test({
     assertEquals(status, 500);
     assertEquals(mock.tips[0].status, "pending");
     mock.failUpdate = false;
+  },
+});
+
+Deno.test({
+  name: "late unpaid completed and failed never downgrade succeeded or refunded",
+  ...opts,
+  async fn() {
+    for (const terminal of ["succeeded", "refunded", "partially_refunded", "disputed"]) {
+      const row = seed(terminal);
+      assertEquals(await post("checkout.session.completed", {id:"cs_test_1",status:"complete",payment_status:"unpaid"}),200);
+      assertEquals(row.status,terminal);
+      assertEquals(await post("checkout.session.async_payment_failed", {id:"cs_test_1",status:"complete",payment_status:"unpaid"}),200);
+      assertEquals(row.status,terminal);
+    }
+  },
+});
+
+Deno.test({
+  name: "zero-payment completed never fulfills a tip",
+  ...opts,
+  async fn() {
+    const row=seed();
+    assertEquals(await post("checkout.session.completed",{id:"cs_test_1",status:"complete",payment_status:"no_payment_required"}),200);
+    assertEquals(row.status,"pending");
   },
 });
 

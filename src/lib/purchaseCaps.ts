@@ -29,7 +29,7 @@ export async function checkBoostPurchaseCap(args: {
   const { data: u } = await supabase.auth.getUser();
   if (!u?.user) return { ok: false, error: "Sign in required" };
 
-  const { error } = await (supabase as any).rpc("check_boost_purchase_cap", {
+  const { error } = await supabase.rpc("check_boost_purchase_cap", {
     _user_id: u.user.id,
     _event_id: args.eventId ?? null,
     _amount_cents: args.amountCents,

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, BarChart3, Copy, Loader2, ListMusic, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ const Archive = () => {
   const duplicate = async (ev: EventRow) => {
     if (!user) return;
     // Server-side atomic creation reserves a fresh room code for the copy.
-    const { data, error } = await (supabase as any).rpc("create_event", {
+    const { data, error } = await supabase.rpc("create_event", {
       _name: `${ev.name} (copy)`,
       _venue: ev.venue,
       _dj_name: ev.dj_name,

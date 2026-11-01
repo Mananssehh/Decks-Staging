@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Disc3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 
 interface Props {
   variant?: "premium" | "outline";

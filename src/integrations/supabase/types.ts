@@ -836,6 +836,48 @@ export type Database = {
         }
         Relationships: []
       }
+      repair_admission_log: {
+        Row: {
+          admitted: boolean
+          created_at: string
+          event_id: string | null
+          id: number
+          user_id: string
+        }
+        Insert: {
+          admitted?: boolean
+          created_at?: string
+          event_id?: string | null
+          id?: never
+          user_id: string
+        }
+        Update: {
+          admitted?: boolean
+          created_at?: string
+          event_id?: string | null
+          id?: never
+          user_id?: string
+        }
+        Relationships: []
+      }
+      repair_admission_settings: {
+        Row: {
+          event_budget: number
+          guest_budget: number
+          singleton: boolean
+        }
+        Insert: {
+          event_budget?: number
+          guest_budget?: number
+          singleton?: boolean
+        }
+        Update: {
+          event_budget?: number
+          guest_budget?: number
+          singleton?: boolean
+        }
+        Relationships: []
+      }
       repair_counter_evidence: {
         Row: {
           actual_downvotes: number | null
@@ -860,6 +902,33 @@ export type Database = {
           id?: string
           old_downvotes?: number | null
           old_upvotes?: number | null
+        }
+        Relationships: []
+      }
+      repair_points_reconciliation: {
+        Row: {
+          balance: number
+          captured_at: string
+          classification: string
+          difference: number
+          ledger_total: number
+          user_id: string
+        }
+        Insert: {
+          balance: number
+          captured_at?: string
+          classification: string
+          difference: number
+          ledger_total: number
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          captured_at?: string
+          classification?: string
+          difference?: number
+          ledger_total?: number
+          user_id?: string
         }
         Relationships: []
       }
@@ -1294,6 +1363,11 @@ export type Database = {
         Args: { _song_request_id: string }
         Returns: undefined
       }
+      repair_claim_bridge_code: {
+        Args: { _code: string; _ip: string }
+        Returns: Json
+      }
+      repair_prune_limiter_logs: { Args: never; Returns: undefined }
       repair_write_broadcast: {
         Args: {
           _event_id: string

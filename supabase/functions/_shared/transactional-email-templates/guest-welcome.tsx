@@ -14,7 +14,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, button, container, footer, footerLink,
   footerTiny, h1, h2, hr, lead, link, main, text, textMuted,
@@ -24,7 +23,7 @@ interface Props {
   nickname?: string
 }
 
-const Email = ({ nickname = 'there' }: Props) => (
+export const Email = ({ nickname = 'there' }: Props) => (
   <Html lang="en" dir="ltr">
     <Head />
     <Preview>Welcome to Decks — request songs and tip the DJ live</Preview>
@@ -67,9 +66,3 @@ const Email = ({ nickname = 'there' }: Props) => (
   </Html>
 )
 
-export const template = {
-  component: Email,
-  subject: 'Welcome to Decks 🎧',
-  displayName: 'Guest welcome',
-  previewData: { nickname: 'Sam' },
-} satisfies TemplateEntry

@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

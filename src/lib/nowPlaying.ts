@@ -47,7 +47,7 @@ export async function updateNowPlaying({
 }
 
 export async function fetchNowPlaying(eventId: string): Promise<NowPlayingRow | null> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("now_playing")
     .select("*")
     .eq("event_id", eventId)

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Flag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import {
   Dialog,
   DialogContent,
@@ -55,7 +55,7 @@ export function ReportDialog({ open, onOpenChange, targetType, targetId, eventId
       return;
     }
     setSubmitting(true);
-    const { error } = await (supabase as any).from("reports").insert({
+    const { error } = await supabase.from("reports").insert({
       reporter_id: user.id,
       event_id: eventId ?? null,
       target_type: targetType,

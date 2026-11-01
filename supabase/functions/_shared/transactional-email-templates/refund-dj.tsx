@@ -14,7 +14,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, button, container, detailLabel, detailRow,
   footer, footerLink, footerTiny, formatUSD, h1, hr, lead, link, main, text,
@@ -30,7 +29,7 @@ interface Props {
   fullyRefunded?: boolean
 }
 
-const Email = ({
+export const Email = ({
   djName = 'there',
   guestName = 'A guest',
   eventName = 'your event',
@@ -86,16 +85,3 @@ const Email = ({
   </Html>
 )
 
-export const template = {
-  component: Email,
-  subject: 'A tip on Decks was refunded',
-  displayName: 'Refund notification (DJ)',
-  previewData: {
-    djName: 'Nova',
-    guestName: 'Sam',
-    eventName: 'Friday Night Set',
-    grossAmountCents: 500,
-    refundedAmountCents: 500,
-    fullyRefunded: true,
-  },
-} satisfies TemplateEntry

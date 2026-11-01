@@ -55,7 +55,8 @@ export function CheckoutConsentModal({
       setNoPlacement(false);
       setDiscretion(false);
       setNonRefundable(false);
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       toast({
         title: "Couldn't record consent",
         description: e?.message ?? "Please try again.",

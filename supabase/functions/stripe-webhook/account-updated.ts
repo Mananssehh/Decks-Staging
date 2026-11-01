@@ -55,7 +55,7 @@ export interface AccountUpdatedDeps {
     recipientEmail: string | null | undefined;
     idempotencyKey: string;
     templateData: Record<string, unknown>;
-  }) => Promise<void>;
+  }) => Promise<void | {sent:false;reason:string}>;
 }
 
 export interface StripeAccountLike {
@@ -78,6 +78,7 @@ export interface AccountUpdatedResult {
     | "sync_failed"
     | "claim_failed"
     | "email_failed";
+  // Disabled managed sender is not a successful delivery.
   emailQueued: boolean;
 }
 
@@ -164,12 +165,13 @@ export async function handleAccountUpdated(
   try {
     const djEmail = await deps.getUserEmail(prev.user_id);
     const djName = (await deps.getNickname(prev.user_id)) ?? "there";
-    await deps.sendEmail({
+    const delivery = await deps.sendEmail({
       templateName: "dj-stripe-connected",
       recipientEmail: djEmail,
       idempotencyKey: `dj-stripe-connected:${accountId}`,
       templateData: { djName },
     });
+    if (delivery?.sent === false) return { ok:true,outcome:"no_transition",emailQueued:false };
   } catch (e) {
     // Revert the claim so a Stripe retry re-attempts the email.
     const { affected: revertAffected, error: revertError } = await store
@@ -196,8 +198,7 @@ export async function handleAccountUpdated(
 }
 
 /** Supabase-backed PayoutStore. */
-// deno-lint-ignore no-explicit-any
-export function createPayoutStore(admin: any): PayoutStore {
+export function createPayoutStore(admin: import("https://esm.sh/@supabase/supabase-js@2").SupabaseClient): PayoutStore {
   return {
     async getPrevious(stripeAccountId) {
       const { data, error } = await admin

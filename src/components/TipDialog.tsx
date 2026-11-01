@@ -15,6 +15,8 @@ import { PURCHASE_CAPS } from "@/lib/purchaseCaps";
 import { recordConsent, CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { ENABLE_LIVE_STRIPE } from "@/lib/featureFlags";
 import { supabase } from "@/integrations/supabase/client";
+import { tipRequestKey } from "@/lib/tipRequestKey";
+import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
 
 interface Props {
   open: boolean;
@@ -58,12 +60,11 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         body: { event_id: eventId, check_only: true },
       });
       if (cancelled) return;
-      let payload: any = data;
-      if (!payload && error && (error as any).context) {
-        const ctx = (error as any).context;
+      let payload: FunctionPayload | null = data;
+      if (!payload && functionContext(error)) {
+        const ctx = functionContext(error);
         try {
-          if (typeof ctx.json === "function") payload = await ctx.json();
-          else if (typeof ctx.text === "function") payload = JSON.parse(await ctx.text());
+          if (ctx) payload = await ctx.json();
         } catch { /* ignore */ }
       }
       if (payload?.ready) {
@@ -120,8 +121,12 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         return;
       }
 
+      const { data: currentUser, error: userError } = await supabase.auth.getUser();
+      if (userError || !currentUser.user || !eventId) throw Error("Sign in to tip");
+      const requestKey = tipRequestKey(currentUser.user.id, eventId, songRequestId ?? null, amountCents);
       const { data, error } = await supabase.functions.invoke("tip-create-checkout", {
         body: {
+          request_key: requestKey,
           event_id: eventId,
           amount_cents: amountCents,
           song_request_id: songRequestId ?? null,
@@ -132,12 +137,11 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
 
       // supabase-js can wrap a structured-error body in `error` (FunctionsHttpError)
       // even when the function returned 200. Recover the JSON from error.context.
-      let payload: any = data;
-      if (!payload && error && (error as any).context) {
-        const ctx = (error as any).context;
+      let payload: FunctionPayload | null = data;
+      if (!payload && functionContext(error)) {
+        const ctx = functionContext(error);
         try {
-          if (typeof ctx.json === "function") payload = await ctx.json();
-          else if (typeof ctx.text === "function") payload = JSON.parse(await ctx.text());
+          if (ctx) payload = await ctx.json();
         } catch { /* ignore */ }
       }
 
@@ -171,7 +175,8 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
       if (error) throw error;
       if (!payload?.url) throw new Error("Checkout session missing URL — please try again.");
       window.location.href = payload.url as string;
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       toast.error(e?.message ?? "Couldn't process tip");
     } finally {
       setSubmitting(false);

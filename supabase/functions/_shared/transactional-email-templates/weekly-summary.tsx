@@ -14,7 +14,6 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import type { TemplateEntry } from './registry.ts'
 import {
   BRAND, SITE_URL, SUPPORT_EMAIL, button, container, detailLabel, detailRow,
   footer, footerLink, footerTiny, formatUSD, h1, hr, lead, link, main, text,
@@ -40,7 +39,7 @@ interface Props {
   topTippers?: TopTipper[]
 }
 
-const Email = ({
+export const Email = ({
   djName = 'there',
   weekStart = '',
   weekEnd = '',
@@ -113,25 +112,3 @@ const Email = ({
   </Html>
 )
 
-export const template = {
-  component: Email,
-  subject: 'Your Decks week in review',
-  displayName: 'Weekly DJ summary',
-  previewData: {
-    djName: 'Nova',
-    weekStart: 'Jun 16',
-    weekEnd: 'Jun 22',
-    grossCents: 4200,
-    netCents: 2940,
-    guestCount: 8,
-    upcomingPayoutCents: 2940,
-    topSongs: [
-      { title: 'One More Time — Daft Punk', count: 5 },
-      { title: 'Sicko Mode — Travis Scott', count: 3 },
-    ],
-    topTippers: [
-      { nickname: 'Sam', amountCents: 1500 },
-      { nickname: 'Alex', amountCents: 1000 },
-    ],
-  },
-} satisfies TemplateEntry

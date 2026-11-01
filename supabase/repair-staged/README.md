@@ -1,11 +1,13 @@
-# DECKS Staging core repair group — source-only review package
+# DECKS Staging core repair group — installation and evidence record
 
 ## Scope and source identity
 
 - Only DECKS Staging project `3bde3db6-ee77-4460-95f2-891bb19a0278`.
 - Starting source SHA independently verified before edits: `41620157daf3c40254adc16590e0b52008ebe3bb`.
 - Lovable automatically records source changes; no manual Git commit/checkout/push was performed. `SOURCE_STATE.txt` records the observed source head and a file digest manifest for review.
-- **No hosted SQL was executed, no Edge functions deployed, no site published, no email sent, no payments created, no secrets changed, no Auth quota requested.** Hosted accesses were read-only catalog/schema queries.
+- Original core turn was source-only. Independent reviewer subsequently installed core SQL; this follow-up only read hosted SQL, regenerated actual hosted types, and deployed matching core functions plus the safely disabled welcome sender. No publication, emails, payments, secret or quota changes.
+- Reviewer evidence: 02/04 passed ten role-based rollback checks and zero counter mismatches; 01/03/05/06/07 installed preserving `on_auth_user_created`, balance checksum unchanged, quarantine zero, one retention job. First full attempt rolled back on provider-role permission; retry omitted only three supabase_admin default statements.
+- Fresh agent read-only evidence: core RPC signatures/ACLs present, one `on_auth_user_created`, zero vote-cache mismatches, zero quarantined profiles. Cron internals are unavailable to agent SQL; one job remains reviewer-reported evidence.
 - Email dispatch/wake remain their captured no-op definitions. Historical `joinb`, `d5b`, `e0*` drafts are neither authoritative nor promoted by this package.
 
 ## Exact ordered SQL files
@@ -20,7 +22,8 @@
 8. `supabase/repair-staged/07_retention.sql` — daily pg_cron cleanup of limiter logs older than 24 hours. Does not touch email jobs.
 9. `supabase/repair-staged/08_verify.sql` — read-only post-apply invariants and retention job check.
 
-**Execute 01–07 in one explicit SQL transaction during a staging maintenance window**, with the read-only preflight checked first. Individual files intentionally have `SET LOCAL` and no BEGIN/COMMIT; the SQL interface operator owns transaction control. This avoids temporary partial repairs or PUBLIC execution gaps between files. Any lock timeout aborts the transaction: investigate, then retry the complete transaction; never continue from a partially failed file. Execute exactly one migration channel—do not also promote old overlapping drafts.
+**Already installed: do not execute 01–07 blindly.** Use `09_resume.sql` for read-only installed-state review. `00_preflight.sql` is the original first-install boundary guard and intentionally rejects the installed join hash. Bootstrap now preserves any one enabled existing bootstrap and inserts reconciliation evidence only if absent; ledger backfill rechecks balance/ledger difference. Other first-install files are not idempotent and are not a resume script. Independent reviewer must select any necessary delta explicitly.
+The three supabase_admin default statements in 06 are now comments documenting the provider-owned permission gap; no escalation was attempted. Existing application ACLs and postgres defaults are closed, not provider-owned future defaults.
 
 Review the latest live catalog and function creator roles before execution. The captured catalog has app function owner postgres and defaults from postgres/supabase_admin; additional owners/overloads require re-review. Catalog dependencies alone omit late-bound PL/pgSQL calls. Policy helpers `has_role`, `is_event_owner`, `is_event_member` deliberately retain authenticated EXECUTE. Internal trigger functions are not browser APIs; their creator/owner needs EXECUTE when creating triggers, and invoker dependencies require explicit grants.
 
@@ -41,7 +44,7 @@ The first `x-forwarded-for` entry is not established as trusted gateway evidence
 
 ## Source callers and types
 
-- `src/lib/stagedRepairs.ts` — typed source-only RPC contracts; generated `src/integrations/supabase/types.ts` remains the actual hosted schema, unchanged until execution.
+- `src/lib/stagedRepairs.ts` — narrow RPC adapter; generated `src/integrations/supabase/types.ts` regenerated from actual installed hosted schema in follow-up.
 - `src/lib/nowPlaying.ts` — manual broadcast through atomic RPC.
 - `src/pages/DJEventManage.tsx` — all dashboard/focus/next/approval/skip/remove callers share atomic transition; queue uses owner RPC; no false success on mirror failure.
 - `src/pages/EventPage.tsx` — desired-state vote RPC instead of direct table upsert/delete; optimistic state rolls back on errors.
@@ -50,7 +53,7 @@ The first `x-forwarded-for` entry is not established as trusted gateway evidence
 - `supabase/functions/now-playing-ingest/index.ts` — metadata lookup/matching remains outside transaction; request+mirror+heartbeat write now one token-revalidating event-first transaction.
 - `AGENTS.md` — lock and staged-contract rules.
 
-**Compatibility gate:** new source RPCs intentionally do not exist in hosted staging yet. Vote/playback callers will fail closed until reviewed SQL is installed. Do not publish/deploy this source alone. Apply SQL in maintenance, regenerate hosted types, deploy matching Edge source explicitly, then verify authenticated UI flows.
+**Core compatibility:** RPCs exist and matching join-event, bridge-pair, now-playing-ingest were deployed to staging. Follow-up payment SQL and dependent candidates remain outside deployable function paths and are not installed. No site publishing occurred.
 
 ## Evidence and actual tests
 
@@ -84,7 +87,7 @@ For a full behavioral reversal, independently review the fresh pre-apply snapsho
 
 ## Remaining release gaps
 
-- Hosted migrations, daily cron job, actual managed signup trigger execution, generated types, Edge deployment and authenticated UI end-to-end remain **unexecuted/unverified by design**.
+- Core installation is reviewer-reported plus read-only verified above; actual new-account signup and authenticated UI mutation E2E remain unverified. Own-account session mint failed because no matching app account exists; no other identity was chosen.
 - pg_cron scheduling is staged and supported by read-only hosted extension discovery; local fixture does not emulate managed pg_cron privileges.
 - Bridge gateway address provenance unresolved; common failure bucket documented above.
 - No exhaustive proof for arbitrary service-role bulk SQL or privileged clients: those can bypass RLS and must obey event-first ordering. Current browser request/vote/integration writes are closed, and known source writers were enumerated.

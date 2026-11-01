@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { SEO } from "@/components/SEO";
 import { SongRequestCard, SongRequestRow } from "@/components/SongRequestCard";
@@ -31,6 +31,7 @@ import { useNowPlaying } from "@/hooks/useNowPlaying";
 import { fetchMyProfile } from "@/lib/publicProfiles";
 import { resolveEventEntry } from "@/lib/eventEntry";
 import { setSongVote } from "@/lib/stagedRepairs";
+import { createEventRefresh, listenEventRefresh, notifyEventChange } from "@/lib/eventRefresh";
 
 
 type SortMode = "top" | "trending" | "played";
@@ -67,6 +68,11 @@ const EventPage = () => {
   const [removing, setRemoving] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [lastRequestAt, setLastRequestAt] = useState(0);
+  const voteLocks = useRef(new Set<string>());
+  const refreshRef = useRef<{ refresh: () => Promise<void>; invalidate: () => void } | null>(null);
+  const userId = user?.id;
+  const nicknameRef = useRef(profile?.nickname);
+  nicknameRef.current = profile?.nickname;
 
   // Redirect if not signed in
   useEffect(() => {
@@ -77,7 +83,7 @@ const EventPage = () => {
 
   // Load event + songs + my votes
   useEffect(() => {
-    if (!code || !user) return;
+    if (!code || !userId) return;
     let cancelled = false;
 
     (async () => {
@@ -88,16 +94,17 @@ const EventPage = () => {
       const liveProf = await fetchMyProfile("EventPage.join");
       const nick =
         (liveProf?.nickname && liveProf.nickname !== "Guest" ? liveProf.nickname : null) ||
-        (profile?.nickname && profile.nickname !== "Guest" ? profile.nickname : null) ||
+        (nicknameRef.current && nicknameRef.current !== "Guest" ? nicknameRef.current : null) ||
         navNickname ||
         liveProf?.nickname ||
-        profile?.nickname ||
+        nicknameRef.current ||
         "Guest";
 
       // Membership — not event readability — decides whether this visitor can
       // take part. resolveEventEntry guarantees a participant row exists for
       // non-owners, including guests who open the event link directly.
-      const ev = await resolveEventEntry(code, user.id, nick);
+      const ev = await resolveEventEntry(code, userId, nick);
+      if (cancelled) return;
 
       if (!ev) {
         toast.error("That event isn't available. Double-check the code on the QR poster.");
@@ -110,7 +117,6 @@ const EventPage = () => {
       if (ev.requests_status === "ended") {
         toast.info("This event has ended — you can still browse the played tracks.");
       }
-      setEventInfo(ev);
 
       // Show welcome hint once per event per browser
       const hintKey = `decks-hint-${ev.id}`;
@@ -122,7 +128,7 @@ const EventPage = () => {
 
       const [{ data: reqs }, { data: votes }] = await Promise.all([
         supabase.from("song_requests").select("*").eq("event_id", ev.id),
-        supabase.from("votes").select("song_request_id, value").eq("user_id", user.id),
+        supabase.from("votes").select("song_request_id, value").eq("user_id", userId),
       ]);
 
       if (cancelled) return;
@@ -130,11 +136,12 @@ const EventPage = () => {
       setMyVotes(
         Object.fromEntries((votes ?? []).map((v) => [v.song_request_id, v.value as 1 | -1])),
       );
+      setEventInfo(ev); // Subscribe only after the initial snapshot commits.
       setLoading(false);
     })();
 
     return () => { cancelled = true; };
-  }, [code, user, navigate, profile?.nickname]);
+  }, [code, userId, navigate, navNickname]);
 
   // Restore scroll position when returning from a user profile page (Back button).
   // Source of truth in priority order: location.state.scrollY, then sessionStorage.
@@ -156,7 +163,8 @@ const EventPage = () => {
       }
     }
     if (y && y > 0) {
-      requestAnimationFrame(() => window.scrollTo({ top: y!, behavior: "auto" }));
+      const restoredY = y;
+      requestAnimationFrame(() => window.scrollTo({ top: restoredY, behavior: "auto" }));
     }
     try { sessionStorage.removeItem(key); } catch { /* ignore */ }
     // Remember last event path so PublicProfile can fall back here after a refresh.
@@ -168,45 +176,53 @@ const EventPage = () => {
 
   // Realtime: songs + event lifecycle, with mobile-friendly reconnect
   useEffect(() => {
-    if (!eventInfo) return;
+    const eventId = eventInfo?.id;
+    const userId = user?.id;
+    if (!eventId || !userId) return;
+    const activeVoteLocks = voteLocks.current;
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let backoff = 1000;
     let reconnectTimer: number | null = null;
     let cancelled = false;
 
-    const refetch = async () => {
-      const [{ data: reqs }] = await Promise.all([
-        supabase.from("song_requests").select("*").eq("event_id", eventInfo.id),
+    const sync = createEventRefresh(async () => {
+      const [reqs, event, votes] = await Promise.all([
+        supabase.from("song_requests").select("*").eq("event_id", eventId),
+        supabase.from("events").select("*").eq("id", eventId).single(),
+        supabase.from("votes").select("song_request_id,value").eq("user_id", userId),
       ]);
-      if (!cancelled && reqs) setSongs(reqs as SongRequestRow[]);
-    };
+      if (reqs.error || event.error || votes.error) throw Error("Event refresh failed");
+      return { songs: reqs.data as SongRequestRow[], event: event.data as EventInfo,
+        votes: Object.fromEntries(votes.data.map(v => [v.song_request_id, v.value as 1 | -1])) };
+    }, snapshot => {
+      setSongs(snapshot.songs); setEventInfo(snapshot.event); setMyVotes(snapshot.votes);
+    }, () => voteLocks.current.size > 0);
+    refreshRef.current = sync;
+    const refetch = () => { void sync.refresh(); };
+    let channelGeneration = 0;
 
     const subscribe = () => {
+      const generation = ++channelGeneration;
       if (channel) supabase.removeChannel(channel);
       channel = supabase
-        .channel(`event-${eventInfo.id}-${Date.now()}`)
+        .channel(`event-${eventId}-${crypto.randomUUID()}`)
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "song_requests", filter: `event_id=eq.${eventInfo.id}` },
-          (payload) => {
-            setSongs((prev) => {
-              if (payload.eventType === "INSERT") return [...prev, payload.new as SongRequestRow];
-              if (payload.eventType === "UPDATE")
-                return prev.map((s) => (s.id === (payload.new as SongRequestRow).id ? (payload.new as SongRequestRow) : s));
-              if (payload.eventType === "DELETE")
-                return prev.filter((s) => s.id !== (payload.old as { id: string }).id);
-              return prev;
-            });
-          },
+          { event: "*", schema: "public", table: "song_requests", filter: `event_id=eq.${eventId}` },
+          refetch,
         )
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventInfo.id}` },
-          (payload) => setEventInfo((prev) => prev ? { ...prev, ...(payload.new as EventInfo) } : prev),
+          { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventId}` },
+          refetch,
         )
+        .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `user_id=eq.${userId}` }, refetch)
         .subscribe((status) => {
+          if (cancelled || generation !== channelGeneration) return;
           if (status === "SUBSCRIBED") {
+            if (reconnectTimer) window.clearTimeout(reconnectTimer);
             backoff = 1000;
+            refetch();
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             if (reconnectTimer) window.clearTimeout(reconnectTimer);
             reconnectTimer = window.setTimeout(() => {
@@ -220,26 +236,19 @@ const EventPage = () => {
         });
     };
 
-    const onVisibility = () => {
-      if (document.visibilityState === "visible" && !cancelled) {
-        refetch();
-        subscribe();
-      }
-    };
-    const onOnline = () => { if (!cancelled) { refetch(); subscribe(); } };
-
     subscribe();
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("online", onOnline);
+    const unlisten = listenEventRefresh(eventId, userId, refetch);
 
     return () => {
       cancelled = true;
+      sync.dispose();
+      activeVoteLocks.clear();
+      if (refreshRef.current === sync) refreshRef.current = null;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("online", onOnline);
+      unlisten();
       if (channel) supabase.removeChannel(channel);
     };
-  }, [eventInfo?.id]);
+  }, [eventInfo?.id, user?.id]);
 
   const nowPlaying = useMemo(() => songs.find((s) => s.status === "playing"), [songs]);
 
@@ -335,7 +344,10 @@ const EventPage = () => {
       return;
     }
     // Per-song debounce: ignore taps while a vote request is in flight
-    if (pendingVotes[songId]) return;
+    if (voteLocks.current.has(songId)) return;
+    voteLocks.current.add(songId);
+    const voteScope = refreshRef.current;
+    voteScope?.invalidate();
 
     const prevVote = myVotes[songId];
     const isToggleOff = prevVote === value;
@@ -366,7 +378,9 @@ const EventPage = () => {
 
     try {
       await setSongVote(songId, isToggleOff ? null : value);
+      if (eventInfo) notifyEventChange(eventInfo.id, user.id);
     } catch (err) {
+      if (voteScope !== refreshRef.current) return;
       // Rollback optimistic state on failure
       setMyVotes((prev) => {
         const n = { ...prev };
@@ -384,11 +398,15 @@ const EventPage = () => {
       const msg = (err as { message?: string })?.message ?? "Vote failed";
       toast.error(`Vote failed: ${msg}`);
     } finally {
-      setPendingVotes((p) => {
+      if (voteScope === refreshRef.current) {
+        voteLocks.current.delete(songId);
+        void voteScope?.refresh();
+        setPendingVotes((p) => {
         const n = { ...p };
         delete n[songId];
         return n;
-      });
+        });
+      }
     }
   };
 

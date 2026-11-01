@@ -45,7 +45,7 @@ const mockServer = Deno.serve({ port: MOCK_PORT }, async (req) => {
       const filterPayouts = url.searchParams.get("payouts_enabled");
       let matched = !!mock.row;
       if (matched && filterPayouts === "eq.false") {
-        matched = mock.row!.payouts_enabled === false;
+        matched = mock.row?.payouts_enabled === false;
       }
       if (matched && mock.row) {
         mock.row = { ...mock.row, ...body };
@@ -85,14 +85,14 @@ const originalServe = Deno.serve.bind(Deno);
 let fnServer: { shutdown: () => Promise<void> } | null = null;
 // Pin the function's server to a dedicated port.
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = (handler: any) => {
+Deno.serve = ((handler: Deno.ServeHandler) => {
   const s = originalServe({ port: FN_PORT }, handler);
   fnServer = s;
   return s;
-};
+}) as typeof Deno.serve;
 await import("./index.ts");
 // deno-lint-ignore no-explicit-any
-(Deno as any).serve = originalServe;
+Deno.serve = originalServe;
 
 const stripe = new Stripe("sk_test_dummy_key_for_local_tests", {
   apiVersion: "2024-12-18.acacia",
@@ -128,7 +128,7 @@ async function postEvent(payoutsEnabled: boolean) {
 }
 
 Deno.test({
-  name: "endpoint returns 200 and queues one activation email",
+  name: "endpoint returns 200 with domain-disabled email and preserves payout activation",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -138,21 +138,13 @@ Deno.test({
 
   const res = await postEvent(true);
   assertEquals(res.status, 200);
-  assertEquals(mock.emails.length, 1);
-  assertEquals(
-    (mock.emails[0] as { templateName: string }).templateName,
-    "dj-stripe-connected",
-  );
-  assertEquals(
-    (mock.emails[0] as { idempotencyKey: string }).idempotencyKey,
-    "dj-stripe-connected:acct_TEST123",
-  );
+  assertEquals(mock.emails.length, 0);
   assertEquals(mock.row?.payouts_enabled, true);
 
   // Redelivery of the same event: still 200, no duplicate email.
   const again = await postEvent(true);
   assertEquals(again.status, 200);
-  assertEquals(mock.emails.length, 1);
+  assertEquals(mock.emails.length, 0);
   },
 });
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +49,7 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
       if (upErr) throw upErr;
 
       // Re-stamp profile (no-op for nickname if unchanged).
-      await (supabase as any).rpc("upgrade_anonymous_profile", {
+      await supabase.rpc("upgrade_anonymous_profile", {
         p_nickname: profile?.nickname ?? null,
       });
       await refreshProfile();

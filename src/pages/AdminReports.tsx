@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export default function AdminReports() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("reports")
       .select("*")
       .eq("status", filter)
@@ -67,7 +67,7 @@ export default function AdminReports() {
   };
 
   const updateStatus = async (id: string, status: Status) => {
-    const { error } = await (supabase as any).from("reports").update({ status }).eq("id", id);
+    const { error } = await supabase.from("reports").update({ status }).eq("id", id);
     if (error) toast.error(error.message);
     else {
       toast.success("Report updated");

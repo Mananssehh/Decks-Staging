@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Sparkles, User as UserIcon } from "lucide-react";
 import { DecksLogo } from "@/components/DecksLogo";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { Badge } from "@/components/ui/badge";
 import { UpgradeAccountDialog } from "@/components/UpgradeAccountDialog";
 

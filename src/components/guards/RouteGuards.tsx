@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-state";
 import { AppHeader } from "@/components/AppHeader";
 
 /**
@@ -71,7 +71,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, loading]);
+  }, [user, loading]);
 
   if (loading || state === "loading") return <GuardLoading />;
   if (state === "denied") return <Navigate to="/" replace />;
@@ -108,7 +108,7 @@ export function RequireEventOwner({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, isDJ, loading, id]);
+  }, [user, isDJ, loading, id]);
 
   if (loading || state === "loading") return <GuardLoading />;
   if (state === "denied") {

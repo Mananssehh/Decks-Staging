@@ -1,0 +1,10 @@
+Lint: bunx eslint . --max-warnings 0: passed, zero errors/warnings.
+Frontend: bunx vitest run src/lib src/components: 92 passed.
+Full frontend: bunx vitest run: 95 passed, 9 production bundle tests failed; dist/assets absent. No skipped assertions.
+Core local PG fixture: 83 assertions + deterministic lock barrier + rollback passed.
+Follow-up local PG fixture: 19 assertions + rollback passed.
+Staged Deno fake Stripe/signature handler: 8 passed.
+Managed Edge tests join/bridge/welcome/webhook/reconcile: 52 passed, zero failed.
+Browser public OAuth error callback: /auth, login form verified. Authenticated E2E unavailable: --self mint no matching account.
+No live money or email calls.
+Auth email hook Deno check blocked on missing managed webhooks-js package locally; no deployment or sends attempted for auth hook.

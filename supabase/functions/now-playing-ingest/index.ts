@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
   const rawBody = await req.json().catch(() => ({}));
 
   // Bridge heartbeat: mark integration as seen without touching now_playing.
-  if (rawBody && typeof rawBody === "object" && (rawBody as any).type === "bridge_connected") {
+  if (rawBody && typeof rawBody === "object" && (rawBody as {type?:unknown}).type === "bridge_connected") {
     const { error: hbErr } = await supabase
       .from("event_integrations")
       .update({ last_seen_at: new Date().toISOString() })
@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
   }
   const b = parsed.data;
 
-  const row: Record<string, any> = {
+  const row: Record<string, unknown> = {
     event_id: integration.event_id,
     title: b.title,
     artist: b.artist || "",
@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
 
     if (candidates && candidates.length) {
       // 1) Exact normalized title+artist (or title alone when one side has no artist).
-      let matches = candidates.filter((c: any) => {
+      let matches = candidates.filter((c) => {
         const t = normalize(c.title);
         const a = normalize(c.artist);
         if (!t || t !== npTitleN) return false;
@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
       // 2) Strong title similarity fallback (Dice ≥ 0.92). When artist is known on
       //    both sides, require artist similarity too to avoid false positives.
       if (!matches.length) {
-        matches = candidates.filter((c: any) => {
+        matches = candidates.filter((c) => {
           const t = normalize(c.title);
           const a = normalize(c.artist);
           const titleSim = similarity(t, npTitleN);
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
 
       if (matches.length) {
         // Highest score, then newest.
-        matches.sort((a: any, b: any) => {
+        matches.sort((a, b) => {
           const sa = (a.upvotes ?? 0) - (a.downvotes ?? 0) + (a.boost ?? 0);
           const sb = (b.upvotes ?? 0) - (b.downvotes ?? 0) + (b.boost ?? 0);
           if (sa !== sb) return sb - sa;

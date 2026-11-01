@@ -8,13 +8,16 @@ const {
   mockAdjustProfilePoints,
   mockToastError,
   mockToastSuccess,
+  flags,
 } = vi.hoisted(() => ({
   mockRpc: vi.fn(),
   mockRefreshProfile: vi.fn(),
   mockAdjustProfilePoints: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
+  flags: { ENABLE_BOOSTS: true },
 }));
+vi.mock("@/lib/featureFlags", () => flags);
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -22,7 +25,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/contexts/auth-state", () => ({
   useAuth: () => ({
     profile: { id: "u1", nickname: "Tester", points: 21, is_premium: false },
     refreshProfile: mockRefreshProfile,
@@ -40,6 +43,7 @@ vi.mock("sonner", () => ({
 describe("BoostDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    flags.ENABLE_BOOSTS = true;
   });
 
   it("deducts points locally and returns the latest boost total on success", async () => {
@@ -56,7 +60,7 @@ describe("BoostDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /\+5 Spark \$0\.99/i }));
+    fireEvent.click(screen.getByRole("button", { name: /\+5 Spark 5 pts/i }));
     fireEvent.click(screen.getByRole("button", { name: /^Boost \+5$/ }));
 
     await waitFor(() => {
@@ -90,7 +94,7 @@ describe("BoostDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /\+5 Spark \$0\.99/i }));
+    fireEvent.click(screen.getByRole("button", { name: /\+5 Spark 5 pts/i }));
     const submitButton = screen.getByRole("button", { name: /^Boost \+5$/ });
     fireEvent.click(submitButton);
     fireEvent.click(submitButton);
@@ -99,5 +103,13 @@ describe("BoostDialog", () => {
 
     resolveRpc?.({ data: { boost: 5 }, error: null });
     await waitFor(() => expect(mockToastSuccess).toHaveBeenCalled());
+  });
+  it("paused boosts never call spending RPC or deduct points", () => {
+    flags.ENABLE_BOOSTS = false;
+    render(<BoostDialog open onOpenChange={() => undefined} songRequestId="song-1" songTitle="Track" />);
+    fireEvent.click(screen.getByRole("button", { name: /\+5 Spark 5 pts/i }));
+    const submit = screen.getByRole("button", { name: /^Boost \+5$/ });
+    expect(submit).toBeDisabled(); fireEvent.click(submit);
+    expect(mockRpc).not.toHaveBeenCalled(); expect(mockAdjustProfilePoints).not.toHaveBeenCalled();
   });
 });

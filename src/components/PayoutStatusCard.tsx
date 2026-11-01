@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
 
 type Status = "not_started" | "pending" | "action_required" | "ready" | "mode_mismatch" | "loading";
 
@@ -31,7 +32,8 @@ export function PayoutStatusCard() {
       if (data?.mode === "live" || data?.mode === "test") setMode(data.mode);
       if (data?.key_mode === "live" || data?.key_mode === "test") setKeyMode(data.key_mode);
       setModeMismatch(Boolean(data?.mode_mismatch));
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       console.error(e);
       setStatus("not_started");
     }
@@ -48,10 +50,10 @@ export function PayoutStatusCard() {
       });
 
       // Recover structured error body if supabase-js wrapped a non-2xx response
-      let payload: any = data;
+      let payload: FunctionPayload | null = data;
       if (error) {
         try {
-          const ctx: any = (error as any).context;
+          const ctx = functionContext(error);
           if (ctx?.json) payload = await ctx.json();
           else if (ctx?.text) {
             const t = await ctx.text();
@@ -73,10 +75,11 @@ export function PayoutStatusCard() {
       const se = payload?.stripe_error;
       const detail = se
         ? `Stripe ${se.http_status ?? "?"} ${se.stripe_type ?? ""} ${se.stripe_code ?? ""}: ${se.message ?? ""} (req ${se.request_id ?? "n/a"})`
-        : payload?.message || payload?.error || (error as any)?.message || "Couldn't start onboarding";
+        : payload?.message || payload?.error || error?.message || "Couldn't start onboarding";
       toast.error(detail, { duration: 12000 });
       setBusy(false);
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught as { message?: string; code?: string; raw?: {message?:string;type?:string;code?:string;param?:string;statusCode?:number;request_log_url?:string}; statusCode?:number; requestId?:string; type?:string; decline_code?:string; param?:string; doc_url?:string };
       console.error(e);
       toast.error(e?.message ?? "Couldn't start onboarding");
       setBusy(false);

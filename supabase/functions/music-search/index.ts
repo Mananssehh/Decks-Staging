@@ -81,12 +81,12 @@ const SpotifyProvider: Provider = {
       return [];
     }
     const j = await res.json();
-    const items: any[] = j?.tracks?.items ?? [];
+    const items: {id:string;name:string;artists?:{name:string}[];album?:{name?:string;images?:{url:string}[]};duration_ms?:number;preview_url?:string;external_urls?:{spotify?:string};explicit?:boolean}[] = j?.tracks?.items ?? [];
     return items.map((t) => ({
       source_song_id: t.id,
       source_platform: "spotify" as const,
       title: t.name,
-      artist: (t.artists ?? []).map((a: any) => a.name).join(", "),
+      artist: (t.artists ?? []).map((a) => a.name).join(", "),
       album: t.album?.name ?? "",
       album_art_url: t.album?.images?.[0]?.url ?? null,
       duration_ms: t.duration_ms ?? 0,
@@ -111,7 +111,7 @@ const AppleProvider: Provider = {
       return [];
     }
     const j = await res.json();
-    const items: any[] = j?.results ?? [];
+    const items: {trackId:number;trackName?:string;artistName?:string;collectionName?:string;artworkUrl100?:string;trackTimeMillis?:number;previewUrl?:string;trackViewUrl?:string;trackExplicitness?:string}[] = j?.results ?? [];
     return items.map((t) => ({
       source_song_id: String(t.trackId),
       source_platform: "itunes" as const,
@@ -158,7 +158,7 @@ function norm(s: string): string {
   return (s ?? "")
     .toLowerCase()
     .replace(/\b(featuring|feat\.?|ft\.?|with)\b/g, " ")
-    .replace(/[\(\)\[\]\{\}]/g, " ")
+    .replace(/[()[\]{}]/g, " ")
     .replace(/&/g, " and ")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
