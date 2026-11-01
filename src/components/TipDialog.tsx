@@ -15,6 +15,7 @@ import { PURCHASE_CAPS } from "@/lib/purchaseCaps";
 import { recordConsent, CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { ENABLE_LIVE_STRIPE } from "@/lib/featureFlags";
 import { supabase } from "@/integrations/supabase/client";
+import { tipRequestKey } from "@/lib/tipRequestKey";
 
 interface Props {
   open: boolean;
@@ -120,8 +121,12 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         return;
       }
 
+      const { data: currentUser, error: userError } = await supabase.auth.getUser();
+      if (userError || !currentUser.user || !eventId) throw Error("Sign in to tip");
+      const requestKey = tipRequestKey(currentUser.user.id, eventId, songRequestId ?? null, amountCents);
       const { data, error } = await supabase.functions.invoke("tip-create-checkout", {
         body: {
+          request_key: requestKey,
           event_id: eventId,
           amount_cents: amountCents,
           song_request_id: songRequestId ?? null,
