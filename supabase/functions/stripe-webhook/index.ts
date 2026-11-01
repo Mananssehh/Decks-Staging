@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getStripe, json } from "../_shared/stripe.ts";
 import { createPayoutStore, handleAccountUpdated } from "./account-updated.ts";
 import type Stripe from "https://esm.sh/stripe@17.5.0?target=denonext";
+import { APP_EMAIL_TEMPLATES, sendTemplateEmail, type AppEmailTemplate } from "../_shared/transactional-email-templates/send-email.ts";
 
 
 Deno.serve(async (req) => {
@@ -95,7 +96,7 @@ Deno.serve(async (req) => {
     await admin.from("dj_tips").update(patch).eq("id", args.tip.id);
   }
 
-  // Send an app email through send-transactional-email. Failures never break
+  // Staging adapter is explicitly disabled until managed sender-domain scaffolding.
   // the webhook — Stripe must still get a 200 so it doesn't retry the payment
   // event. Idempotency keys make this safe to call multiple times.
   async function sendEmail(opts: {
@@ -111,18 +112,8 @@ Deno.serve(async (req) => {
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const e = opts.recipientEmail.trim().toLowerCase();
       if (!EMAIL_RE.test(e) || e.endsWith("@example.com")) return;
-      const { error } = await admin.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: opts.templateName,
-          recipientEmail: e,
-          idempotencyKey: opts.idempotencyKey,
-          templateData: opts.templateData,
-        },
-      });
-      if (error) {
-        console.warn("[stripe-webhook] sendEmail error", opts.templateName, error.message);
-        if (opts.throwOnError) throw new Error(error.message ?? "send failed");
-      }
+      if (!APP_EMAIL_TEMPLATES.includes(opts.templateName as AppEmailTemplate)) throw Error("Unsupported app email");
+      return await sendTemplateEmail(opts.templateName as AppEmailTemplate,e,{idempotencyKey:opts.idempotencyKey,templateData:opts.templateData});
     } catch (e) {
       if (opts.throwOnError) throw e;
       console.warn("[stripe-webhook] sendEmail threw", opts.templateName, (e as Error).message);
@@ -482,9 +473,7 @@ Deno.serve(async (req) => {
           store: createPayoutStore(admin),
           getUserEmail: (id) => getUserEmail(id),
           getNickname: (id) => getNickname(id),
-          sendEmail: async (opts) => {
-            await sendEmail({ ...opts, throwOnError: true });
-          },
+          sendEmail: opts => sendEmail({ ...opts, throwOnError: true }),
         });
         if (!result.ok) {
           // Retryable: Stripe will redeliver this event.
