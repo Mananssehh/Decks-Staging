@@ -8,5 +8,10 @@ Deno.test('pair success preserves desktop contract',async()=>{
 Deno.test('claim errors fail closed',async()=>{const h=createBridgePairHandler(async()=>{throw new Error('DB');},'http://local');equal((await h(req())).status,500);});
 Deno.test('DB rate denial maps 429',async()=>{const h=createBridgePairHandler(async()=>({ok:false,reason:'rate_limited'}),'http://local');equal((await h(req())).status,429);});
 Deno.test('invalid input still counts as failed atomic claim',async()=>{
- let args:unknown;const h=createBridgePairHandler(async(...a)=>{args=a;return {ok:false};},'http://local');equal((await h(req('bad'))).status,404);equal(args,['','fixture-ip']);
+ let args:unknown;const h=createBridgePairHandler(async(...a)=>{args=a;return {ok:false};},'http://local');equal((await h(req('bad'))).status,404);equal(args,['','unverified-gateway']);
+});
+Deno.test('spoofed forwarding addresses cannot create new rate buckets',async()=>{
+ const keys:string[]=[];const h=createBridgePairHandler(async(_c,key)=>{keys.push(key);return {ok:false};},'http://local');
+ for(const address of ['1.2.3.4','5.6.7.8','x'.repeat(500)])await h(new Request('http://local/pair',{method:'POST',headers:{'x-forwarded-for':address},body:'{"code":"123456"}'}));
+ equal(keys,['unverified-gateway','unverified-gateway','unverified-gateway']);
 });

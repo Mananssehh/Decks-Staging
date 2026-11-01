@@ -7,7 +7,9 @@ export function createBridgePairHandler(claim: (code: string, ip: string) => Pro
   return async (req: Request) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    // Forwarded headers are not proven gateway-owned in staging. A common fail-closed
+    // bucket preserves the ten-failure rule until a trusted address source is verified.
+    const ip = 'unverified-gateway';
     try {
       const body = await req.json().catch(() => null);
       const code = typeof body?.code === 'string' && /^\d{6}$/.test(body.code.trim()) ? body.code.trim() : '';

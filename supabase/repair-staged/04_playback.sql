@@ -54,7 +54,7 @@ REVOKE INSERT,UPDATE,DELETE ON public.now_playing FROM anon,authenticated;
 -- Shared event mutex for manual broadcast and bridge ingest. JSON accepted fields are explicitly validated.
 CREATE OR REPLACE FUNCTION public.repair_write_broadcast(_event_id uuid,_row jsonb,_request_id uuid DEFAULT NULL,_integration_id uuid DEFAULT NULL,_token text DEFAULT NULL)
 RETURNS public.now_playing LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE ev public.events; np public.now_playing; sr public.song_requests; service boolean;
+DECLARE ev public.events; np public.now_playing; previous public.now_playing; sr public.song_requests; service boolean; same_track boolean; started timestamptz;
 BEGIN
  service := coalesce(current_setting('request.jwt.claim.role',true),'')='service_role' OR
    coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')='service_role';
@@ -67,7 +67,8 @@ BEGIN
    IF NOT service OR NOT EXISTS(SELECT 1 FROM public.event_integrations WHERE id=_integration_id AND event_id=ev.id AND ingest_token=_token) THEN
      RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
  END IF;
- IF _row IS NULL OR jsonb_typeof(_row)<>'object' OR jsonb_typeof(_row->'title') IS DISTINCT FROM 'string'
+ IF _row IS NULL OR jsonb_typeof(_row) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Invalid broadcast' USING ERRCODE='22023'; END IF;
+ IF jsonb_typeof(_row->'title') IS DISTINCT FROM 'string'
  OR coalesce(length(btrim(_row->>'title')),0) NOT BETWEEN 1 AND 300
  OR coalesce(length(_row->>'artist'),0)>300 OR coalesce(_row->>'status','playing') NOT IN ('playing','mixing','paused')
  OR EXISTS(SELECT 1 FROM jsonb_each(_row) kv WHERE jsonb_typeof(kv.value) NOT IN ('string','null'))
@@ -75,19 +76,30 @@ BEGIN
  OR coalesce(length(_row->>'spotify_url'),0)>2000 OR coalesce(length(_row->>'source'),0)>40 OR coalesce(length(_row->>'source_track_id'),0)>200
  OR EXISTS(SELECT 1 FROM jsonb_object_keys(_row) k WHERE k NOT IN ('title','artist','album_art','apple_url','spotify_url','source','source_track_id','status','started_at')) THEN
  RAISE EXCEPTION 'Invalid broadcast' USING ERRCODE='22023'; END IF;
- -- Broadcast-only edits retire any manual playing selection so the two views cannot disagree.
+ IF EXISTS(SELECT 1 FROM jsonb_each_text(_row) kv WHERE kv.key IN ('album_art','apple_url','spotify_url') AND coalesce(kv.value,'')<>'' AND kv.value !~ '^https?://[^[:space:]]+$') THEN
+ RAISE EXCEPTION 'Invalid URL' USING ERRCODE='22023'; END IF;
+ IF _row->>'started_at' IS NOT NULL AND (_row->>'started_at') !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.[0-9]+)?(Z|[+-]\d{2}:\d{2})$' THEN RAISE EXCEPTION 'Invalid timestamp' USING ERRCODE='22023'; END IF;
+ started:=coalesce((_row->>'started_at')::timestamptz,clock_timestamp());
+ IF NOT isfinite(started) THEN RAISE EXCEPTION 'Invalid timestamp' USING ERRCODE='22023'; END IF;
+ SELECT * INTO previous FROM public.now_playing WHERE event_id=ev.id;
+ same_track := previous.id IS NOT NULL AND public.normalize_text(previous.title)=public.normalize_text(_row->>'title')
+   AND public.normalize_text(previous.artist)=public.normalize_text(_row->>'artist');
+ -- Same-track pause/resume preserves selection and start time; replacements retire it.
+ IF same_track THEN started:=coalesce(previous.started_at,started); END IF;
+ IF NOT same_track THEN
  UPDATE public.song_requests SET status='played',played_at=coalesce(played_at,clock_timestamp()),
  played_by_source=CASE WHEN _integration_id IS NULL THEN 'manual_dj' ELSE 'decks_bridge' END WHERE event_id=ev.id AND status='playing';
+ END IF;
  IF _request_id IS NOT NULL THEN
    SELECT * INTO sr FROM public.song_requests WHERE id=_request_id AND event_id=ev.id FOR UPDATE;
    IF sr.id IS NULL THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
-   IF sr.status IN ('pending','approved') THEN
+   IF sr.status IN ('pending','approved') AND coalesce(_row->>'status','playing') IN ('playing','mixing') THEN
      UPDATE public.song_requests SET status='played',played_at=coalesce(played_at,clock_timestamp()),played_by_source='decks_bridge' WHERE id=sr.id;
    END IF;
  END IF;
  INSERT INTO public.now_playing(event_id,title,artist,album_art,apple_url,spotify_url,source,status,started_at,source_track_id,now_playing_request_id)
  VALUES(ev.id,btrim(_row->>'title'),_row->>'artist',_row->>'album_art',_row->>'apple_url',_row->>'spotify_url',
- coalesce(_row->>'source','manual'),coalesce(_row->>'status','playing'),coalesce((_row->>'started_at')::timestamptz,clock_timestamp()),_row->>'source_track_id',sr.id)
+ CASE WHEN _integration_id IS NULL THEN 'manual_dj' ELSE 'decks_bridge' END,coalesce(_row->>'status','playing'),started,_row->>'source_track_id',coalesce(sr.id,CASE WHEN same_track THEN previous.now_playing_request_id END))
  ON CONFLICT(event_id) DO UPDATE SET title=excluded.title,artist=excluded.artist,album_art=excluded.album_art,
  apple_url=excluded.apple_url,spotify_url=excluded.spotify_url,source=excluded.source,status=excluded.status,
  started_at=excluded.started_at,source_track_id=excluded.source_track_id,now_playing_request_id=excluded.now_playing_request_id,updated_at=clock_timestamp()

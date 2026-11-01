@@ -92,6 +92,13 @@ try {
  await denied('nonowner ingest token denied',()=>asUser(other,q=>q`select public.get_ingest_token(${eid})`));
  await denied('manual broadcast cannot forge request link',()=>asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":"Fake"}'::jsonb,${s2})`));
  await denied('broadcast JSON type validation',()=>asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":42}'::jsonb)`));
+ await denied('broadcast scalar validation',()=>asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'[]'::jsonb)`));
+ await denied('broadcast infinite timestamp denied',()=>asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":"Track 105","started_at":"infinity"}'::jsonb)`));
+ const start=(await db`select started_at from public.now_playing where event_id=${eid}`)[0].started_at;
+ await asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":"Track 105","artist":"Artist","status":"paused"}'::jsonb)`);
+ check('same track pause preserves playing selection',(await db`select status from public.song_requests where id=${s2}`)[0].status,'playing');
+ check('same track pause preserves start',(await db`select started_at from public.now_playing where event_id=${eid}`)[0].started_at,start);
+ await denied('integration client mutation denied',()=>asUser(owner,q=>q`update public.event_integrations set ingest_token='forged' where event_id=${eid}`));
  await asUser(owner,q=>q`select public.repair_write_broadcast(${eid},'{"title":"Manual","status":"mixing"}'::jsonb)`);
  check('manual broadcast retires playing',(await db`select count(*)::int n from public.song_requests where event_id=${eid} and status='playing'`)[0].n,0);
  await db`insert into public.bridge_pairing_codes(code,event_id,created_by,expires_at) values('123456',${eid},${owner},now()+interval '5 minutes')`;
@@ -111,7 +118,7 @@ try {
  const remaining=await Promise.all(Array.from({length:210},(_,i)=>asUser(uuid(200+i),q=>q`select public.join_event_by_code('ROOM01',null) j`)));
  check('default event budget exactly 300',(await db`select count(*)::int n from public.repair_admission_log where event_id=${eid} and admitted`)[0].n,300);
  check('concurrent over-budget admissions denied',remaining.filter(r=>r[0].j.ok).length,198);
- check('event budget refuses new identity',(await asUser(uuid(200),q=>q`select public.join_event_by_code('ROOM01',null) j`))[0].j.ok,false);
+ check('event budget refuses new identity',(await asUser(uuid(410),q=>q`select public.join_event_by_code('ROOM01',null) j`))[0].j.ok,false);
  const attempts=()=>asUser(uuid(201),q=>q`select public.join_event_by_code('INVALID',null)`);
  await Promise.all(Array.from({length:20},attempts));
  check('guest concurrent attempt cap exact',(await db`select count(*)::int n from public.repair_admission_log where user_id=${uuid(201)}`)[0].n,10);
