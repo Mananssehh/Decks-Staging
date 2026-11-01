@@ -45,12 +45,10 @@ BEGIN
  -- Existing unreserved pending follows the original cap oracle. No price/cap changes.
  SELECT coalesce(sum(d.gross_amount_cents),0) INTO day_spend FROM public.dj_tips d
  WHERE d.user_id=_user_id AND ((d.status='succeeded' AND d.created_at>now()-interval '24 hours')
- OR (d.status='pending' AND (public.tip_pending_is_live(d.status,d.checkout_expires_at,d.created_at)
- OR true)));
+ OR (d.status='pending' AND (true)));
  SELECT coalesce(sum(d.gross_amount_cents),0) INTO event_spend FROM public.dj_tips d
  WHERE d.user_id=_user_id AND d.event_id=e.id AND (d.status='succeeded'
- OR (d.status='pending' AND (public.tip_pending_is_live(d.status,d.checkout_expires_at,d.created_at)
- OR true)));
+ OR (d.status='pending' AND (true)));
  IF day_spend+_amount_cents>10000 OR event_spend+_amount_cents>10000 THEN RAISE EXCEPTION 'Tip limit reached' USING ERRCODE='22023'; END IF;
  IF _origin IS NULL OR _origin !~ '^https://[A-Za-z0-9.-]+(:[0-9]+)?$' THEN RAISE EXCEPTION 'Invalid APP_ORIGIN'; END IF;
  fee:=floor(_amount_cents*3000::numeric/10000)::integer;

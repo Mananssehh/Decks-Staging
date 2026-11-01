@@ -84,7 +84,9 @@ try {
  await denied('nonmember forbidden',()=>deniedReserve(outsider));await denied('owner self tip forbidden',()=>deniedReserve(dj));
  await db`insert into public.event_banned_guests(event_id,user_id) values(${event},${mixed})`;
  await denied('banned member forbidden',()=>deniedReserve(mixed));await db`delete from public.event_banned_guests where user_id=${mixed}`;
+ await db`alter table public.events disable trigger user`;
  await db`update public.events set ended_at=now() where id=${event}`;
+ await db`alter table public.events enable trigger user`;
  await denied('ended_at alone rejects new reservation',()=>deniedReserve(mixed));
  console.log(`RESULT ${count} payment assertions passed with real concurrent connections`);
 }finally{await db.end();}
