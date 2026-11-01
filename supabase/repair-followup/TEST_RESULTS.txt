@@ -1,3 +1,19 @@
+FINAL STAGING DEPLOYMENT TURN — actual results (November 1 2026 UTC)
+- Hosted catalog read confirmed followup_payment_contract body payment-v3 and service-only function ACL; direct query execution denied by intended private ACL. No grants or SQL changed.
+- supabase.get_types: regenerated actual installed hosted types.
+- supabase.test_edge_functions functions=[stripe-webhook,tip-reconcile,tip-create-checkout]: 27 passed, 0 failed after shared evidence bundling fix. Local fake backend/provider tests, not real Stripe or hosted payment requests.
+- nix run nixpkgs#deno -- test --allow-env --allow-net supabase/functions/tip-create-checkout/readiness_test.ts supabase/functions/tip-create-checkout/endpoint_test.ts supabase/functions/tip-create-checkout/checkout_test.ts: 11 passed.
+- bunx eslint . --max-warnings 0: passed zero warnings/errors. Exact generated MCP output excluded; authored MCP inputs remain linted.
+- bunx vitest run src/lib/eventSongSnapshot.test.tsx src/lib/eventRefresh.test.ts: 5 passed.
+- bunx vitest run src/lib src/components: 95 passed / 12 files.
+- No manual production build or full bundle suite this turn; root independently runs production build/all tests. Prior root result 104 passed is reviewer evidence, not agent-executed.
+- Deployment: stripe-webhook + tip-reconcile successfully deployed, then tip-create-checkout. Initial reconcile sibling import bundle failure corrected with shared directory extraction and successful redeployment.
+- Explicit invalid-authorization live probes (no session minted): stripe-webhook POST without signature =>400 Missing signature; tip-reconcile =>401 Unauthorized; tip-create-checkout =>401 UNAUTHORIZED. No provider requests, financial writes or emails.
+- python3 /tmp/browser/final-staging/refresh_preview.py: reloaded localhost/auth, two login inputs, zero page errors; /src/lib/eventSongSnapshot.ts returned200 containing left-embedded vote query. Screenshot inspected. Authenticated two-tab state not verified here; root repeats existing-session checks.
+- Automatic preview compilation: build OK. MCP generated banner/output not manually modified this turn.
+- No SQL reapplication, publication, Stripe API/session/payment/refund, emails, secret/key/Auth quota changes.
+
+PRIOR PAYMENT COMPLETION EVIDENCE (not rerun this turn):
 Actual checks in payment completion turn (all local, no Stripe/email/hosted writes):
 1. nix shell nixpkgs#postgresql -c bash -c 'setpriv --reuid=1000 --regid=1000 --clear-groups bash supabase/repair-followup/fixture/run.sh'
    PASS 57 real PostgreSQL assertions, parallel connections, mixed legacy/reservation settlement/refund/reconcile/cap tests, containment rollback retained evidence and disabled creation.

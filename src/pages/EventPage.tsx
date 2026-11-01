@@ -32,6 +32,7 @@ import { fetchMyProfile } from "@/lib/publicProfiles";
 import { resolveEventEntry } from "@/lib/eventEntry";
 import { setSongVote } from "@/lib/stagedRepairs";
 import { createEventRefresh, listenEventRefresh, notifyEventChange } from "@/lib/eventRefresh";
+import { loadEventSongs } from "@/lib/eventSongSnapshot";
 
 
 type SortMode = "top" | "trending" | "played";
@@ -126,16 +127,20 @@ const EventPage = () => {
       }
 
 
-      const [{ data: reqs }, { data: votes }] = await Promise.all([
-        supabase.from("song_requests").select("*").eq("event_id", ev.id),
-        supabase.from("votes").select("song_request_id, value").eq("user_id", userId),
-      ]);
+      let snapshot: Awaited<ReturnType<typeof loadEventSongs>>;
+      try {
+        snapshot = await loadEventSongs(ev.id,userId);
+      } catch {
+        if (!cancelled) {
+          toast.error("The queue couldn't refresh. Please try again.");
+          setLoading(false);
+        }
+        return;
+      }
 
       if (cancelled) return;
-      setSongs((reqs ?? []) as SongRequestRow[]);
-      setMyVotes(
-        Object.fromEntries((votes ?? []).map((v) => [v.song_request_id, v.value as 1 | -1])),
-      );
+      setSongs(snapshot.songs);
+      setMyVotes(snapshot.votes);
       setEventInfo(ev); // Subscribe only after the initial snapshot commits.
       setLoading(false);
     })();
@@ -186,14 +191,12 @@ const EventPage = () => {
     let cancelled = false;
 
     const sync = createEventRefresh(async () => {
-      const [reqs, event, votes] = await Promise.all([
-        supabase.from("song_requests").select("*").eq("event_id", eventId),
+      const [snapshot, event] = await Promise.all([
+        loadEventSongs(eventId,userId),
         supabase.from("events").select("*").eq("id", eventId).single(),
-        supabase.from("votes").select("song_request_id,value").eq("user_id", userId),
       ]);
-      if (reqs.error || event.error || votes.error) throw Error("Event refresh failed");
-      return { songs: reqs.data as SongRequestRow[], event: event.data as EventInfo,
-        votes: Object.fromEntries(votes.data.map(v => [v.song_request_id, v.value as 1 | -1])) };
+      if (event.error) throw Error("Event refresh failed");
+      return { ...snapshot, event: event.data as EventInfo };
     }, snapshot => {
       setSongs(snapshot.songs); setEventInfo(snapshot.event); setMyVotes(snapshot.votes);
     }, () => voteLocks.current.size > 0);

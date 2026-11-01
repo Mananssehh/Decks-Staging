@@ -1,3 +1,7 @@
-Starting source: 8b25a15c5f4484b1a5e81dd014b7abeb399c0f16
-Observed source head before final evidence refresh: 320d4fe5254a7f7d3489d4e0ad559cee7154ac6e
-Platform records subsequent source changes automatically; no manual commit.
+User requested continuation: 274333307bb020852c6e651949933fd3564f06c7
+Observed starting platform HEAD: c9f409296e01d882387691e9ff15c937596158f8
+Observed HEAD before final evidence refresh: 1a6f117eb9d1e7c22e245bffbf0c7fce28527f43
+SQL01+02 independently installed by root in one transaction; not reapplied.
+Canonical stripe-webhook and tip-reconcile successfully deployed before tip-create-checkout this turn.
+Hosted types regenerated from actual installed schema.
+Platform records subsequent edits automatically; no manual git state changes.

@@ -1,8 +1,9 @@
-// SOURCE ONLY: independent repair-followup installation + combined webhook/reconcile deployment required.
+// payment-v3 independently installed in staging. Readiness is advisory; reservations remain authoritative.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getStripe,getStripeMode,json,corsHeaders } from '../_shared/stripe.ts';
-import { paymentRpc,requirePaymentContract,safeOrigin } from '../_shared/payment-contract.ts';
+import { paymentRpc,requirePaymentContract,paymentOrigin } from '../_shared/payment-contract.ts';
 import { createReservedCheckout,type CheckoutInput,type Reservation } from './checkout.ts';
+import { checkReadiness,type ReadinessTip } from './readiness.ts';
 Deno.serve(async req=>{
  if(req.method==='OPTIONS')return new Response('ok',{headers:corsHeaders});
  if(req.method!=='POST')return json({error_code:'INVALID_REQUEST'},405);
@@ -16,18 +17,17 @@ Deno.serve(async req=>{
   const body=await req.json();
   if(!body||typeof body.event_id!=='string'||! /^[0-9a-f-]{36}$/i.test(body.event_id))return json({error_code:'INVALID_REQUEST'},400);
   if(body.check_only===true){
-   // Readiness is read-only: no reservation, consent write or Stripe API call.
-   const {data:e,error}=await db.from('events').select('*').eq('id',body.event_id).maybeSingle();
-   if(error)throw error;
-   if(!e||!e.is_active||e.ended_at||e.requests_status==='ended')return json({error_code:'EVENT_NOT_FOUND',ready:false});
-   if(e.dj_id===user.user.id)return json({error_code:'SELF_TIP',ready:false});
-   const {data:p,error:pe}=await db.from('dj_payout_accounts').select('*').eq('user_id',e.dj_id).maybeSingle();if(pe)throw pe;
-   if(getStripeMode()==='unknown')return json({error_code:'STRIPE_CONFIG_ERROR',ready:false});
-   if(!p?.charges_enabled||!p.payouts_enabled||p.livemode!==(getStripeMode()==='live'))return json({error_code:'DJ_PAYOUTS_NOT_READY',ready:false});
-   return json({ready:true,ok:true});
+   const result=await checkReadiness(user.user.id,body.event_id,body.amount_cents??100,{
+    db,origin:Deno.env.get('APP_ORIGIN'),backendUrl:url,mode:getStripeMode(),now:Date.now,
+    event:async()=>{const {data,error}=await db.from('events').select('dj_id,is_active,ended_at,requests_status').eq('id',body.event_id).maybeSingle();if(error)throw error;return data;},
+    member:async()=>{const {data,error}=await db.from('event_participants').select('id').eq('event_id',body.event_id).eq('user_id',user.user.id).limit(1).maybeSingle();if(error)throw error;return !!data;},
+    banned:async()=>{const {data,error}=await db.from('event_banned_guests').select('id').eq('event_id',body.event_id).eq('user_id',user.user.id).limit(1).maybeSingle();if(error)throw error;return !!data;},
+    payout:async(dj)=>{const {data,error}=await db.from('dj_payout_accounts').select('stripe_account_id,charges_enabled,payouts_enabled,livemode').eq('user_id',dj).maybeSingle();if(error)throw error;return data;},
+    tips:async(offset)=>{const {data,error}=await db.from('dj_tips').select('event_id,status,gross_amount_cents,created_at').eq('user_id',user.user.id).in('status',['pending','succeeded']).order('id').range(offset,offset+999);if(error)throw error;return data as ReadinessTip[];},
+   });return json(result);
   }
   await requirePaymentContract(db);
-  const origin=safeOrigin(Deno.env.get('APP_ORIGIN'));
+  const origin=paymentOrigin(Deno.env.get('APP_ORIGIN'),url);
   const stripe=getStripe();
   const result=await createReservedCheckout(user.user.id,body as CheckoutInput,{
    reserve:(uid,input)=>paymentRpc<Reservation>(db,'followup_reserve_tip',{_user_id:uid,_request_key:input.request_key,_event_id:input.event_id,_amount_cents:input.amount_cents,_song_request_id:input.song_request_id??null,_origin:origin}),
@@ -39,6 +39,7 @@ Deno.serve(async req=>{
   const message=(error as {message?:string})?.message??'';
   const codes=[['Current consent','CONSENT_REQUIRED'],['Tip limit','TIP_LIMIT_REACHED'],['Event unavailable','EVENT_NOT_FOUND'],['DJ payouts','DJ_PAYOUTS_NOT_READY'],['Invalid request','INVALID_REQUEST'],['Idempotency key payload','REQUEST_CONFLICT'],['already settled','CHECKOUT_TERMINAL'],['Reconciliation required','RECONCILIATION_REQUIRED']] as const;
   const match=codes.find(([text])=>message.includes(text));
-  return json({error_code:match?.[1]??'CHECKOUT_AMBIGUOUS',terminal:match?.[1]==='CHECKOUT_TERMINAL',message:match?.[1]==='RECONCILIATION_REQUIRED'?'Checkout requires review; no new charge was started.':'Checkout could not be confirmed. Retry the same tip.'},match?200:503);
+  const configError=message.includes('APP_ORIGIN')||message.includes('Payment integration');
+  return json({ready:false,error_code:configError?'STRIPE_CONFIG_ERROR':match?.[1]??'CHECKOUT_AMBIGUOUS',terminal:match?.[1]==='CHECKOUT_TERMINAL',message:configError?'Tips are temporarily unavailable.':match?.[1]==='RECONCILIATION_REQUIRED'?'Checkout requires review; no new charge was started.':'Checkout could not be confirmed. Retry the same tip.'},match?200:503);
  }
 });

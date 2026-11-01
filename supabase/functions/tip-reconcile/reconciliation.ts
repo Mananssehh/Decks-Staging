@@ -1,5 +1,5 @@
 import type Stripe from 'https://esm.sh/stripe@17.5.0?target=denonext';
-import { sessionEvidence,type Evidence } from '../stripe-webhook/financial-router.ts';
+import { sessionEvidence,type Evidence } from '../_shared/payment-evidence.ts';
 export interface ReconcileRow {id:string;stripe_checkout_session_id:string|null;reservation_id?:string|null;created_at:string}
 export interface ReconcileProvider {
  retrieve:(id:string)=>Promise<Stripe.Checkout.Session>;

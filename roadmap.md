@@ -13,11 +13,11 @@
 - [x] Source-only reservation/settlement foundations, concurrency/retry fixtures and rollback.
 - [x] PKCE code exchange and local redirect regression tests.
 - [x] Zero-warning lint, frontend behavior and mocked Edge tests.
-- [ ] Production-bundle verification blocked on production build artifact; nine assertions fail honestly.
-- [x] Complete canonical reserved/legacy webhook and refund/reconcile integration in source; independent SQL install/deployment remain gated.
+- [ ] Current production build/all-tests verification is owned by root; prior root build/lint/104 tests passed, not rerun by agent.
+- [x] Complete canonical reserved/legacy webhook/refund/reconcile integration; reviewed SQL installed and canonical staging deployment complete.
 - [ ] Official managed sender and durable business-event retry integration blocked on domain configuration and supported delivery design.
-- [ ] Authenticated UI E2E blocked on authorized staging session; own-account mint found no matching account.
-- [ ] Independent review/install follow-up SQL before deploying dependent functions.
+- [ ] Authenticated two-tab UI verification is owned by root using its existing synthetic session; no account/session minted here.
+- [x] Independent reviewer installed follow-up SQL; canonical staging payment functions deployed in order.
 
 ## Backlog
 - [ ] Replace hard-coded $100 tip limits ($50 single / $100 per 24h / $100 per event, currently constants inside `check_tip_cap` and `src/lib/purchaseCaps.ts`) with configurable, server-enforced limits (e.g. `app_config` row read by the cap function, admin-editable). Do not change current limit values as part of D3.
@@ -29,3 +29,9 @@
 - [x] Immutable redirects, retry lifecycle and evidence-backed ambiguity review.
 - [x] Parallel PostgreSQL and canonical Edge integration regressions; lint/frontend behavior checks.
 - [x] Ordered review/install/deployment and containment documentation.
+
+## Final staging payment activation
+- [x] Verified installed contract catalog and regenerated hosted types; deployed webhook/reconcile before checkout.
+- [x] Read-only honest readiness and exact staging-origin fallback regressions.
+- [x] Narrow generated MCP lint exclusion; preview refreshed; split snapshot race corrected and tested (authenticated two-tab proof remains root-owned).
+- [x] Updated installed/deployed evidence and remaining provider gates.

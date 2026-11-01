@@ -610,6 +610,160 @@ export type Database = {
         }
         Relationships: []
       }
+      followup_account_evidence: {
+        Row: {
+          account_id: string
+          evidence: Json
+          notification_state: string
+          provider_created: number
+        }
+        Insert: {
+          account_id: string
+          evidence: Json
+          notification_state?: string
+          provider_created: number
+        }
+        Update: {
+          account_id?: string
+          evidence?: Json
+          notification_state?: string
+          provider_created?: number
+        }
+        Relationships: []
+      }
+      followup_payment_events: {
+        Row: {
+          event_id: string
+          event_type: string
+          evidence: Json
+          received_at: string
+          tip_id: string | null
+        }
+        Insert: {
+          event_id: string
+          event_type: string
+          evidence: Json
+          received_at?: string
+          tip_id?: string | null
+        }
+        Update: {
+          event_id?: string
+          event_type?: string
+          evidence?: Json
+          received_at?: string
+          tip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_payment_events_tip_id_fkey"
+            columns: ["tip_id"]
+            isOneToOne: false
+            referencedRelation: "dj_tips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      followup_tip_financial_state: {
+        Row: {
+          dispute_closed_at: number | null
+          dispute_id: string | null
+          dispute_state: string | null
+          notification_state: string
+          paid: boolean
+          review_reason: string | null
+          tip_id: string
+        }
+        Insert: {
+          dispute_closed_at?: number | null
+          dispute_id?: string | null
+          dispute_state?: string | null
+          notification_state?: string
+          paid?: boolean
+          review_reason?: string | null
+          tip_id: string
+        }
+        Update: {
+          dispute_closed_at?: number | null
+          dispute_id?: string | null
+          dispute_state?: string | null
+          notification_state?: string
+          paid?: boolean
+          review_reason?: string | null
+          tip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_tip_financial_state_tip_id_fkey"
+            columns: ["tip_id"]
+            isOneToOne: true
+            referencedRelation: "dj_tips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      followup_tip_reservations: {
+        Row: {
+          amount_cents: number
+          checkout_parameters: Json
+          consent_version: string
+          created_at: string
+          event_id: string
+          id: string
+          request_key: string
+          retry_until: string
+          session_id: string | null
+          session_url: string | null
+          state: string
+          tip_id: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          checkout_parameters: Json
+          consent_version: string
+          created_at?: string
+          event_id: string
+          id?: string
+          request_key: string
+          retry_until?: string
+          session_id?: string | null
+          session_url?: string | null
+          state?: string
+          tip_id: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          checkout_parameters?: Json
+          consent_version?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          request_key?: string
+          retry_until?: string
+          session_id?: string | null
+          session_url?: string | null
+          state?: string
+          tip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_tip_reservations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "followup_tip_reservations_tip_id_fkey"
+            columns: ["tip_id"]
+            isOneToOne: true
+            referencedRelation: "dj_tips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guest_funnel_events: {
         Row: {
           created_at: string
@@ -1300,6 +1454,49 @@ export type Database = {
         Returns: number
       }
       ensure_profile: { Args: { p_nickname: string }; Returns: Json }
+      followup_apply_financial_event: { Args: { _e: Json }; Returns: string }
+      followup_attach_tip_session: {
+        Args: {
+          _expires_at: string
+          _reservation_id: string
+          _session_id: string
+          _url: string
+        }
+        Returns: undefined
+      }
+      followup_payment_contract: { Args: never; Returns: string }
+      followup_reserve_tip: {
+        Args: {
+          _amount_cents: number
+          _event_id: string
+          _origin?: string
+          _request_key: string
+          _song_request_id?: string
+          _user_id: string
+        }
+        Returns: {
+          amount_cents: number
+          checkout_parameters: Json
+          consent_version: string
+          created_at: string
+          event_id: string
+          id: string
+          request_key: string
+          retry_until: string
+          session_id: string | null
+          session_url: string | null
+          state: string
+          tip_id: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "followup_tip_reservations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      followup_sync_account: { Args: { _e: Json }; Returns: undefined }
       generate_bridge_pairing_code: {
         Args: { _event_id: string }
         Returns: {
