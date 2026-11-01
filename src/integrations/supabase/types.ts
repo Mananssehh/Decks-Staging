@@ -836,6 +836,33 @@ export type Database = {
         }
         Relationships: []
       }
+      repair_counter_evidence: {
+        Row: {
+          actual_downvotes: number | null
+          actual_upvotes: number | null
+          captured_at: string
+          id: string
+          old_downvotes: number | null
+          old_upvotes: number | null
+        }
+        Insert: {
+          actual_downvotes?: number | null
+          actual_upvotes?: number | null
+          captured_at?: string
+          id: string
+          old_downvotes?: number | null
+          old_upvotes?: number | null
+        }
+        Update: {
+          actual_downvotes?: number | null
+          actual_upvotes?: number | null
+          captured_at?: string
+          id?: string
+          old_downvotes?: number | null
+          old_upvotes?: number | null
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           created_at: string
@@ -1190,6 +1217,14 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      dj_set_queue_position: {
+        Args: { _event_id: string; _position: number; _song_request_id: string }
+        Returns: undefined
+      }
+      dj_transition_request: {
+        Args: { _event_id: string; _song_request_id: string; _status: string }
+        Returns: undefined
+      }
       email_queue_dispatch: { Args: never; Returns: undefined }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
@@ -1259,6 +1294,37 @@ export type Database = {
         Args: { _song_request_id: string }
         Returns: undefined
       }
+      repair_write_broadcast: {
+        Args: {
+          _event_id: string
+          _integration_id?: string
+          _request_id?: string
+          _row: Json
+          _token?: string
+        }
+        Returns: {
+          album_art: string | null
+          apple_url: string | null
+          artist: string | null
+          created_at: string
+          event_id: string
+          id: string
+          now_playing_request_id: string | null
+          source: string | null
+          source_track_id: string | null
+          spotify_url: string | null
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "now_playing"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       request_song: {
         Args: {
           _album?: string
@@ -1277,6 +1343,10 @@ export type Database = {
           outcome: string
           request_id: string
         }[]
+      }
+      set_song_vote: {
+        Args: { _song_request_id: string; _value?: number }
+        Returns: undefined
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

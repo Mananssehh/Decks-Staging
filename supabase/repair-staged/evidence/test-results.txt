@@ -1,0 +1,6 @@
+2026-11-01, DECKS Staging source-only core repairs
+PASS: disposable PostgreSQL fixture: 82 assertions; real parallel connections; deterministic event mutex/ended-state recheck; tested containment rollback.
+PASS: bunx vitest run src/lib/stagedRepairs.test.ts src/lib/eventEntry.test.ts src/lib/requestSong.test.ts src/lib/publicProfiles.test.ts — 58 tests, 4 files.
+PASS: deno test supabase/functions/join-event/handler_test.ts supabase/functions/bridge-pair/handler_test.ts — 10 tests.
+FULL SUITE RUN: bunx vitest run — 76 passed, 2 failed BoostDialog tests (old dollar-price selector); prodBundle collection failed missing dist/assets. No tests skipped/disabled by this change.
+Preview diagnostics latest read: build OK. No hosted mutation, auth signup, UI mutation E2E, Edge deployment, managed cron execution or app production bundle verification performed.
