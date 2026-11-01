@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { logCritical } from "@/lib/errorLogger";
 import { NowPlayingPanel } from "@/components/NowPlayingPanel";
 import { BridgePairing } from "@/components/BridgePairing";
-import { transitionRequest } from "@/lib/stagedRepairs";
+import { transitionRequest, setQueuePosition as saveQueuePosition } from "@/lib/stagedRepairs";
 import { useNowPlaying } from "@/hooks/useNowPlaying";
 
 
@@ -228,8 +228,12 @@ const DJEventManage = () => {
   };
 
   const setQueuePosition = async (songId: string, position: number) => {
-    const { error } = await supabase.from("song_requests").update({ queue_position: position }).eq("id", songId);
-    if (error) toast.error(error.message);
+    if (!event) return;
+    try {
+      await saveQueuePosition(event.id, songId, position);
+    } catch (error) {
+      toast.error((error as { message?: string }).message ?? "Could not update queue");
+    }
   };
 
   const moveTo = async (song: SongRequestRow, direction: "top" | "up" | "down") => {

@@ -5,6 +5,7 @@ import type { Json } from "@/integrations/supabase/types";
 type RepairContracts = {
   set_song_vote: { args: { _song_request_id: string; _value: number | null }; result: null };
   dj_transition_request: { args: { _event_id: string; _song_request_id: string; _status: string }; result: null };
+  dj_set_queue_position: { args: { _event_id: string; _song_request_id: string; _position: number }; result: null };
   repair_write_broadcast: { args: { _event_id: string; _row: Json }; result: Json };
 };
 type RepairClient = {
@@ -32,4 +33,11 @@ export async function writeBroadcast(eventId: string, row: Json) {
   if (error) throw error;
   if (!data) throw new Error("Broadcast was not saved");
   return data;
+}
+
+export async function setQueuePosition(eventId: string, songId: string, position: number) {
+  const { error } = await client.rpc("dj_set_queue_position", {
+    _event_id: eventId, _song_request_id: songId, _position: position,
+  });
+  if (error) throw error;
 }

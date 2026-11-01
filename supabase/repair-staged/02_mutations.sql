@@ -3,7 +3,7 @@ SET LOCAL statement_timeout='60s';
 -- No tuple may be acquired by a browser before the event mutex.
 REVOKE INSERT,UPDATE,DELETE ON public.votes FROM anon,authenticated;
 REVOKE INSERT,UPDATE,DELETE ON public.song_requests FROM anon,authenticated;
-GRANT UPDATE(queue_position) ON public.song_requests TO authenticated;
+-- Queue writes also use an event-first owner RPC (created in 04).
 DROP POLICY IF EXISTS "Users can soft-remove their own pending requests" ON public.song_requests;
 DROP POLICY IF EXISTS "Users can delete their own pending requests" ON public.song_requests;
 CREATE OR REPLACE FUNCTION public.repair_vote_identity_guard() RETURNS trigger

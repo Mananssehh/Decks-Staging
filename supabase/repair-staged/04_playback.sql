@@ -2,6 +2,18 @@ SET LOCAL lock_timeout='5s';
 SET LOCAL statement_timeout='60s';
 -- Preflight rejects pre-existing multiple playing rows; do not destroy that evidence.
 CREATE UNIQUE INDEX repair_one_playing_per_event ON public.song_requests(event_id) WHERE status='playing';
+CREATE OR REPLACE FUNCTION public.dj_set_queue_position(_event_id uuid,_song_request_id uuid,_position double precision)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE ev public.events;
+BEGIN
+ SELECT * INTO ev FROM public.events WHERE id=_event_id FOR UPDATE;
+ IF auth.uid() IS NULL OR ev.dj_id IS DISTINCT FROM auth.uid() THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
+ IF _position IS NULL OR _position IN ('NaN'::double precision,'Infinity'::double precision,'-Infinity'::double precision) THEN RAISE EXCEPTION 'Invalid position' USING ERRCODE='22023'; END IF;
+ UPDATE public.song_requests SET queue_position=_position WHERE id=_song_request_id AND event_id=ev.id;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
+END $$;
+REVOKE ALL ON FUNCTION public.dj_set_queue_position(uuid,uuid,double precision) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.dj_set_queue_position(uuid,uuid,double precision) TO authenticated,service_role;
 CREATE OR REPLACE FUNCTION public.dj_transition_request(_event_id uuid,_song_request_id uuid,_status text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE ev public.events; sr public.song_requests;

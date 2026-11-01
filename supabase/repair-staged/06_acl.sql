@@ -15,7 +15,7 @@ GRANT EXECUTE ON FUNCTION
  public.get_guest_event_count(),public.get_guest_join_limits(),public.join_event_by_code(text,text),
  public.request_song(uuid,text,text,text,text,text,text,integer,text,boolean,text),public.remove_my_song_request(uuid),
  public.generate_bridge_pairing_code(uuid),public.regenerate_ingest_token(uuid),public.get_ingest_token(uuid),
- public.set_song_vote(uuid,integer),public.dj_transition_request(uuid,uuid,text),public.repair_write_broadcast(uuid,jsonb,uuid,uuid,text),
+ public.set_song_vote(uuid,integer),public.dj_transition_request(uuid,uuid,text),public.dj_set_queue_position(uuid,uuid,double precision),public.repair_write_broadcast(uuid,jsonb,uuid,uuid,text),
  public.has_role(uuid,public.app_role),public.is_event_owner(uuid),public.is_event_member(uuid)
  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_public_nicknames(uuid[]),public.get_public_profile(uuid) TO anon,authenticated;
