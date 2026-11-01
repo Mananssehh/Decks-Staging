@@ -13,10 +13,10 @@
 - [x] Source-only reservation/settlement foundations, concurrency/retry fixtures and rollback.
 - [x] PKCE code exchange and local redirect regression tests.
 - [x] Zero-warning lint, frontend behavior and mocked Edge tests.
-- [ ] Current production build/all-tests verification is owned by root; prior root build/lint/104 tests passed, not rerun by agent.
+- [x] Root independently verified final production build/typecheck/lint/all 107 tests before the lifecycle repair; not agent-executed.
 - [x] Complete canonical reserved/legacy webhook/refund/reconcile integration; reviewed SQL installed and canonical staging deployment complete.
 - [ ] Official managed sender and durable business-event retry integration blocked on domain configuration and supported delivery design.
-- [ ] Authenticated two-tab UI verification is owned by root using its existing synthetic session; no account/session minted here.
+- [x] Root independently verified authenticated two-tab own-vote selection synchronization; no account/session minted here.
 - [x] Independent reviewer installed follow-up SQL; canonical staging payment functions deployed in order.
 
 ## Backlog
@@ -35,3 +35,8 @@
 - [x] Read-only honest readiness and exact staging-origin fallback regressions.
 - [x] Narrow generated MCP lint exclusion; preview refreshed; split snapshot race corrected and tested (authenticated two-tab proof remains root-owned).
 - [x] Updated installed/deployed evidence and remaining provider gates.
+
+## Final staging lifecycle repair
+- [x] Remove the unpublished votes binding; preserve published song_requests/events feeds and all coherent refresh/optimistic/cleanup behavior.
+- [x] Existing refresh/snapshot/event-entry regressions: 11 passed; zero-warning lint passed; runtime catch and source evidence recorded.
+- [ ] Root repeats actual hosted end-event lifecycle validation after this source-only repair; no deployment or SQL changes authorized.

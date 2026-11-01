@@ -1,3 +1,12 @@
+FINAL LIFECYCLE REPAIR FILES:
+src/pages/EventPage.tsx
+roadmap.md
+supabase/repair-followup/README.md
+supabase/repair-followup/SOURCE_STATE.txt
+supabase/repair-followup/TEST_RESULTS.txt
+supabase/repair-followup/CHANGED_FILES.txt
+
+PRIOR DEPLOYMENT TURN FILES:
 AGENTS.md
 README.md
 eslint.config.js
