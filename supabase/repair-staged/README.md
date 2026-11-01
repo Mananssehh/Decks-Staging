@@ -67,7 +67,7 @@ Run locally under a non-root account with PostgreSQL and bun:
 ```sh
 setpriv --reuid=1000 --regid=1000 --clear-groups bash supabase/repair-staged/fixture/run.sh
 bunx vitest run src/lib/stagedRepairs.test.ts src/lib/eventEntry.test.ts src/lib/requestSong.test.ts src/lib/publicProfiles.test.ts
- deno test supabase/functions/join-event/handler_test.ts supabase/functions/bridge-pair/handler_test.ts
+deno test supabase/functions/join-event/handler_test.ts supabase/functions/bridge-pair/handler_test.ts
 ```
 
 82 database assertions passed, including parallel voting/request support, 100 prepared identities plus retries, exact 300-event and 10-guest caps, double claim, mirror failure rollback, historical ledger/cache evidence, token rotation and both creator defaults. Deterministic separate-connection fixture observed vote waiting on event lock and rejecting the ended state after acquisition; containment rollback passed.

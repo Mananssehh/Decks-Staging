@@ -1,9 +1,9 @@
 # Roadmap
 
 ## Core staging audit repair
-- [ ] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.
-- [ ] Switch join, bridge and DJ source callers to repaired boundaries without deployment.
-- [ ] Run source tests and isolated database/concurrency fixtures; document unverified hosted behavior.
+- [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.
+- [x] Switch join, bridge and DJ source callers to repaired boundaries without deployment.
+- [x] Run source tests and isolated database/concurrency fixtures; document unverified hosted behavior.
 - [ ] Independent review and execution of staged SQL (blocked on reviewer; no hosted migration application this turn).
 
 ## Backlog
