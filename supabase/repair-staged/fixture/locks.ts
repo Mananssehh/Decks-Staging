@@ -5,7 +5,7 @@ const db=postgres(opts);const a=postgres({...opts,max:1});const b=postgres({...o
 const eid='00000000-0000-0000-0000-000000001000',user='00000000-0000-0000-0000-000000000002';
 let release:()=>void=()=>{};const gate=new Promise<void>(r=>{release=r;});let locked:()=>void=()=>{};const acquired=new Promise<void>(r=>{locked=r;});
 try {
- const [song]=await db`select id from public.song_requests where event_id=${eid} and status in ('pending','approved','playing') limit 1`;
+ const [song]=await db`insert into public.song_requests(event_id,requested_by,title,artist,source_platform,source_song_id) values(${eid},${user},'Lock fixture','Artist','itunes','999999') returning id`;
  assert.ok(song);
  const holder=a.begin(async q=>{await q`select id from public.events where id=${eid} for update`;locked();await gate;await q`update public.events set requests_status='ended' where id=${eid}`;});
  await acquired;
