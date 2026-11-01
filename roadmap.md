@@ -13,10 +13,10 @@
 - [x] Source-only reservation/settlement foundations, concurrency/retry fixtures and rollback.
 - [x] PKCE code exchange and local redirect regression tests.
 - [x] Zero-warning lint, frontend behavior and mocked Edge tests.
-- [ ] Production-bundle verification blocked on production build artifact; nine assertions fail honestly.
-- [x] Complete canonical reserved/legacy webhook and refund/reconcile integration in source; independent SQL install/deployment remain gated.
+- [ ] Current production build/all-tests verification is owned by root; prior root build/lint/104 tests passed, not rerun by agent.
+- [x] Complete canonical reserved/legacy webhook/refund/reconcile integration; reviewed SQL installed and canonical staging deployment complete.
 - [ ] Official managed sender and durable business-event retry integration blocked on domain configuration and supported delivery design.
-- [ ] Authenticated UI E2E blocked on authorized staging session; own-account mint found no matching account.
+- [ ] Authenticated two-tab UI verification is owned by root using its existing synthetic session; no account/session minted here.
 - [x] Independent reviewer installed follow-up SQL; canonical staging payment functions deployed in order.
 
 ## Backlog
