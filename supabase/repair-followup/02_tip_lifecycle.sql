@@ -31,7 +31,7 @@ CREATE FUNCTION public.followup_apply_financial_event(_e jsonb) RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE d public.dj_tips; r public.followup_tip_reservations; f public.followup_tip_financial_state;
  uid uuid; tid uuid; ids uuid[]; v text; k text; rid uuid; kind text:=_e->>'kind';
- eid text:=_e->>'event_id'; refunded integer; paid boolean; terminal boolean; dispute_time bigint;
+ eid text:=_e->>'event_id'; refunded integer; v_paid boolean; terminal boolean; dispute_time bigint;
 BEGIN
  IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Forbidden'; END IF;
  IF eid IS NULL OR eid !~ '^(evt_|reconcile:)' OR kind NOT IN ('paid','pending','expired','failed','refund','dispute_open','dispute_won','dispute_lost','charge','review') THEN RAISE EXCEPTION 'Invalid evidence'; END IF;
@@ -67,7 +67,7 @@ BEGIN
  END IF;
  INSERT INTO public.followup_tip_financial_state(tip_id,paid) VALUES(tid,d.status IN ('succeeded','refunded','partially_refunded','disputed')) ON CONFLICT DO NOTHING;
  SELECT * INTO f FROM public.followup_tip_financial_state WHERE tip_id=tid FOR UPDATE;
- paid:=f.paid OR kind IN ('paid','refund','dispute_open','dispute_won','dispute_lost');
+ v_paid:=f.paid OR kind IN ('paid','refund','dispute_open','dispute_won','dispute_lost');
  refunded:=d.refunded_amount_cents;
  IF kind='refund' THEN
   IF (_e->>'refunded_amount_cents')::integer IS NULL OR (_e->>'refunded_amount_cents')::integer NOT BETWEEN 0 AND d.gross_amount_cents THEN RAISE EXCEPTION 'Invalid cumulative refund'; END IF;
@@ -88,7 +88,7 @@ BEGIN
   WHEN f.dispute_state='lost' OR refunded>=gross_amount_cents THEN 'refunded'
   WHEN f.dispute_state IN ('open','needs_review') THEN 'disputed'
   WHEN refunded>0 THEN 'partially_refunded'
-  WHEN paid THEN 'succeeded'
+  WHEN v_paid THEN 'succeeded'
   WHEN kind IN ('failed','expired') THEN kind
   WHEN status IN ('failed','expired') THEN status ELSE 'pending' END,
   stripe_checkout_session_id=coalesce(nullif(_e->>'session_id',''),stripe_checkout_session_id),
@@ -99,12 +99,12 @@ BEGIN
   refunded_at=CASE WHEN refunded>d.refunded_amount_cents OR f.dispute_state='lost' THEN coalesce(refunded_at,now()) ELSE refunded_at END,
   checkout_expires_at=coalesce(to_timestamp(nullif(_e->>'expires_at','')::bigint),checkout_expires_at),
   failure_reason=CASE WHEN kind IN ('failed','expired','review') THEN kind ELSE failure_reason END WHERE id=tid;
- UPDATE public.followup_tip_financial_state SET paid=paid OR f.paid OR kind='paid' OR paid,
+ UPDATE public.followup_tip_financial_state SET paid=v_paid,
  dispute_id=f.dispute_id,dispute_state=f.dispute_state,dispute_closed_at=f.dispute_closed_at,
  review_reason=CASE WHEN kind='review' THEN coalesce(_e->>'reason','provider_ambiguity') WHEN terminal OR kind='paid' THEN NULL ELSE review_reason END WHERE tip_id=tid;
  IF r.id IS NOT NULL THEN
   UPDATE public.followup_tip_reservations SET session_id=coalesce(nullif(_e->>'session_id',''),session_id),
-  state=CASE WHEN paid THEN 'succeeded' WHEN kind='review' THEN 'review' WHEN kind IN ('failed','expired') THEN kind ELSE state END WHERE id=r.id;
+  state=CASE WHEN v_paid THEN 'succeeded' WHEN kind='review' THEN 'review' WHEN kind IN ('failed','expired') THEN kind ELSE state END WHERE id=r.id;
  END IF;
  INSERT INTO public.followup_payment_events(event_id,tip_id,event_type,evidence) VALUES(eid,tid,_e->>'event_type',_e);
  RETURN tid;
