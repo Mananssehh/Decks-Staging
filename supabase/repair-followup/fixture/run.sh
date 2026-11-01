@@ -12,5 +12,5 @@ psql -X -v ON_ERROR_STOP=1 -f "$HERE/../../repair-staged/fixture/00_fixture.sql"
 psql -X -v ON_ERROR_STOP=1 --single-transaction -f "$HERE/../01_tip_reservations.sql" -f "$HERE/../02_tip_lifecycle.sql" >"$WORK/migration.log" 2>&1 || { cat "$WORK/migration.log"; exit 1; }
 NODE_PATH=/dev-server/node_modules bun "$HERE/payment.ts"
 psql -X -v ON_ERROR_STOP=1 --single-transaction -f "$HERE/../rollback.sql" >"$WORK/rollback.log" 2>&1 || { cat "$WORK/rollback.log"; exit 1; }
-psql -X -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF has_function_privilege('service_role','public.followup_reserve_tip(uuid,uuid,uuid,integer,uuid)','execute') THEN RAISE EXCEPTION 'rollback failed'; END IF; IF NOT EXISTS(SELECT 1 FROM public.followup_tip_reservations) THEN RAISE EXCEPTION 'evidence missing'; END IF; END \$\$;" >"$WORK/verify.log" 2>&1 || { cat "$WORK/verify.log"; exit 1; }
+psql -X -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF has_function_privilege('service_role','public.followup_reserve_tip(uuid,uuid,uuid,integer,uuid,text)','execute') THEN RAISE EXCEPTION 'rollback failed'; END IF; IF NOT EXISTS(SELECT 1 FROM public.followup_tip_reservations) THEN RAISE EXCEPTION 'evidence missing'; END IF; END \$\$;" >"$WORK/verify.log" 2>&1 || { cat "$WORK/verify.log"; exit 1; }
 echo 'PASS containment rollback retains payment evidence and disables new checkout'

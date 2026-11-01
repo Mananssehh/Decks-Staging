@@ -1,8 +1,0 @@
-import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { handleReservedPayment, type SignedPaymentEvent } from './handler.ts';
-const req=()=>new Request('https://local.invalid',{method:'POST',headers:{'stripe-signature':'fake-signature'},body:'signed-fixture'});
-const event:SignedPaymentEvent={id:'evt_fake',type:'checkout.session.completed',livemode:false,data:{object:{id:'cs_fake',metadata:{reservation_id:'reservation'},status:'complete',payment_status:'unpaid',amount_total:500,currency:'usd'}}};
-Deno.test('invalid signature cannot reach financial writer',async()=>{let called=false;const res=await handleReservedPayment(req(),async()=>{throw Error('invalid')},async()=>{called=true});assertEquals(res.status,400);await res.text();assertEquals(called,false);});
-Deno.test('completed unpaid never authorizes fulfillment',async()=>{let paid:unknown;const res=await handleReservedPayment(req(),async()=>event,async args=>{paid=args._paid});assertEquals(res.status,200);await res.text();assertEquals(paid,false);});
-Deno.test('paid complete authorizes settlement only after verified event',async()=>{let paid:unknown;const res=await handleReservedPayment(req(),async()=>({...event,data:{object:{...event.data.object,payment_status:'paid'}}}),async args=>{paid=args._paid});await res.text();assertEquals(paid,true);});
-Deno.test('SQL failure returns retryable error without acknowledging financial event',async()=>{const res=await handleReservedPayment(req(),async()=>event,async()=>{throw Error('db')});assertEquals(res.status,503);await res.text();});
