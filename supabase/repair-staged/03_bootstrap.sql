@@ -18,6 +18,7 @@ CREATE TABLE public.repair_points_reconciliation (
  difference bigint NOT NULL, classification text NOT NULL, captured_at timestamptz NOT NULL DEFAULT now()
 );
 GRANT ALL ON public.repair_points_reconciliation TO service_role;
+REVOKE ALL ON public.repair_points_reconciliation FROM anon,authenticated;
 ALTER TABLE public.repair_points_reconciliation ENABLE ROW LEVEL SECURITY;
 LOCK TABLE public.profiles IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE public.points_transactions IN SHARE ROW EXCLUSIVE MODE;

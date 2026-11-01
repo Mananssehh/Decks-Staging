@@ -63,6 +63,7 @@ CREATE TRIGGER repair_request_write BEFORE INSERT OR UPDATE OR DELETE ON public.
 CREATE TABLE public.repair_counter_evidence(id uuid PRIMARY KEY, old_upvotes integer,old_downvotes integer,
  actual_upvotes integer,actual_downvotes integer,captured_at timestamptz NOT NULL DEFAULT now());
 GRANT ALL ON public.repair_counter_evidence TO service_role;
+REVOKE ALL ON public.repair_counter_evidence FROM anon,authenticated;
 ALTER TABLE public.repair_counter_evidence ENABLE ROW LEVEL SECURITY;
 -- Lock relation in canonical order before touching rows; no vote writer can enter while repair runs.
 LOCK TABLE public.events IN SHARE ROW EXCLUSIVE MODE;

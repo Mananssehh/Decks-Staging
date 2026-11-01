@@ -22,6 +22,8 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO anon,authent
 ALTER TABLE public.song_requests ADD FOREIGN KEY(event_id) REFERENCES public.events(id) ON DELETE CASCADE;
 ALTER TABLE public.votes ADD FOREIGN KEY(song_request_id) REFERENCES public.song_requests(id) ON DELETE CASCADE;
 ALTER TABLE public.points_transactions ADD FOREIGN KEY(song_request_id) REFERENCES public.song_requests(id) ON DELETE SET NULL;
+ALTER TABLE public.event_integrations ADD FOREIGN KEY(event_id) REFERENCES public.events(id) ON DELETE CASCADE;
+ALTER TABLE public.event_participants ADD FOREIGN KEY(event_id) REFERENCES public.events(id) ON DELETE CASCADE;
 ALTER TABLE public.votes ADD CONSTRAINT votes_value_check CHECK(value IN(-1,1));
 -- Pre-repair reconciliation examples: known missing starter, ambiguous offset, already reconciled.
 INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000901'),('00000000-0000-0000-0000-000000000902'),('00000000-0000-0000-0000-000000000903');

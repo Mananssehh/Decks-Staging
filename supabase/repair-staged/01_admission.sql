@@ -7,6 +7,7 @@ CREATE TABLE public.repair_admission_log (
  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 GRANT ALL ON public.repair_admission_log TO service_role;
+REVOKE ALL ON public.repair_admission_log FROM anon,authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.repair_admission_log_id_seq TO service_role;
 ALTER TABLE public.repair_admission_log ENABLE ROW LEVEL SECURITY;
 CREATE INDEX repair_admission_user_time ON public.repair_admission_log(user_id,created_at);
@@ -18,6 +19,7 @@ CREATE TABLE public.repair_admission_settings (
  guest_budget integer NOT NULL DEFAULT 10 CHECK(guest_budget > 0)
 );
 GRANT ALL ON public.repair_admission_settings TO service_role;
+REVOKE ALL ON public.repair_admission_settings FROM anon,authenticated;
 ALTER TABLE public.repair_admission_settings ENABLE ROW LEVEL SECURITY;
 -- Absence of settings uses the defaults above; no seed is required.
 CREATE OR REPLACE FUNCTION public.join_event_by_code(_code text, _nickname text DEFAULT NULL)
