@@ -88,5 +88,16 @@ try {
  await db`update public.events set ended_at=now() where id=${event}`;
  await db`alter table public.events enable trigger user`;
  await denied('ended_at alone rejects new reservation',()=>deniedReserve(mixed));
+
+ // Review is financially durable; retry permission may fail without changing accounting.
+ await denied('banned retry denied without deleting reservation',()=>db.begin(async q=>{
+  await q`insert into public.event_banned_guests(event_id,user_id) values(${event},${user})`;
+  await q`set local role service_role`;await q`select set_config('request.jwt.claim.role','service_role',true)`;
+  return q`select public.followup_reserve_tip(${user},${uuid(10)},${event},5000,null,'https://changed.invalid')`;
+ }));
+ const frozen=await reserve(uuid(10));check('retry preserves originally frozen success redirect',frozen[0].checkout_parameters.success_url,'https://fixture.invalid/event/PAY001?tip=success');
+ check('retry returns original financial evidence after event ends',frozen[0].tip_id,retries[0][0].tip_id);
+ // Authorization and current consent are checked before new reservation; retry does not mutate consent evidence.
+ check('no balance mutations introduced',(await db`select points from public.profiles where id=${user}`)[0].points,15);
  console.log(`RESULT ${count} payment assertions passed with real concurrent connections`);
 }finally{await db.end();}

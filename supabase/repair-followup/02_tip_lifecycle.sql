@@ -1,5 +1,8 @@
 SET LOCAL lock_timeout='5s';
 SET LOCAL statement_timeout='60s';
+CREATE UNIQUE INDEX followup_tip_pi_unique ON public.dj_tips(stripe_payment_intent_id) WHERE stripe_payment_intent_id IS NOT NULL;
+CREATE UNIQUE INDEX followup_tip_charge_unique ON public.dj_tips(stripe_charge_id) WHERE stripe_charge_id IS NOT NULL;
+CREATE UNIQUE INDEX followup_tip_session_unique ON public.dj_tips(stripe_checkout_session_id) WHERE stripe_checkout_session_id IS NOT NULL;
 CREATE TABLE public.followup_payment_events (
  event_id text PRIMARY KEY, tip_id uuid REFERENCES public.dj_tips(id), event_type text NOT NULL,
  evidence jsonb NOT NULL, received_at timestamptz NOT NULL DEFAULT now()
