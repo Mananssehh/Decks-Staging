@@ -70,7 +70,7 @@ LOCK TABLE public.song_requests IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE public.votes IN SHARE ROW EXCLUSIVE MODE;
 INSERT INTO public.repair_counter_evidence
  SELECT sr.id,sr.upvotes,sr.downvotes,count(v.id) FILTER(WHERE v.value=1),count(v.id) FILTER(WHERE v.value=-1),now()
- FROM public.song_requests sr LEFT JOIN public.votes v ON v.song_request_id=sr.id GROUP BY sr.id;
+ FROM public.song_requests sr LEFT JOIN public.votes v ON v.song_request_id=sr.id GROUP BY sr.id,sr.upvotes,sr.downvotes;
 UPDATE public.song_requests sr SET upvotes=e.actual_upvotes,downvotes=e.actual_downvotes FROM public.repair_counter_evidence e WHERE sr.id=e.id;
 CREATE OR REPLACE FUNCTION public.boost_request(_song_request_id uuid,_amount integer)
 RETURNS public.song_requests LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
