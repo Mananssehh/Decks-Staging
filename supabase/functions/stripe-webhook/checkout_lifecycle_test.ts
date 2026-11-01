@@ -26,6 +26,10 @@ const mock = {
 
 function matches(row: TipRow, params: URLSearchParams) {
   for (const [k, v] of params) {
+    if (v.startsWith("in.(")) {
+      if (!v.slice(4,-1).split(",").includes(String(row[k as keyof TipRow]))) return false;
+      continue;
+    }
     if (!v.startsWith("eq.")) continue;
     const want = v.slice(3);
     // deno-lint-ignore no-explicit-any

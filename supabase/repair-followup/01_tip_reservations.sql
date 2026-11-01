@@ -22,9 +22,10 @@ DECLARE r public.followup_tip_reservations; e public.events; p public.dj_payout_
  s public.song_requests; t uuid:=gen_random_uuid(); fee integer; day_spend bigint; event_spend bigint;
  nick text; params jsonb; current_consent constant text:='v2-tips-2026-06-12';
 BEGIN
- IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'Forbidden' USING ERRCODE='42501'; END IF;
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Forbidden' USING ERRCODE='42501'; END IF;
  IF _user_id IS NULL OR _request_key IS NULL OR _event_id IS NULL OR _amount_cents IS NULL OR _amount_cents<100 OR _amount_cents>5000 THEN RAISE EXCEPTION 'Invalid tip' USING ERRCODE='22023'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('tip:'||_user_id::text,0));
+ IF NOT EXISTS(SELECT 1 FROM public.purchase_consents WHERE user_id=_user_id AND version=current_consent) THEN RAISE EXCEPTION 'Current consent required' USING ERRCODE='42501'; END IF;
  SELECT * INTO r FROM public.followup_tip_reservations WHERE user_id=_user_id AND request_key=_request_key FOR UPDATE;
  IF FOUND THEN
   IF r.event_id<>_event_id OR r.amount_cents<>_amount_cents OR r.checkout_parameters->>'song_request_id' IS DISTINCT FROM _song_request_id::text THEN RAISE EXCEPTION 'Idempotency key payload mismatch' USING ERRCODE='22023'; END IF;
@@ -40,15 +41,16 @@ BEGIN
  IF _song_request_id IS NOT NULL THEN SELECT * INTO s FROM public.song_requests WHERE id=_song_request_id AND event_id=e.id;
   IF s.id IS NULL THEN RAISE EXCEPTION 'Invalid song request'; END IF; END IF;
  -- Reserved/ambiguous are never aged out by elapsed time: a checkout may exist or be paid.
- -- Attached pending uses actual expiry. Succeeded/refunded/disputed funds stay counted.
+ -- All reservation-backed pending remains counted until signed/retrieved terminal evidence.
+ -- Existing unreserved pending follows the original cap oracle. No price/cap changes.
  SELECT coalesce(sum(d.gross_amount_cents),0) INTO day_spend FROM public.dj_tips d
- WHERE d.user_id=_user_id AND ((d.status IN ('succeeded','refunded','partially_refunded','disputed') AND d.created_at>now()-interval '24 hours')
+ WHERE d.user_id=_user_id AND ((d.status='succeeded' AND d.created_at>now()-interval '24 hours')
  OR (d.status='pending' AND (public.tip_pending_is_live(d.status,d.checkout_expires_at,d.created_at)
- OR EXISTS(SELECT 1 FROM public.followup_tip_reservations x WHERE x.tip_id=d.id AND x.state IN ('reserved','ambiguous')))));
+ OR EXISTS(SELECT 1 FROM public.followup_tip_reservations x WHERE x.tip_id=d.id AND x.state IN ('reserved','ambiguous','attached')))));
  SELECT coalesce(sum(d.gross_amount_cents),0) INTO event_spend FROM public.dj_tips d
- WHERE d.user_id=_user_id AND d.event_id=e.id AND (d.status IN ('succeeded','refunded','partially_refunded','disputed')
+ WHERE d.user_id=_user_id AND d.event_id=e.id AND (d.status='succeeded'
  OR (d.status='pending' AND (public.tip_pending_is_live(d.status,d.checkout_expires_at,d.created_at)
- OR EXISTS(SELECT 1 FROM public.followup_tip_reservations x WHERE x.tip_id=d.id AND x.state IN ('reserved','ambiguous')))));
+ OR EXISTS(SELECT 1 FROM public.followup_tip_reservations x WHERE x.tip_id=d.id AND x.state IN ('reserved','ambiguous','attached')))));
  IF day_spend+_amount_cents>10000 OR event_spend+_amount_cents>10000 THEN RAISE EXCEPTION 'Tip limit reached' USING ERRCODE='22023'; END IF;
  fee:=floor(_amount_cents*3000::numeric/10000)::integer;
  SELECT nickname INTO nick FROM public.profiles WHERE id=_user_id;
@@ -69,7 +71,7 @@ CREATE FUNCTION public.followup_attach_tip_session(_reservation_id uuid,_session
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE r public.followup_tip_reservations; uid uuid;
 BEGIN
- IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'Forbidden'; END IF;
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Forbidden'; END IF;
  SELECT user_id INTO uid FROM public.followup_tip_reservations WHERE id=_reservation_id;
  IF uid IS NULL THEN RAISE EXCEPTION 'Reservation not found'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('tip:'||uid::text,0));

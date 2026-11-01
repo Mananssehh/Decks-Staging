@@ -179,6 +179,7 @@ const EventPage = () => {
     const eventId = eventInfo?.id;
     const userId = user?.id;
     if (!eventId || !userId) return;
+    const activeVoteLocks = voteLocks.current;
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let backoff = 1000;
     let reconnectTimer: number | null = null;
@@ -241,7 +242,7 @@ const EventPage = () => {
     return () => {
       cancelled = true;
       sync.dispose();
-      voteLocks.current.clear();
+      activeVoteLocks.clear();
       if (refreshRef.current === sync) refreshRef.current = null;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       unlisten();
