@@ -17,7 +17,7 @@
 - [x] Complete canonical reserved/legacy webhook and refund/reconcile integration in source; independent SQL install/deployment remain gated.
 - [ ] Official managed sender and durable business-event retry integration blocked on domain configuration and supported delivery design.
 - [ ] Authenticated UI E2E blocked on authorized staging session; own-account mint found no matching account.
-- [ ] Independent review/install follow-up SQL before deploying dependent functions.
+- [x] Independent reviewer installed follow-up SQL; canonical staging payment functions deployed in order.
 
 ## Backlog
 - [ ] Replace hard-coded $100 tip limits ($50 single / $100 per 24h / $100 per event, currently constants inside `check_tip_cap` and `src/lib/purchaseCaps.ts`) with configurable, server-enforced limits (e.g. `app_config` row read by the cap function, admin-editable). Do not change current limit values as part of D3.
@@ -31,7 +31,7 @@
 - [x] Ordered review/install/deployment and containment documentation.
 
 ## Final staging payment activation
-- [ ] Verify installed contract and regenerate hosted types; deploy webhook/reconcile before checkout.
-- [ ] Read-only honest readiness and exact staging-origin fallback regressions.
-- [ ] Narrow generated MCP lint exclusion; preview refresh and source cross-tab diagnosis.
-- [ ] Update installed/deployed evidence and remaining provider gates.
+- [x] Verified installed contract catalog and regenerated hosted types; deployed webhook/reconcile before checkout.
+- [x] Read-only honest readiness and exact staging-origin fallback regressions.
+- [x] Narrow generated MCP lint exclusion; preview refreshed; split snapshot race corrected and tested (authenticated two-tab proof remains root-owned).
+- [x] Updated installed/deployed evidence and remaining provider gates.
