@@ -109,12 +109,19 @@ CREATE INDEX ON repair_guest_probe.join_failures (at);
 CREATE FUNCTION repair_guest_probe.immutable_owner() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $f$
 BEGIN
-  IF TG_TABLE_NAME = 'sessions' AND (NEW.id <> OLD.id OR NEW.event_id <> OLD.event_id OR NEW.token_hash <> OLD.token_hash) THEN
-    RAISE EXCEPTION 'immutable session identity';
-  ELSIF TG_TABLE_NAME = 'requests' AND (NEW.id <> OLD.id OR NEW.event_id <> OLD.event_id OR NEW.session_id <> OLD.session_id OR NEW.idempotency_key <> OLD.idempotency_key) THEN
-    RAISE EXCEPTION 'immutable request identity';
-  ELSIF TG_TABLE_NAME = 'votes' AND (NEW.request_id <> OLD.request_id OR NEW.session_id <> OLD.session_id OR NEW.event_id <> OLD.event_id) THEN
-    RAISE EXCEPTION 'immutable vote identity';
+  -- Nested IFs: PL/pgSQL may resolve NEW fields even past a false AND.
+  IF TG_TABLE_NAME = 'sessions' THEN
+    IF NEW.id <> OLD.id OR NEW.event_id <> OLD.event_id OR NEW.token_hash <> OLD.token_hash THEN
+      RAISE EXCEPTION 'immutable session identity';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'requests' THEN
+    IF NEW.id <> OLD.id OR NEW.event_id <> OLD.event_id OR NEW.session_id <> OLD.session_id OR NEW.idempotency_key <> OLD.idempotency_key THEN
+      RAISE EXCEPTION 'immutable request identity';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'votes' THEN
+    IF NEW.request_id <> OLD.request_id OR NEW.session_id <> OLD.session_id OR NEW.event_id <> OLD.event_id THEN
+      RAISE EXCEPTION 'immutable vote identity';
+    END IF;
   END IF;
   RETURN NEW;
 END $f$;
@@ -303,7 +310,8 @@ BEGIN
     'changed', _old <> _value, 'upvotes', _r.upvotes, 'downvotes', _r.downvotes);
 EXCEPTION WHEN OTHERS THEN
   -- Fail closed; never echo internals.
-  RAISE WARNING 'probe internal % %', SQLSTATE, SQLERRM; RETURN repair_guest_probe.err(500, 'internal');
+  RAISE WARNING 'repair_guest_probe internal sqlstate %', SQLSTATE; -- no payload/token logged
+   RETURN repair_guest_probe.err(500, 'internal');
 END
 $f$;
 
