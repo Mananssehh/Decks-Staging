@@ -58,6 +58,16 @@ DROP TABLE public._toks, public._req;
 SQL
 grep -q "deadlock" "$D/log" && { echo FAIL deadlock in log; exit 1; }
 
+# Failed-join bucket: 250 parallel bad joins over unknown ids + a real event with wrong code.
+$P -c "DELETE FROM repair_guest_probe.join_failures"
+FE=$($P -c "SELECT event_id FROM repair_guest_probe.operator_create_event('fail', interval '1 hour', 10)")
+for i in $(seq 1 250); do
+  if [ $((i % 2)) = 0 ]; then E="$FE"; else E=$(cat /proc/sys/kernel/random/uuid); fi
+  $P -c "SET ROLE service_role; SELECT public.repair_guest_probe_rpc('join', jsonb_build_object('event_id','$E','code','wrong','nickname','f'))->>'status'" &
+done | sort | uniq -c > "$D/fails"; wait
+grep -q "200 404" "$D/fails" && grep -q "50 429" "$D/fails" || { cat "$D/fails"; echo FAIL failure bucket; exit 1; }
+[ "$($P -c "SELECT count(*) FROM repair_guest_probe.join_failures")" = 200 ] || { echo FAIL failure rows; exit 1; }
+
 $P -f "$HERE/900_disable_and_drop.sql"
 $P <<'SQL'
 DO $z$ BEGIN
@@ -65,4 +75,4 @@ DO $z$ BEGIN
   IF (SELECT count(*) FROM public.app_sentinel) <> 1 THEN RAISE EXCEPTION 'FAIL sentinel'; END IF;
 END $z$;
 SQL
-echo "PASS local_pg_test: install, assertions, 100 concurrent joins, admission cap 429, 150 concurrent votes exact counters, no deadlock, disable+drop, app sentinel untouched"
+echo "PASS local_pg_test: install, assertions, 100 concurrent joins, admission cap 429, 150 concurrent votes exact counters, 250 parallel bad joins -> exactly 200 logged/404 + 50 typed 429, no deadlock, disable+drop, app sentinel untouched"

@@ -131,5 +131,6 @@ BEGIN
   UPDATE repair_guest_probe.marker SET enabled = true;
 
   DELETE FROM repair_guest_probe.events;
+  DELETE FROM repair_guest_probe.join_failures;
   RAISE NOTICE 'assertions passed';
 END $t$;
