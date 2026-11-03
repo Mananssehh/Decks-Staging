@@ -41,6 +41,8 @@ support, lifetime/resource limits, cross-instance behavior, reconnect/trailing
 flush, revoked connections, no token exposure, no guest-send delivery, and no Auth
 signup. Venue Wi-Fi, sustained 100+ sockets and browser persistence remain untested.
 Source implementation is under guest-event-stream and 010_stream.sql; no hosted
-SQL/deployment or frontend integration. Native upgrades and 100-socket acceptance
+SQL/deployment. Browser source now uses the OFF staging flag, one event socket,
+auth first frame, coalesced authoritative snapshot refresh, jittered reconnect,
+30-second visible/online snapshot fallback and terminal-session cleanup. Native upgrades and 100-socket acceptance
 remain independent root checks. 120s rollover is a conservative cleanup policy,
 not a promise of worker lifetime; platform may terminate earlier.

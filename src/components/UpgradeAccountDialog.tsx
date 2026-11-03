@@ -122,7 +122,7 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
               Create account
             </Button>
           </DialogFooter>
-          {actor.kind==='guest'&&<Button type="button" variant="ghost" onClick={()=>{guestStore().intent();onOpenChange(false);navigate('/auth?next=/profile');}}>Link an existing account</Button>}
+          {actor.kind==='guest'&&<Button type="button" variant="ghost" onClick={()=>{guestStore().intent();onOpenChange(false);navigate('/auth?next=/profile&claim=guest');}}>Link an existing account</Button>}
         </form>
       </DialogContent>
     </Dialog>

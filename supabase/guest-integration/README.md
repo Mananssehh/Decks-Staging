@@ -338,3 +338,14 @@ These are not established by mocks or the earlier isolated probe. Own ledger
 pagination uses validated guest/derived Auth and canonical aliases; claim intent is
 bound to the explicitly submitted account email to avoid unrelated shared-browser
 login merging. Those flows require hosted acceptance before turning the flag on.
+
+Local application review evidence: 16 new SQL assertions (manual/shared Auth URL
+checks, nickname/idempotency, current consent, private profile, own ledger,
+expiry/rejoin, stored URL sanitization and retired Auth refusal); preserved 100
+guest +15 bootstrap +39 stream assertions with containment/refusal/exact empty
+catalog restoration; separate 57 parallel financial assertions. 25 no-network
+Edge/transport tests and Deno checks pass; lint has zero warnings and automatic
+frontend typecheck reports build OK. Guest Join screen invokes zero Auth signup;
+actor precedence, pending tip key, proof retry/two-tab persistence, configuration
+unavailable and reconnect/terminal cleanup tests pass. Full frontend results are
+recorded in APPLICATION_REVIEW.md; nine absent-bundle tests stay unmodified.

@@ -75,7 +75,7 @@ const Auth = () => {
       if (!emailParse.success) throw new Error(emailParse.error.issues[0].message);
       const passParse = passwordSchema.safeParse(password);
       if (!passParse.success) throw new Error(passParse.error.issues[0].message);
-      if(guestApplicationEnabled&&guestStore().pending())guestStore().intent(emailParse.data);
+      if(guestApplicationEnabled&&searchParams.get('claim')==='guest'&&guestStore().pending())guestStore().intent(emailParse.data);
 
       if (mode === "signup") {
         const nickParse = nicknameSchema.safeParse(nickname);
