@@ -69,4 +69,10 @@
 - [x] Incorporate root's exact materialized snapshot derivative; read-only observed already optimized root pair captured; both exact baseline gates/rollbacks verified. 25 capacity + 170 existing SQL assertions, 12 no-network Edge tests and zero-warning lint; 100 local flows completed, all final snapshots coherent. Hosted repeat NOT yet passed.
 - [x] Diagnose from hosted Postgres/gateway logs: 26x 57014 + 22x PostgREST 504 from event-row tuple convoy behind O(songs x principals) snapshot.
 - [x] Source-only 012 candidate + 912 rollback, equivalence/concurrency proof (local fresh100 58.7s -> 2.5s), safe Edge upstream logging + tests.
-- [ ] Root review/install 012 and optionally deploy logging guest-event, then repeat hosted fresh100 and 100 WS (blocked on root).
+- [x] Root installed reviewed snapshot/aliases/member hosted; root HTTP 100/100 and WS 100 passed on GUESTQB.
+
+## Final staging enablement
+- [x] Canonicalize 012 to exact hosted aliases/member/snapshot (fresh install, hosted no-op, drift refused); 912 restores all three.
+- [x] Frontend guest application ON behind exact staging backend gate; config test covers ON/explicit OFF/other backends.
+- [x] RequestPicker search no longer reruns on unrelated refreshes; regression test.
+- [ ] Root browser check and fixture cleanup (root-owned). Logging guest-event remains undeployed.

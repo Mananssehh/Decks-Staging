@@ -17,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { useStableGuestScope } from "@/hooks/useStableGuestScope";
 import { searchMusic, MusicSearchResult, normalizeKey, RateLimitedError } from "@/lib/musicSearch";
 import { canonicalTrackIdentity, sameTrack, isActiveRequestStatus } from "@/lib/trackIdentity";
 import { submitSongRequest, requestFeedback } from "@/lib/requestSong";
@@ -838,6 +839,8 @@ function StatusBadge({ status }: { status: "live" | "paused" | "ended" }) {
 }
 
 function RequestPicker({ onPick, existing, allowExplicit = true,guestScope }: { onPick: (song: MusicSearchResult) => void; existing: SongRequestRow[]; allowExplicit?: boolean;guestScope?:{event_id:string;token:string} }) {
+  // Parent recreates the scope object on every queue/profile refresh; key it by event/token only.
+  const stableScope = useStableGuestScope(guestScope);
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [results, setResults] = useState<MusicSearchResult[]>([]);
@@ -866,7 +869,7 @@ function RequestPicker({ onPick, existing, allowExplicit = true,guestScope }: { 
     setRateLimited(false);
     (async () => {
       try {
-        const res = await searchMusic(debounced,guestScope);
+        const res = await searchMusic(debounced,stableScope);
         if (cancelled) return;
         setResults(res.results);
         setProvider(res.provider);
@@ -883,7 +886,7 @@ function RequestPicker({ onPick, existing, allowExplicit = true,guestScope }: { 
       }
     })();
     return () => { cancelled = true; };
-  }, [debounced,guestScope]);
+  }, [debounced,stableScope]);
 
   // Only an active request for the exact same provider track counts as a
   // duplicate — tapping it supports the existing request instead.

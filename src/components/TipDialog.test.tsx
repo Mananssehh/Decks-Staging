@@ -2,7 +2,7 @@ import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
 import {it,expect,vi,afterEach} from 'vitest';
 import {TipDialog} from './TipDialog';
 const mocks=vi.hoisted(()=>({invoke:vi.fn(),consent:vi.fn(),error:vi.fn()}));
-vi.mock('@/integrations/supabase/client',()=>({supabase:{auth:{getUser:async()=>({data:{user:{id:'user'}},error:null})},functions:{invoke:mocks.invoke}}}));
+vi.mock('@/integrations/supabase/client',()=>({supabase:{auth:{getUser:async()=>({data:{user:{id:'user'}},error:null})},functions:{invoke:mocks.invoke},rpc:async()=>({data:['user'],error:null})}}));
 vi.mock('@/lib/consent',()=>({recordConsent:mocks.consent,CURRENT_CONSENT_VERSION:'v2-tips-2026-06-12'}));
 vi.mock('sonner',()=>({toast:{error:mocks.error,success:vi.fn()}}));
 afterEach(()=>{cleanup();vi.clearAllMocks();localStorage.clear();});

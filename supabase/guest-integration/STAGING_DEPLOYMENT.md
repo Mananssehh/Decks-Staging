@@ -102,3 +102,13 @@ remains unready), browser/account-link flows and 100 WebSockets before turning o
 the source flag. Existing rollback/containment instructions remain authoritative.
 ## 06:11-06:15 UTC fresh-100 failure
 Diagnosed from hosted logs (57014 statement timeouts and PostgREST 504 pool timeouts behind an event-row lock convoy caused by the O(songs x principals) snapshot). Source-only repair `012_capacity.sql` and safe Edge upstream logging: see `CAPACITY_012.md`. Nothing installed or deployed.
+
+## Final staging enablement (2026-11-03, base `b52f4fd8`)
+
+- Root enabled both markers and hosted-reviewed snapshot/aliases/member; root-reported HTTP 100 and WS 100
+  acceptance on `GUESTQB` (see CAPACITY_012.md). Not re-run by this source change.
+- Source: `012_capacity.sql` canonicalized to the exact hosted definitions (no hosted replay, no new SQL/data).
+- Frontend `ENABLE_GUEST_APPLICATION=true`; `guestEnabled()` still hard-gates to the exact staging backend
+  `ldxgejbzmpvsvozqmpfe`; any other/unknown backend stays OFF (tested).
+- Deployed functions unchanged: the 4 runtime adapters from the earlier deployment. The guest-event
+  safe SQLSTATE/correlation-ID logging change remains **source-only, NOT deployed**.

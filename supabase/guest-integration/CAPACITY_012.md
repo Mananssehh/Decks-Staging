@@ -1,4 +1,27 @@
-# 012 capacity repair (source-only candidate, NOT installed)
+# 012 capacity repair: canonical source of the hosted reviewer state
+
+## Current status (2026-11-03, base `b52f4fd8`)
+
+- **Hosted (root-performed, not by this source):** the reviewer committed the materialized snapshot at
+  06:33:40 UTC and materialized aliases/member at 06:45:05 UTC after full JSON equality; all 468 principal
+  alias arrays and 40 membership outcomes unchanged. Prior definitions are captured by root in private RLS
+  `guest_runtime.reviewer_snapshot_baseline` / `reviewer_identity_baseline` (audit evidence; 012/912 never touch them).
+  No `guest_principals_merged_into` index and no `capacity_before` exist hosted.
+- **Root hosted acceptance (root evidence, not reproduced here):** new QA event `f5290e13-...` (`GUESTQB`):
+  25/25 flows 26.995 s, 50/50 36.535 s, 100/100 34.304 s (joins 5.979 s); 1231 HTTP 200 + 2 expected 401,
+  0 Auth HTTP, Auth users 118 unchanged. 100 WebSockets connected in 5.076 s; all received 3 rounds and
+  coherent 100 snapshots incl. 100 concurrent votes; all reconnected after 120 s rollover (130.743 s total;
+  200 ready, 442 invalidate, 600 pong, 100 rollover hints, no `service_unavailable`).
+- **This source:** `012_capacity.sql` now reproduces EXACTLY the three hosted definitions (verbatim
+  `pg_get_functiondef`, md5 aliases `6b4fac91...`, member `c1dbf1dc...`, snapshot `c2cda1c3...`; reference copy
+  `before/capacity_root_observed.sql`). States: fresh 011 triple (`b2a23574...`/`9b1f695d...`/`83fa330d...`) ->
+  capture all three into private RLS `capacity_before` and install; exact hosted triple -> no-op; anything else
+  (including partial snapshot-only state) -> refused, no artifacts. No index. 912 restores the three captured 011
+  definitions only when `capacity_before` exists; on the hosted state it is a no-op. **Do not replay on hosted;**
+  it would be a no-op there by design, and no hosted SQL was run in this turn.
+
+The sections below are the original diagnosis and earlier (superseded) candidate history.
+
 
 Base source `58d36da632e4ee4ec700f2dabbc96354a4fb3e2c`. Hosted 001..011 unchanged; markers untouched.
 
@@ -33,7 +56,7 @@ row `FOR UPDATE`. 1.5 s share holds made writers and later readers queue on the 
 PostgREST pool filled with waiters (504), and queued statements hit the 8 s timeout (500 / 57014).
 Not caused by Edge concurrency, JIT, deadlocks, or pool size itself.
 
-## Fix: `012_capacity.sql` (rollback `912_rollback_capacity.sql`)
+## Earlier candidate (superseded by the canonical state above)
 
 - Partial index `app_principals(merged_into) WHERE merged_into IS NOT NULL`.
 - `aliases()` rewritten as two index probes (UNION) with `actor()` inlined as
