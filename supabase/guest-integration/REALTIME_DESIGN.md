@@ -1,31 +1,41 @@
-# Receive-only invalidation channel: blocked, NOT installed source
+# Receive-only Edge WebSocket feed — NEXT BOUNDED PHASE, NOT IMPLEMENTED
 
-Current managed platform guidance allows only a per-Auth-user topic predicate on
-realtime.messages, not anonymous capability-topic policies. Root's permission
-probe proves SQL permission, not platform authorization. Therefore this package
-contains NO realtime policy, cron job, Broadcast trigger or subscription helper.
-It must not be enabled for UI integration relying on Broadcast yet.
+Chosen design: guest authenticates to an Edge WebSocket server with a verified
+event token. Only the server subscribes to backend change feeds using service-role
+credentials. No anonymous `realtime.messages` policy, guest backend channel,
+synthetic Auth JWT, Presence or guest broadcast privileges will be authored.
 
-Required reviewed design if the platform permits this exception:
-- Private `guest_runtime.event_revisions` row per app event, monotonically increasing
-  revision, dirty flag, last_sent_at, generation, 256-bit random capability topic.
-- Topic delivered only by token-authorized snapshot; anon/authenticated may SELECT
-  only extension=broadcast rows for a current, unexpired capability. No INSERT or
-  Presence grants. Predicate is SECURITY DEFINER, fixed search_path, no row data.
-- Event-first write triggers mark dirty after queue/vote/event/now-playing changes.
-  Never acquire a principal mutex from these triggers. They must not throw through
-  business transactions; dirty failures must leave durable observable evidence.
-- Ban/revocation/claim rotates capability at the event lock; dirty flush sends only
-  current topic. Already cached old socket can receive no future invalidation.
-- Single named `guest-integration-revision-flush` job, 2-second pg_cron interval,
-  awakened on enqueue, unscheduled after drain. Trigger/job wake and drain share
-  scheduling mutex AFTER event locks; flusher does not hold it while acquiring
-  event rows. Each event <=1 broadcast/2 seconds with guaranteed trailing flush.
-- Coalesce before sending: revision only, never app rows, user IDs or tokens.
-- Retries armed only for pending dirty events; observable exception state and
-  explicit containment unschedules job. No permanent idle polling.
+Root temporarily proved anonymous private capability feasibility on staging:
+guessed topic denied, spoofed guest broadcast not delivered, operator broadcast
+received, no Auth signup; temporary policy/helper/table removed and Auth count 118.
+That is feasibility evidence, not permission to bypass managed policy guidance.
 
-A continuously active 2-second job can run 43,200 checks/day and keep the backend
-awake; wake/drain avoids idle checks. This is a cost/timing trade-off, not a
-capacity claim. Root must independently verify anonymous PRIVATE subscription,
-revoked-topic isolation, trailing flush, contention and idle drain on staging.
+## Source requirements for the next phase
+
+- Authenticate through fixed service-only token validation, never UUID alone.
+  Token sent in a bounded initial socket frame, never URL/query/log/subprotocol.
+- Receive-only after authentication: reject client mutation/broadcast frames;
+  bounded frame sizes, connection/session budgets, heartbeat and idle cleanup.
+- Server-only subscriptions use actual published tables (`events`, `song_requests`,
+  `now_playing`); never unpublished `votes`. Vote counter updates invalidate songs.
+- Per-event monotonically increasing revisions, coalesced to at most one emission
+  every two seconds with a guaranteed trailing flush; revision-only messages.
+  Never relay rows, user IDs, provider data or tokens from service-role feeds.
+- Revalidate before emission and periodically; ban, claim, expiry, revocation,
+  disabled marker or contract mismatch closes the socket. Cached credentials do
+  not authorize continuing delivery. Fail closed if validation is unavailable.
+- Queue snapshots remain authoritative and always validate the event token.
+  Socket revisions only trigger coalesced snapshot refresh; reconnect obtains a
+  fresh validated snapshot, protecting against missing notifications.
+- Multiple Edge instances need reviewed revision semantics, bounded service
+  subscriptions, reliable teardown and observable reconnect/backpressure failure.
+  Do not advertise a durable global counter unless its storage/coordination exists.
+- Stop subscriptions/timers when last receiver leaves. No permanent idle cron.
+
+## Independent platform/source acceptance (open)
+
+Root reviews WebSocket source and platform runtime/upgrades separately: upgrade
+support, lifetime/resource limits, cross-instance behavior, reconnect/trailing
+flush, revoked connections, no token exposure, no guest-send delivery, and no Auth
+signup. Venue Wi-Fi, sustained 100+ sockets and browser persistence remain untested.
+This lifecycle pass does not implement or deploy the feed or frontend.
