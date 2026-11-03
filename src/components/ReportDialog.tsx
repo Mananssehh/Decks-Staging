@@ -13,6 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {useActor} from '@/hooks/useActor';
+import {guestInvoke,guestScope} from '@/lib/guestClient';
 
 type TargetType = "request" | "user" | "nickname";
 type Reason = "inappropriate" | "harassment" | "spam" | "copyright" | "other";
@@ -36,6 +38,7 @@ const REASONS: { value: Reason; label: string; description: string }[] = [
 
 export function ReportDialog({ open, onOpenChange, targetType, targetId, eventId, contextLabel }: Props) {
   const { user } = useAuth();
+  const actor=useActor();
   const [reason, setReason] = useState<Reason>("inappropriate");
   const [details, setDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +49,7 @@ export function ReportDialog({ open, onOpenChange, targetType, targetId, eventId
   };
 
   const submit = async () => {
-    if (!user) {
+    if (!user&&actor.kind!=='guest') {
       toast.error("Sign in to report");
       return;
     }
@@ -55,6 +58,8 @@ export function ReportDialog({ open, onOpenChange, targetType, targetId, eventId
       return;
     }
     setSubmitting(true);
+    if(actor.guest?.session){try{await guestInvoke('report',{...guestScope(actor.guest.session),target_type:targetType,target_id:targetId,reason,details:details.trim()});toast.success('Report submitted.');reset();onOpenChange(false);}catch(e){toast.error(e instanceof Error?e.message:'Could not submit report');}finally{setSubmitting(false);}return;}
+    if(!user){setSubmitting(false);return;}
     const { error } = await supabase.from("reports").insert({
       reporter_id: user.id,
       event_id: eventId ?? null,

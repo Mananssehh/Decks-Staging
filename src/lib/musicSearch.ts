@@ -3,7 +3,7 @@ import { functionContext } from "./functionPayload";
 
 export interface MusicSearchResult {
   source_song_id: string | null;
-  source_platform: "spotify" | "itunes";
+  source_platform: "spotify" | "itunes" | "manual";
   title: string;
   artist: string;
   album: string;
@@ -30,13 +30,13 @@ export class RateLimitedError extends Error {
   }
 }
 
-export async function searchMusic(query: string): Promise<MusicSearchResponse> {
+export async function searchMusic(query: string,guest?:{event_id:string;token:string}): Promise<MusicSearchResponse> {
   const q = query.trim();
   if (q.length < 2) return { provider: "none", results: [] };
 
   const { data, error } = await supabase.functions.invoke<MusicSearchResponse & { error?: string }>(
     "music-search",
-    { body: { q } },
+    { body: { q,...(guest?{guest}: {}) } },
   );
   if (error) {
     // supabase-js FunctionsHttpError surfaces non-2xx; inspect context if present

@@ -15,6 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { emailSchema, passwordSchema } from "@/lib/validation";
+import {useActor} from '@/hooks/useActor';
+import {guestStore,claimPendingGuest} from '@/lib/guestClient';
+import {useNavigate} from 'react-router-dom';
 
 interface Props {
   open: boolean;
@@ -28,6 +31,7 @@ interface Props {
  */
 export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
   const { profile, refreshProfile } = useAuth();
+  const actor=useActor(),navigate=useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,6 +46,13 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
       if (!passParse.success) throw new Error(passParse.error.issues[0].message);
 
       // Anonymous upgrade — keeps the same auth.uid().
+      if(actor.kind==='guest'){
+        guestStore().intent();
+        const {error}=await supabase.auth.signUp({email:emailParse.data,password:passParse.data,options:{data:{nickname:actor.profile?.nickname??'Guest'},emailRedirectTo:`${window.location.origin}/auth/callback`}});
+        if(error)throw error;
+        await claimPendingGuest();await refreshProfile();onOpenChange(false);
+        toast.success('Check your email to confirm your account. Your guest progress stays saved until linking completes.');return;
+      }
       const { error: upErr } = await supabase.auth.updateUser({
         email: emailParse.data,
         password: passParse.data,
@@ -111,6 +122,7 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
               Create account
             </Button>
           </DialogFooter>
+          {actor.kind==='guest'&&<Button type="button" variant="ghost" onClick={()=>{guestStore().intent();onOpenChange(false);navigate('/auth?next=/profile');}}>Link an existing account</Button>}
         </form>
       </DialogContent>
     </Dialog>

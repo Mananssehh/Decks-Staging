@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import {guestApplicationEnabled,guestStore,guestInvoke,guestScope} from './guestClient';
 
 export type GuestFunnelEvent =
   | "guest_prompt_shown"
@@ -21,7 +22,7 @@ export async function logGuestFunnel(
   try {
     const { data: sessRes } = await supabase.auth.getSession();
     const uid = sessRes.session?.user?.id;
-    if (!uid) return;
+    if (!uid) {const guest=guestApplicationEnabled?guestStore().current():null;if(guest)await guestInvoke('funnel',{...guestScope(guest),event_type:eventType});return;}
     await supabase.from("guest_funnel_events").insert({
       user_id: uid,
       event_id: opts.eventId ?? null,

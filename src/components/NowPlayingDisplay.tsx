@@ -6,6 +6,7 @@ import { NowPlayingStatus } from "@/lib/nowPlaying";
 import { cn } from "@/lib/utils";
 import { PlatformLinks } from "@/components/PlatformLinks";
 import type { SongRequestRow } from "@/components/SongRequestCard";
+import type {NowPlayingRow} from '@/lib/nowPlaying';
 
 interface Props {
   eventId: string;
@@ -13,10 +14,13 @@ interface Props {
   matchedRequest?: SongRequestRow | null;
   /** Optional fallback request (DJ marked playing) if no broadcast row exists. */
   fallbackRequest?: SongRequestRow | null;
+  snapshotNowPlaying?:NowPlayingRow|null;
 }
 
-export function NowPlayingDisplay({ eventId, matchedRequest, fallbackRequest }: Props) {
-  const { nowPlaying, loading } = useNowPlaying(eventId);
+export function NowPlayingDisplay({ eventId, matchedRequest, fallbackRequest,snapshotNowPlaying }: Props) {
+  const live = useNowPlaying(snapshotNowPlaying!==undefined?undefined:eventId);
+  const nowPlaying=snapshotNowPlaying!==undefined?snapshotNowPlaying:live.nowPlaying;
+  const loading=snapshotNowPlaying!==undefined?false:live.loading;
   const lastToastKey = useRef<string | null>(null);
 
   // Atomic per-source resolution: never mix title from one row with album_art from another.

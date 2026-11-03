@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { completeCallback } from "@/lib/authCallback";
+import {claimPendingGuest} from '@/lib/guestClient';
 
 /**
  * Dedicated OAuth callback route.
@@ -28,6 +29,7 @@ const AuthCallback = () => {
         const next = await completeCallback(window.location.href,
           code => supabase.auth.exchangeCodeForSession(code),
           async () => !!(await supabase.auth.getSession()).data.session);
+        await claimPendingGuest();
         finish(next);
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Sign-in failed");
