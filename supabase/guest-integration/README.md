@@ -285,3 +285,55 @@ empty catalog restoration. Deno checks/lint verified. Frontend unchanged:98 pass
 SQL/source and enable markers before separately authorized deployment; future new
 endpoint deployment verify_jwt=false only guest-event-stream, configuration unchanged
 here. Actual100 API+100socket/reconnect capacity and platform limits remain untested.
+
+## 011 application source review (not installed or deployed)
+
+The browser guest flag is **OFF** (`ENABLE_GUEST_APPLICATION=false`) and can only
+enable on the authorized staging backend. Existing Auth and legacy anonymous Auth
+keep their old path. No hosted SQL, deployment, Auth creation, provider request,
+publication or secret/quota changes were made in this phase.
+
+Event-scoped credentials live only in backend-scoped browser storage and POST/auth
+frames, never URLs or analytics. Real guest actors are separate from Auth users.
+Guest screens use the verified snapshot/API and one receive-only socket, with
+coalesced refresh, desired-vote safeguards, reconnect resync and low-rate fallback.
+Claim needs explicit pending intent and verified nonanonymous Auth; proof survives
+confirmation/PKCE and is cleared only on confirmed/idempotent claim. Unrelated
+login does not create intent. Pending tip keys can be recovered through own aliases.
+
+**Eventual install order, one independently reviewed transaction:** targeted
+`000_targeted_bootstrap.sql`, rerun preflight, `001` through `008`, `010_stream.sql`,
+`011_application.sql`, then `009_after_catalog.sql` and application assertions.
+Keep both runtime and stream markers disabled until root explicitly verifies and
+enables them. Do not run historical migrations. Existing `001..010` files remain
+unchanged; 011 captures replaced definitions for review and empty rollback.
+
+011 adds protected retirement evidence, stale-JWT insertion refusal, atomic
+returning-bootstrap nickname synchronization, HTTPS-only input and stored snapshot
+links, deterministic manual identity and active provider/title/artist deduplication.
+Both Auth and guest requests share the same kernel. Service-only
+`guest_application_actor(event,token,operation)` validates scoped catalog/tip/consent
+access; consent records `v2-tips-2026-06-12` server-side. Scoped public profile and
+aggregate succeeded-tip helpers expose no Auth/email/provider identities. Private
+profiles are not linked from queue entries. Pricing/payment-v3 reservations and
+provider parameters remain unchanged; Stripe readiness is still unready and no
+provider checkout success is claimed.
+
+Containment remains `900_contain.sql`: disable markers/revoke sessions and preserve
+data. Empty destructive rollback refuses guest evidence, restores captured public
+definitions, drops the new application RPCs and private overlay. Stream-only
+teardown is safe before application installation; after 011 use containment/full
+reviewed empty restore rather than dropping its snapshot dependencies independently.
+
+Source inventory: `guestApplication/guestClient/guestStream`, `GuestProvider` and
+`useActor`; Join/EventPage/header/profile/ledger/public profile/report/upgrade/
+callback/now-playing/tip callers; shared `_shared/application-actor` resolver,
+music-search, guest-event dispatch and canonical checkout adapter. Generated hosted
+types and MCP ownership/exact lint exclusion are unchanged.
+
+Remaining acceptance gates: root SQL/ACL/lifecycle review and install, disabled
+marker/endpoint readiness checks, authorized endpoint deployment, actual browser
+join/claim/multi-tab/provider-link testing and 100 guest API+socket/reconnect load.
+These are not established by mocks or the earlier isolated probe. Full account-wide
+ledger pagination and shared-browser explicit existing-account claim UX require
+additional acceptance review before turning the flag on.
