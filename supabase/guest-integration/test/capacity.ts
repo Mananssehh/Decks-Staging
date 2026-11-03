@@ -28,7 +28,7 @@ async function freshFlow(label:string,common:string,tag:string){
  const guests=await Promise.all(Array.from({length:100},async(_,i)=>{
   const g=await timed(()=>call('join',{bootstrap:hex(),code:CODE,nickname:`Cap ${tag} ${i}`}),lat.join,errs);if(!g?.ok){typed[g?.error??'join']=(typed[g?.error??'join']??0)+1;return null;}
   const scope={event_id:EVENT,token:g.token};
-  for(const [op,p] of [['snapshot',scope],['request',{...scope,idempotency_key:crypto.randomUUID(),source_platform:'itunes',source_song_id:`${tag}-${i}`,title:`Cap ${tag} ${i}`,artist:'Load'}],['vote',{...scope,request_id:common,value:1}],['snapshot',scope]] as const){
+  for(const [op,p] of [['snapshot',scope],['request',{...scope,idempotency_key:crypto.randomUUID(),source_platform:'itunes',source_song_id:`${(tag==="a"?700000:800000)+i}`,title:`Cap ${tag} ${i}`,artist:'Load'}],['vote',{...scope,request_id:common,value:1}],['snapshot',scope]] as const){
    const r=await timed(()=>call(op,p as R),lat[op],errs);if(!r?.ok){typed[`${op}:${r?.error??'sqlerror'}`]=(typed[`${op}:${r?.error??'sqlerror'}`]??0)+1;}
   }
   return {...g,scope};
@@ -42,7 +42,7 @@ try{
   await admin`insert into auth.users(id) values(${DJ})`;
   await admin`insert into public.events(id,dj_id,name,dj_name,room_code,cooldown_seconds) values(${EVENT},${DJ},'Capacity','DJ',${CODE},0)`;
   const seeded:R[]=[];for(let i=0;i<175;i++){const g=await call('join',{bootstrap:hex(),code:CODE,nickname:`Seed ${i}`});assert.equal(g.ok,true,`seed join ${i} ${g.error}`);seeded.push(g);}
-  const songs:string[]=[];for(let i=0;i<149;i++){const g=seeded[i];const r=await call('request',{event_id:EVENT,token:g.token,idempotency_key:crypto.randomUUID(),source_platform:'itunes',source_song_id:`seed-${i}`,title:`Seed ${i}`,artist:'Seed'});assert.equal(r.ok,true,`seed request ${i} ${r.error}`);songs.push(r.request_id);}
+  const songs:string[]=[];for(let i=0;i<149;i++){const g=seeded[i];const r=await call('request',{event_id:EVENT,token:g.token,idempotency_key:crypto.randomUUID(),source_platform:'itunes',source_song_id:`${900000+i}`,title:`Seed ${i}`,artist:'Seed'});assert.equal(r.ok,true,`seed request ${i} ${r.error}`);songs.push(r.request_id);}
   for(let i=0;i<140;i++)for(const s of [songs[(i+1)%149],songs[(i+7)%149]]){const r=await call('vote',{event_id:EVENT,token:seeded[i].token,request_id:s,value:i%3?1:-1});assert.equal(r.ok,true,`seed vote ${r.error}`);}
   await admin`create table public._cap_common as select ${songs[0]}::uuid id, ${seeded[0].principal_id}::uuid probe`;
   const ms=await snapshotMs(seeded[0].principal_id);console.log(`011 snapshot mean ${ms.toFixed(1)}ms (principals=${(await admin`select count(*)::int n from guest_runtime.app_principals`)[0].n})`);
