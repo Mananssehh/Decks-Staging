@@ -33,6 +33,8 @@ grep -q 'Auth without profile' "$WORK/orphan.log"
 echo 'PASS orphan preflight refuses installation without invented data'
 psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-8]_*.sql) >"$WORK/install.log" 2>&1 || { cat "$WORK/install.log"; exit 1; }
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/matrix.ts"
+psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/010_stream.sql" >"$WORK/stream.log" 2>&1 || { cat "$WORK/stream.log"; exit 1; }
+NODE_PATH=/dev-server/node_modules bun "$HERE/test/stream.ts"
 # Containment must preserve data; destructive rollback must refuse.
 if psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >"$WORK/refusal" 2>&1; then echo FAIL destructive rollback accepted; exit 1; fi
 grep -q 'guest records exist' "$WORK/refusal"
@@ -64,6 +66,7 @@ UNION ALL SELECT 'trigger',tgrelid::regclass::text||':'||tgname,pg_get_triggerde
 UNION ALL SELECT 'column',attrelid::regclass::text||':'||attname,format_type(atttypid,atttypmod)||':'||attnotnull::text FROM pg_attribute WHERE attnum>0 AND NOT attisdropped AND attrelid IN(SELECT oid FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind='r' AND relname NOT LIKE '\_before%');
 SQL
 PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-8]_*.sql) >>"$WORK/empty.log" 2>&1
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/010_stream.sql" >>"$WORK/empty.log" 2>&1
 PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >>"$WORK/empty.log" 2>&1 || { tail -40 "$WORK/empty.log"; exit 1; }
 PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regnamespace('guest_runtime') IS NOT NULL OR EXISTS(SELECT 1 FROM public._before_restore WHERE def IS DISTINCT FROM pg_get_functiondef(to_regprocedure(sig))) THEN RAISE EXCEPTION 'restore mismatch'; END IF; IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.profiles'::regclass AND attname='auth_user_id' AND NOT attisdropped) OR EXISTS(SELECT 1 FROM pg_trigger WHERE tgname LIKE 'guest_writer%' OR tgname LIKE 'guest_registered_profile%' OR tgname='guest_profile_identity') THEN RAISE EXCEPTION 'lifecycle rollback residue'; END IF; IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.profiles'::regclass AND conname='profiles_id_fkey' AND confrelid='auth.users'::regclass AND confdeltype='c') THEN RAISE EXCEPTION 'Auth FK restore mismatch'; END IF; END \$\$;"
 echo 'PASS empty rollback restores every original public function definition'
