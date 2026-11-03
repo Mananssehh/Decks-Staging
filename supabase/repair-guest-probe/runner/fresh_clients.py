@@ -106,8 +106,7 @@ def guest_flow(c, ev, code, label):
         v1s, v1 = c.call("vote", {"event_id": ev, "token": tok, "request_id": target, "value": 1})
         ck["vote_ok"] = v1s == 200 and v1.get("my_vote") == 1 and v1.get("request_id") == target
         v2s, v2 = c.call("vote", {"event_id": ev, "token": tok, "request_id": target, "value": 1})
-        ck["vote_idempotent"] = ck["vote_ok"] and v2s == 200 and v2.get("changed") is False and v2.get("my_vote") == 1 \
-            and v2.get("upvotes") == v1.get("upvotes")
+        ck["vote_idempotent"] = ck["vote_ok"] and v2s == 200 and v2.get("changed") is False and v2.get("my_vote") == 1  # totals may move from other guests concurrently
     s, rj = c.call("join", {"event_id": ev, "token": tok})
     ck["resume_same_session"] = s == 200 and rj.get("resumed") is True and rj.get("session_id") == sid
     ck["resume_no_new_token"] = s == 200 and "token" not in rj

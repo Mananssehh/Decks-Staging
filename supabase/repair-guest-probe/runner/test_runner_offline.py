@@ -22,7 +22,7 @@ class H(http.server.BaseHTTPRequestHandler):
         a, p = d.get("action"), d.get("payload", {})
         with lock:
             if a == "contract":
-                return self.reply(200, {"ok": True, "contract": "guest-token-probe-v1"})
+                return self.reply(200, {"ok": True, "contract": "guest-token-probe-v1", "enabled": True})
             if a not in ("join", "request", "read", "vote"):
                 return self.reply(400, {"ok": False, "error": "invalid_action"})
             tok = p.get("token")
