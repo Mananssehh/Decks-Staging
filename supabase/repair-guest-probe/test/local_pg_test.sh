@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Isolated throwaway PostgreSQL test of 001/900. No network, no hosted DB.
 set -euo pipefail
+if [ "$(id -u)" = 0 ]; then exec runuser -u nobody -- bash "$0" "$@"; fi
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 D="$(mktemp -d /tmp/gtp-pg.XXXXXX)"; PORT=55439
 initdb -D "$D/data" -U postgres -A trust >/dev/null
