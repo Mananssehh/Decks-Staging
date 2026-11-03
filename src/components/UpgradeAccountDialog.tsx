@@ -47,7 +47,7 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
 
       // Anonymous upgrade — keeps the same auth.uid().
       if(actor.kind==='guest'){
-        guestStore().intent();
+        guestStore().intent(emailParse.data);
         const {error}=await supabase.auth.signUp({email:emailParse.data,password:passParse.data,options:{data:{nickname:actor.profile?.nickname??'Guest'},emailRedirectTo:`${window.location.origin}/auth/callback`}});
         if(error)throw error;
         await claimPendingGuest();await refreshProfile();onOpenChange(false);

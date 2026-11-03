@@ -29,6 +29,7 @@ Deno.serve(async req=>{
   }
   await requirePaymentContract(db);
   const origin=paymentOrigin(Deno.env.get('APP_ORIGIN'),url);
+  if(getStripeMode()==='unknown')return json({ready:false,error_code:'STRIPE_CONFIG_ERROR'},503);
   const stripe=getStripe();
   const result=await createReservedCheckout(actor.id,body as unknown as CheckoutInput,{
    reserve:(uid,input)=>paymentRpc<Reservation>(db,'followup_reserve_tip',{_user_id:uid,_request_key:input.request_key,_event_id:input.event_id,_amount_cents:input.amount_cents,_song_request_id:input.song_request_id??null,_origin:origin}),

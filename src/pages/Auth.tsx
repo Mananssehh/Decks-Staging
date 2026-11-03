@@ -13,6 +13,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { emailSchema, nicknameSchema, passwordSchema } from "@/lib/validation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { logGuestFunnel } from "@/lib/guestFunnel";
+import {guestApplicationEnabled,guestStore} from '@/lib/guestClient';
 
 
 
@@ -74,6 +75,7 @@ const Auth = () => {
       if (!emailParse.success) throw new Error(emailParse.error.issues[0].message);
       const passParse = passwordSchema.safeParse(password);
       if (!passParse.success) throw new Error(passParse.error.issues[0].message);
+      if(guestApplicationEnabled&&guestStore().pending())guestStore().intent(emailParse.data);
 
       if (mode === "signup") {
         const nickParse = nicknameSchema.safeParse(nickname);

@@ -24,8 +24,8 @@ export class GuestStore{
  byCode(code:string){return this.sessions().find(s=>s.code===code.toUpperCase());}
  current(){const id=this.storage.getItem(this.prefix+'current');return this.sessions().find(s=>s.event_id===id)??this.sessions().at(-1)??null;}
  select(event:string){this.storage.setItem(this.prefix+'current',event);}
- intent(){this.storage.setItem(this.prefix+'claim',JSON.stringify({bootstrap:this.bootstrap(),requested_at:Date.now()}));}
- pending(){try{const p=JSON.parse(this.storage.getItem(this.prefix+'claim')??'null');return p&&/^[a-f0-9]{64}$/.test(p.bootstrap)?p as {bootstrap:string;requested_at:number}:null;}catch{return null;}}
+ intent(email?:string){this.storage.setItem(this.prefix+'claim',JSON.stringify({bootstrap:this.bootstrap(),requested_at:Date.now(),email:email?.trim().toLowerCase()}));}
+ pending(){try{const p=JSON.parse(this.storage.getItem(this.prefix+'claim')??'null');return p&&/^[a-f0-9]{64}$/.test(p.bootstrap)?p as {bootstrap:string;requested_at:number;email?:string}:null;}catch{return null;}}
  completeClaim(){this.storage.removeItem(this.prefix+'claim');this.storage.removeItem(this.prefix+'sessions');this.storage.removeItem(this.prefix+'current');this.storage.removeItem(this.prefix+'bootstrap');}
 }
 export type Invoke=(action:string,payload:Record<string,unknown>)=>Promise<Record<string,unknown>>;

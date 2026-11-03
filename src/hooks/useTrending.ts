@@ -20,7 +20,7 @@ export function useTrending(songs: SongRequestRow[], windowMs = 5 * 60_000) {
     const now = Date.now();
     for (const s of songs) {
       const before = prevBoost.current.get(s.id);
-      const after = s.boost ?? 0;
+      const after = s.upvotes ?? 0;
       if (before !== undefined && after > before) {
         const arr = history.current.get(s.id) ?? [];
         arr.push({ at: now, delta: after - before });
