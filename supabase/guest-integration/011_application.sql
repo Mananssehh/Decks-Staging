@@ -313,7 +313,7 @@ REVOKE ALL ON FUNCTION public.application_actor_aliases(uuid) FROM PUBLIC,anon,a
 GRANT EXECUTE ON FUNCTION public.application_actor_aliases(uuid) TO service_role;
 DO $$ DECLARE d text; p text; field text; BEGIN
  d:=pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure);p:=d;
- FOREACH field IN ARRAY ARRAY['sr.external_url','sr.preview_url','sr.album_art_url','sr.album_art','n.album_art','n.apple_url','n.spotify_url'] LOOP p:=replace(p,field,'guest_runtime.safe_url('||field||')'); END LOOP;
+ FOREACH field IN ARRAY ARRAY['sr.external_url','sr.preview_url','sr.album_art_url','sr.album_art','n.album_art','n.apple_url','n.spotify_url'] LOOP p:=replace(p,field||',','guest_runtime.safe_url('||field||'),'); END LOOP;
  p:=replace(p,'''is_mine'',','''profile_linkable'',coalesce((SELECT is_public FROM public.profiles WHERE id=guest_runtime.actor(sr.requested_by)),false),''is_mine'',');
  IF p=d THEN RAISE EXCEPTION 'Snapshot source drift'; END IF; EXECUTE p;
 END $$;
