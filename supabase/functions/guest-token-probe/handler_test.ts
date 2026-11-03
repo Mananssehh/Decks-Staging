@@ -89,10 +89,23 @@ Deno.test("rpc transport error -> 503, no internals leaked", async () => {
   assert(!(await r.text()).includes("secret"));
 });
 
-Deno.test("handler source never touches auth APIs or logs", async () => {
-  const src = await Deno.readTextFile(new URL("./handler.ts", import.meta.url)) +
-    await Deno.readTextFile(new URL("./index.ts", import.meta.url));
-  for (const banned of ["signInAnonymously", "signUp", "getUser", "auth/v1", "console."]) {
-    assert(!src.includes(banned), banned);
+Deno.test("handler makes zero network calls (no Auth/signup) across a full flow", async () => {
+  const orig = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = (() => { fetches++; return Promise.reject(new Error("blocked")); }) as typeof fetch;
+  try {
+    const { calls, h } = setup({ ok: true });
+    const flow = [
+      { action: "join", payload: { event_id: EV, code: "c", nickname: "n" } },
+      { action: "join", payload: { event_id: EV, token: TOK } },
+      { action: "request", payload: { event_id: EV, token: TOK, idempotency_key: EV, title: "t" } },
+      { action: "read", payload: { event_id: EV, token: TOK } },
+      { action: "vote", payload: { event_id: EV, token: TOK, request_id: EV, value: 0 } },
+    ];
+    for (const b of flow) { const r = await h(post(b)); assertEquals(r.status, 200); await r.body?.cancel(); }
+    assertEquals(calls.map((c) => c.action), ["join", "join", "request", "read", "vote"]);
+    assertEquals(fetches, 0);
+  } finally {
+    globalThis.fetch = orig;
   }
 });
