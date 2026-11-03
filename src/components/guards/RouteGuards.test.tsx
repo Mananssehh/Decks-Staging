@@ -75,6 +75,7 @@ describe("RequireAuth", () => {
 });
 
 describe("RequireDJ", () => {
+  it('denies fresh guest identity with no Auth session even if a stale DJ flag is true',()=>{authState.isDJ=true;renderGuard(<RequireDJ><Secret/></RequireDJ>);expect(screen.queryByText('SECRET CONTENT')).toBeNull();expect(screen.getByText('auth page')).toBeTruthy();});
   it("denies guests", () => {
     authState.user = { id: "guest" };
     renderGuard(<RequireDJ><Secret /></RequireDJ>);
@@ -120,6 +121,7 @@ describe("RequireEventOwner", () => {
 });
 
 describe("RequireAdmin", () => {
+  it('denies fresh guest with no Auth session',async()=>{renderGuard(<RequireAdmin><Secret/></RequireAdmin>);await waitFor(()=>expect(screen.getByText('landing')).toBeTruthy());expect(screen.queryByText('SECRET CONTENT')).toBeNull();});
   it("fails closed when no admin role rows exist", async () => {
     authState.user = { id: "dj" };
     authState.isDJ = true;
