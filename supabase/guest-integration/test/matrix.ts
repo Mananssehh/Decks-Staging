@@ -43,8 +43,15 @@ try{
  // Hold 100 different read transactions at validation: all must get through the
  // shared event lock before release (exclusive read locking would time out).
  let releaseReads:()=>void=()=>{};const readHold=new Promise<void>(r=>{releaseReads=r;});let readers=0;
- const readTransactions=joins.map(j=>service(async q=>{await q`select guest_runtime.validate_session(${event},${j.token},false)`;readers++;await readHold;}));
- // Private helper is intentionally inaccessible to service; use API read within transaction.
+ const readTransactions=joins.map(j=>service(async q=>{await q`select public.guest_event_api('snapshot',${q.json({event_id:event,token:j.token})})`;readers++;await readHold;}));
+ let mutatorDone=false;
+ const mutation=call('vote',{event_id:event,token:joins[0].token,request_id:rid,value:1}).then(r=>{mutatorDone=true;return r;});
+ try{
+  for(let i=0;i<500&&readers<100;i++)await new Promise(r=>setTimeout(r,10));
+  eq(readers,100,'100 read validations hold shared event locks concurrently');
+  eq(mutatorDone,false,'mutation waits for existing shared readers');
+ }finally{releaseReads();await Promise.all(readTransactions);}
+ eq((await mutation).ok,true,'exclusive mutator completes without lock upgrade deadlock');
  await db`update public.events set requests_status='paused' where id=${event}`;
  eq((await call('request',{...song,idempotency_key:uid(201),source_song_id:'5678'})).ok,false,'paused request blocked');eq((await call('vote',{...p,request_id:rid,value:-1})).ok,true,'paused voting preserved');
  await db`update public.events set requests_status='live' where id=${event}`;
@@ -58,11 +65,19 @@ try{
  eq((await db`select points from public.profiles where id=${target}`)[0].points,targetBalance+sourceBalance-15,'target points preserved starter dedup exactly 15');
  eq((await db`select count(*)::int n from public.profiles p where p.id in(${g.principal_id},${target}) and p.points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'both ledgers reconcile');
  eq((await db`select requested_by from public.song_requests where id=${rid}`)[0].requested_by,immutable,'request identity immutable after claim');
+ const authSnapshot=(await authenticated(target,q=>q`select public.get_my_event_snapshot(${event}) r`))[0].r;
+ eq(authSnapshot.snapshot.songs[0].is_mine,true,'authenticated snapshot recognizes immutable alias request owner');
+ eq(authSnapshot.snapshot.songs[0].my_vote,1,'authenticated snapshot reads canonical desired vote');
+ eq(authSnapshot.snapshot.ledger.some((t:{amount:number;reason:string})=>t.amount===15&&t.reason==='Starter points'),true,'authenticated snapshot retains own alias ledger');
+ eq((await authenticated(dj,q=>q`select public.get_my_event_snapshot(${event}) r`))[0].r.ok,true,'event owner snapshot without membership allowed');
+ const outsider=uid(795);await db`insert into auth.users(id) values(${outsider})`;
+ eq((await authenticated(outsider,q=>q`select public.get_my_event_snapshot(${event}) r`))[0].r.status,403,'supplied event UUID alone cannot authorize outsider');
  eq((await db`select count(*)::int n from public.votes where song_request_id=${rid} and user_id in(${g.principal_id},${target})`)[0].n,1,'claim dedupes overlapping votes');
  eq((await call('snapshot',p)).status,401,'claim revokes source token');
  eq((await call('join',{bootstrap:bs(1),code:'LOCAL1',nickname:'Guest'})).status,401,'claim revokes bootstrap');
  await db`insert into public.event_banned_guests(event_id,user_id) values(${event},${g.principal_id})`;
  eq((await authenticated(target,q=>q`select public.is_event_member(${event}) m`))[0].m,false,'alias ban cannot be bypassed');
+ eq((await authenticated(target,q=>q`select public.get_my_event_snapshot(${event}) r`))[0].r.status,403,'authenticated alias snapshot respects source ban');
  await db`delete from public.event_banned_guests where user_id=${g.principal_id}`;
  // Alias financial caps preserve old identity and provider parameters, no provider calls.
  await db`insert into public.dj_payout_accounts(user_id,stripe_account_id,charges_enabled,payouts_enabled) values(${dj},'acct_local',true,true)`;
@@ -168,5 +183,21 @@ try{
   eq(restricted,true,'Auth delete rejects immediately while claim gate held rather than cascade wait');
  }finally{unlockDelete();await deletionGate;}
  await service(q=>q`select public.prepare_registered_profile_deletion(${retirementId})`);await db`delete from auth.users where id=${retirementId}`;
+ // Two real overlapping rewards: preserve history, compensate target per event,
+ // and retry without additional transfers or deductions.
+ const overlapTarget=uid(800);await db`insert into auth.users(id) values(${overlapTarget})`;
+ const overlap=await call('join',{bootstrap:bs(3001),code:'LOCAL1',nickname:'Overlap'});
+ await call('join',{bootstrap:bs(3001),code:'EXTRA0',nickname:'Overlap'});
+ await authenticated(overlapTarget,q=>q`select public.join_event_by_code('LOCAL1','Overlap')`);
+ await authenticated(overlapTarget,q=>q`select public.join_event_by_code('EXTRA0','Overlap')`);
+ const overlapBalance=(await db`select points from public.profiles where id=${overlap.principal_id}`)[0].points;
+ const originalTarget=(await db`select points from public.profiles where id=${overlapTarget}`)[0].points;
+ const merged=await claim(overlapTarget,bs(3001));eq(merged.joined_deduplicated,2,'two overlap Joined rewards deduplicated exactly');
+ eq((await db`select points from public.profiles where id=${overlapTarget}`)[0].points,originalTarget+overlapBalance-15-2,'overlap exact target balance preserves existing points');
+ eq((await db`select count(*)::int n from public.points_transactions where user_id=${overlapTarget} and reason='Guest claim duplicate Joined event' and amount=-1`)[0].n,2,'explicit per-event compensating ledger evidence');
+ eq((await db`select count(*)::int n from public.points_transactions where user_id=${overlap.principal_id} and reason='Joined event'`)[0].n,2,'original source join reward history preserved');
+ eq((await claim(overlapTarget,bs(3001))).already_claimed,true,'overlap claim retry idempotent');
+ eq((await db`select count(*)::int n from public.points_transactions where user_id=${overlapTarget} and reason='Guest claim duplicate Joined event'`)[0].n,2,'retry no repeated compensation');
+ eq((await db`select count(*)::int n from public.profiles p where id in(${overlap.principal_id},${overlapTarget}) and points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'overlap both balances reconcile exactly');
  console.log(`RESULT ${checks} local database assertions passed`);
 }finally{await db.end();}
