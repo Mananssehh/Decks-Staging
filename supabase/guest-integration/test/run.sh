@@ -46,6 +46,18 @@ psql -Xq -v ON_ERROR_STOP=1 -c 'UPDATE guest_runtime.installation SET enabled=fa
 psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/011_application.sql" >"$WORK/application.log" 2>&1 || { cat "$WORK/application.log"; exit 1; }
 psql -Xq -v ON_ERROR_STOP=1 -c 'UPDATE guest_runtime.installation SET enabled=true'
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/application.ts"
+# 012 capacity candidate: reproduce at hosted scale, install, prove identical results, rerun flow, rollback twice.
+NODE_PATH=/dev-server/node_modules bun "$HERE/test/capacity.ts" before
+psql -Xq -v ON_ERROR_STOP=1 -c "CREATE DATABASE capacity_rollback TEMPLATE decks_repair"
+psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >"$WORK/capacity.log" 2>&1 || { cat "$WORK/capacity.log"; exit 1; }
+if psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1; then echo FAIL 012 reinstall accepted; exit 1; fi
+NODE_PATH=/dev-server/node_modules bun "$HERE/test/capacity.ts" after
+PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -c "CREATE TABLE public._cap_defs_pre AS SELECT oid::regprocedure::text sig,pg_get_functiondef(oid) def FROM pg_proc WHERE pronamespace='guest_runtime'::regnamespace"
+PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1
+PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_capacity.sql" >>"$WORK/capacity.log" 2>&1
+PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_capacity.sql" >>"$WORK/capacity.log" 2>&1
+PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS(SELECT 1 FROM public._cap_defs_pre WHERE def IS DISTINCT FROM pg_get_functiondef(to_regprocedure(sig))) OR to_regclass('guest_runtime.guest_principals_merged_into') IS NOT NULL OR to_regclass('guest_runtime.capacity_before') IS NOT NULL THEN RAISE EXCEPTION '912 mismatch'; END IF; END \$\$;"
+echo 'PASS 012 rollback twice restores exact 011 guest_runtime definitions'
 # Containment must preserve data; destructive rollback must refuse.
 if psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >"$WORK/refusal" 2>&1; then echo FAIL destructive rollback accepted; exit 1; fi
 grep -q 'guest records exist' "$WORK/refusal"
