@@ -59,12 +59,36 @@ try{
    union (select user_id from public.event_participants where event_id=${EVENT} order by user_id limit 40)
    union (select id from guest_runtime.app_principals where id not in(select user_id from public.event_participants where event_id=${EVENT}) order by id limit 5)) x`;
   await admin`create table public._cap_defs as select md5(pg_get_functiondef('guest_runtime.aliases(uuid)'::regprocedure)) a, md5(pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure)) s`;
+  await admin`create table public._cap_lock_defs as select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace in('guest_runtime'::regnamespace,'public'::regnamespace) and oid not in('guest_runtime.aliases(uuid)'::regprocedure,'guest_runtime.snapshot(uuid,uuid)'::regprocedure)`;
   console.log('RESULT before baseline captured',(await admin`select count(*)::int n from public._cap_snap where s is not null`)[0].n,'visible snapshots');
  }else{
   const [{id:common,probe}]=await admin`select * from public._cap_common`;
   ok((await admin`select count(*)::int n from public._cap_aliases b where b.a is distinct from guest_runtime.aliases(b.id)`)[0].n===0,'012 aliases identical for every principal and unknown actor');
   ok((await admin`select count(*)::int n from public._cap_aliases where cardinality(a)>1`)[0].n>0,'baseline includes merged alias sets');
   ok((await admin`select count(*)::int n from public._cap_snap b where b.s is distinct from guest_runtime.snapshot(b.actor,b.event)`)[0].n===0,'012 snapshot identical for every principal x event (incl. denied NULL)');
+  ok((await admin`select count(*)::int n from public._cap_lock_defs where definition is distinct from pg_get_functiondef(to_regprocedure(signature))`)[0].n===0,'all session, actor, claim and writer lock definitions unchanged');
+  ok((await admin`select relrowsecurity from pg_class where oid='guest_runtime.capacity_before'::regclass`)[0].relrowsecurity,'capacity definition backup has RLS');
+  for(const role of ['anon','authenticated','service_role']){
+   ok(!(await admin`select has_function_privilege(${role},'guest_runtime.snapshot(uuid,uuid)','EXECUTE') f,has_table_privilege(${role},'guest_runtime.capacity_before','SELECT') t`)[0].f&&!(await admin`select has_table_privilege(${role},'guest_runtime.capacity_before','SELECT') t`)[0].t,`${role} has no private snapshot or backup access`);
+  }
+  // Large queue/ledger and unsafe stored data are isolated in a rolled-back transaction. Compare the
+  // original captured function against 012 on precisely the same fixture, then restore 012 by rollback.
+  await admin.begin(async q=>{
+   await q`insert into public.song_requests(event_id,requested_by,title,artist,source_platform,source_song_id,album_art,album_art_url,external_url,preview_url,created_at)
+    select ${EVENT}::uuid,${probe}::uuid,'Large '||i,'Fixture','itunes','large-'||i,'javascript:evil','data:evil','http://unsafe.invalid','https://fixture.invalid/preview',now()+i*interval '1 second' from generate_series(1,510) i`;
+   await q`insert into public.points_transactions(user_id,amount,type,reason) select ${probe}::uuid,0,'earned','Large fixture' from generate_series(1,110)`;
+   const optimized=(await q`select guest_runtime.snapshot(${probe},${EVENT}) s`)[0].s;
+   const [{definition}]=await q`select definition from guest_runtime.capacity_before where signature='guest_runtime.snapshot(uuid,uuid)'`;
+   await q.unsafe(definition);
+   const original=(await q`select guest_runtime.snapshot(${probe},${EVENT}) s`)[0].s;
+   ok(JSON.stringify(optimized)===JSON.stringify(original),'large queue and ledger old/new JSON exactly equal');
+   ok(optimized.songs.length===500&&optimized.truncated===true,'queue capped at 500 with truthful truncation');
+   ok(optimized.ledger.length===100,'own alias ledger capped at 100');
+   ok(optimized.songs.every((s:R)=>s.album_art===null&&s.album_art_url===null&&s.external_url===null&&s.preview_url==='https://fixture.invalid/preview'),'all large-queue unsafe URLs sanitized, HTTPS retained');
+   ok(Object.keys(optimized.profile).sort().join(',')==='id,is_premium,is_public,nickname,points','own profile exposes only approved fields');
+   ok(optimized.ledger.every((t:R)=>!('user_id' in t))&&!('sessions' in optimized)&&!('bootstraps' in optimized),'snapshot excludes credentials and other ledger identities');
+   throw new Error('rollback-large-fixture');
+  }).catch(e=>{if((e as Error).message!=='rollback-large-fixture')throw e;});
   const before=(await admin`select ms from public._cap_ms`)[0].ms,after=await snapshotMs(probe);
   console.log(`012 snapshot mean ${after.toFixed(1)}ms vs 011 ${before.toFixed(1)}ms`);
   ok(after*5<before,'snapshot at hosted-failure scale at least 5x faster');
@@ -77,8 +101,20 @@ try{
   ok((await admin`select count(*)::int n from public.song_requests where event_id=${EVENT}`)[0].n===songsBefore+100,'exactly 100 new requests');
   ok((await admin`select upvotes from public.song_requests where id=${common}`)[0].upvotes===upBefore+100,'common upvotes exactly +100');
   ok((await admin`select upvotes,downvotes from public.song_requests where id=${common}`)[0].upvotes===(await admin`select count(*)::int n from public.votes where song_request_id=${common} and value=1`)[0].n,'counter equals vote rows');
-  let coherent=0;for(const g of guests.slice(0,25)){const s=(await call('snapshot',g!.scope)).snapshot;const mine=s.songs.filter((x:R)=>x.is_mine);const c=s.songs.find((x:R)=>x.id===common);if(mine.length===1&&c.my_vote===1&&s.profile.id===g!.principal_id)coherent++;}
-  ok(coherent===25,'final snapshots coherent: own request is_mine, my_vote=1, own profile');
+  let coherent=0;for(const g of guests){if(!g)throw Error('missing completed guest');const s=(await call('snapshot',g.scope)).snapshot;const mine=s.songs.filter((x:R)=>x.is_mine);const c=s.songs.find((x:R)=>x.id===common);if(mine.length===1&&c.my_vote===1&&s.profile.id===g.principal_id)coherent++;}
+  ok(coherent===100,'all 100 final snapshots coherent: own request is_mine, my_vote=1, own profile');
+  const guest=guests[0];if(!guest)throw Error('missing lock-test guest');
+  let release:()=>void=()=>{};const hold=new Promise<void>(r=>{release=r;});let entered=false,finished=false;
+  const reader=pool.begin(async q=>{await q`set local role service_role`;await q`select set_config('request.jwt.claim.role','service_role',true)`;await q`select public.guest_event_api('snapshot',${q.json(guest.scope)})`;entered=true;await hold;});
+  let writer:Promise<R>|undefined;
+  try{
+   for(let i=0;i<500&&!entered;i++)await new Promise(r=>setTimeout(r,10));
+   ok(entered,'012 snapshot enters with event SHARE lock');
+   const other=guests[1];if(!other)throw Error('missing writer guest');
+   writer=call('vote',{...other.scope,request_id:common,value:1}).then(r=>{finished=true;return r;});
+   await new Promise(r=>setTimeout(r,100));ok(!finished,'different-actor writer still waits for event SHARE reader');
+  }finally{release();await reader;}
+  ok((await writer)?.ok===true,'writer completes after reader release without lock upgrade');
   ok((await admin`select count(*)::int n from pg_locks where locktype='advisory'`)[0].n===0,'no leaked advisory locks');
   console.log(`RESULT ${n} capacity assertions passed`);
  }
