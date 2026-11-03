@@ -165,7 +165,7 @@ const EventPage = () => {
     const activeLocks=voteLocks.current;
     const sync=createEventRefresh(async()=>{
       const state=guestRef.current,s=guestStore().byCode(code);if(!state||!s)throw Error('Guest session missing');
-      return state.load(s);
+      try{return await state.load(s);}catch(e){if(e instanceof GuestError){setLoading(false);setGuestFailure(e.message);}throw e;}
     },s=>{setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
     refreshRef.current=sync;
     void(async()=>{try{

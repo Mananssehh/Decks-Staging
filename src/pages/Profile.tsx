@@ -198,7 +198,7 @@ const Profile = () => {
                 <Badge variant="outline" className="border-primary/40 text-primary">
                   {isDJ ? "DJ" : "Guest"}
                 </Badge>
-                <span className="truncate">{user.email ?? "Anonymous session"}</span>
+                <span className="truncate">{user?.email ?? "Guest session"}</span>
               </div>
             </div>
           </div>
