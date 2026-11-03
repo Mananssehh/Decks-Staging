@@ -10,7 +10,7 @@ export interface GuestSnapshot{
  songs:(SongRequestRow&{is_mine:boolean;my_vote:1|-1|null;profile_linkable?:boolean})[];now_playing:NowPlayingRow|null;
  ledger:{id:string;amount:number;type:'earned'|'spent'|'refunded'|'manual_adjustment';reason:string;created_at:string;event_id:string|null;song_request_id:string|null}[];
 }
-export class GuestError extends Error{constructor(public status:number,public code:string){super(status===503?'Service temporarily unavailable. Please retry later.':status===401?'This event session is unavailable.':status===429?'Please wait before trying again.':code.replaceAll('_',' '));}}
+export class GuestError extends Error{constructor(public status:number,public code:string){super(status===503?'Service temporarily unavailable. Please retry later.':status===401?'This event session is unavailable.':status===429?'Please wait before trying again.':code.replace(/_/g,' '));}}
 export function secureBootstrap(storage:Storage,backend:string){
  const key=`decks:guest:${backend}:bootstrap`,saved=storage.getItem(key);if(saved&&/^[0-9a-f]{64}$/.test(saved))return saved;
  const bytes=crypto.getRandomValues(new Uint8Array(32)),secret=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');storage.setItem(key,secret);return secret;

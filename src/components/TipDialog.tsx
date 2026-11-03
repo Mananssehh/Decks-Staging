@@ -72,15 +72,15 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         } catch { /* ignore */ }
       }
       if (payload?.ready) {
-        setPayoutReady(guest?false:true);
-        if(guest)setPayoutMessage('Tips are temporarily unavailable.');
+        setPayoutReady(true);
         setPayoutMessage("");
       } else if (payload?.error_code) {
         setPayoutReady(false);
         setPayoutMessage(payload.message ?? "Tips aren't available right now.");
       } else {
         // Unknown — allow attempt; server will re-validate.
-        setPayoutReady(true);
+        setPayoutReady(guest?false:true);
+        if(guest)setPayoutMessage('Tips are temporarily unavailable.');
       }
     })();
     return () => {

@@ -16,6 +16,8 @@ import { containsProfanity, looksSpammy } from "@/lib/profanity";
 import { SiteFooter } from "@/components/SiteFooter";
 import { fetchMyProfile } from "@/lib/publicProfiles";
 import { logWarning } from "@/lib/errorLogger";
+import {useActor} from '@/hooks/useActor';
+import {guestInvoke,guestScope} from '@/lib/guestClient';
 
 interface Stats {
   totalRequests: number;
@@ -38,7 +40,8 @@ interface MyEvent {
 }
 
 const Profile = () => {
-  const { user, profile, isDJ, loading: authLoading, signOut, refreshProfile } = useAuth();
+  const { user, loading: authLoading, signOut, refreshProfile } = useAuth();
+  const actor=useActor();const {profile,isDJ}=actor;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo");
@@ -58,14 +61,15 @@ const Profile = () => {
   const [savingPrivacy, setSavingPrivacy] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth", { replace: true });
-  }, [user, authLoading, navigate]);
+    if (!authLoading && !actor.id) navigate("/auth", { replace: true });
+  }, [actor.id, authLoading, navigate]);
 
   useEffect(() => {
     if (profile?.nickname) setNickname(profile.nickname);
   }, [profile?.nickname]);
 
   useEffect(() => {
+    if(actor.guest?.session){void actor.guest.load(actor.guest.session).then(s=>{const reqs=s.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs(s.ledger.filter(t=>t.amount>0) as TxRow[]);setIsPublic(s.profile.is_public===true);setLoading(false);});return;}
     if (!user) return;
     (async () => {
       const [reqRes, txRes, evRes, profRes] = await Promise.all([
@@ -91,9 +95,10 @@ const Profile = () => {
       else setIsPublic(false);
       setLoading(false);
     })();
-  }, [user, isDJ]);
+  }, [user, isDJ,actor.id]);
 
   const togglePrivacy = async (next: boolean) => {
+    if(actor.guest?.session){setSavingPrivacy(true);try{await guestInvoke('profile',{...guestScope(actor.guest.session),is_public:next});await actor.guest.load(actor.guest.session);setIsPublic(next);}catch(e){toast.error(e instanceof Error?e.message:'Could not update profile');}finally{setSavingPrivacy(false);}return;}
     if (!user) return;
     setSavingPrivacy(true);
     const prev = isPublic;
@@ -115,6 +120,7 @@ const Profile = () => {
     if (containsProfanity(parsed.data) || looksSpammy(parsed.data)) {
       return toast.error("Please choose a different nickname.");
     }
+    if(actor.guest?.session){setSavingName(true);try{await guestInvoke('profile',{...guestScope(actor.guest.session),nickname:parsed.data});await actor.guest.load(actor.guest.session);setEditingName(false);}catch(e){toast.error(e instanceof Error?e.message:'Could not update nickname');}finally{setSavingName(false);}return;}
     if (!user) return;
     setSavingName(true);
     const { error } = await supabase.rpc("update_my_profile", { _nickname: parsed.data });
@@ -133,7 +139,7 @@ const Profile = () => {
     navigate("/");
   };
 
-  if (authLoading || !user || !profile) {
+  if (authLoading || !actor.id || !profile) {
     return (
       <div className="min-h-screen">
         <AppHeader />

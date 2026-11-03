@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ReportDialog } from "@/components/ReportDialog";
+import {useActor} from '@/hooks/useActor';
+import {guestInvoke,guestScope} from '@/lib/guestClient';
 
 interface RecentSong {
   id: string;
@@ -43,6 +45,7 @@ const PublicProfile = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const actor=useActor();
   const backState = location.state as { from?: string; scrollY?: number; eventId?: string | null } | null;
   const [reportOpen, setReportOpen] = useState<null | "user" | "nickname">(null);
   const reportEventId = backState?.eventId ?? null;
@@ -79,11 +82,12 @@ const PublicProfile = () => {
     if (!userId) return;
     (async () => {
       setLoading(true);
+      if(actor.guest?.session){try{const r=await guestInvoke('public_profile',{...guestScope(actor.guest.session),target_id:userId});setData(r.profile as unknown as PublicProfileData);}finally{setLoading(false);}return;}
       const { data: res, error } = await supabase.rpc("get_public_profile", { _user_id: userId });
       if (!error) setData(res as unknown as PublicProfileData);
       setLoading(false);
     })();
-  }, [userId]);
+  }, [userId,actor.id]);
 
   if (loading) {
     return (
