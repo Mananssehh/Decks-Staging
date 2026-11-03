@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Guest backend integration (source-only)
+- [ ] Application phase: OFF staging actor/provider flag, persistence/explicit claim, event/profile/ledger/stream paths; verified catalog/tip/consent adapters; 011 URL/manual/lifecycle helpers and tests. Reviewed 001..010 unchanged.
 - [x] Stage candidate principals/FK replacement, actor kernels, sessions, snapshots, claim and alias-aware financial boundaries; not install-ready.
 - [x] Stage bounded guest-event API and 8 no-network endpoint tests; retain probe and existing UI unchanged.
 - [x] Local database suite: 49 assertions plus containment/refusal/empty restore; preflight and canonical backups.
