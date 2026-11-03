@@ -5,7 +5,7 @@
 - [x] Stage bounded guest-event API and 8 no-network endpoint tests; retain probe and existing UI unchanged.
 - [x] Local database suite: 49 assertions plus containment/refusal/empty restore; preflight and canonical backups.
 - [x] Document capability Broadcast constraints and independent hosted review gates.
-- [x] Protected profiles-to-Auth lifecycle, orphan refusal, registered retirement and guest/claimed deletion tests; 71 local assertions plus rollback.
+- [x] Protected profiles-to-Auth lifecycle, orphan refusal, registered retirement and guest/claimed deletion tests; 72 local assertions plus rollback; existing 57 payment assertions pass.
 - [x] Legacy writer/claim entry and statement exclusion reviewed; concurrent DJ/ban/profile/award/financial/claim checks passed.
 - [ ] Independent install review: resolve actual 118 Auth /117 profile orphan and inspect actual catalog/FK/ACL/writer snapshots; hosted operations unauthorized.
 - [ ] Next bounded phase: source review and platform testing of receive-only Edge WebSocket invalidations; no anonymous channel policy.

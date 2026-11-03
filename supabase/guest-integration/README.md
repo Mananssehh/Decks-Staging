@@ -160,7 +160,7 @@ Never deploy source rollback without review.
 ## Local evidence (2026-11-03 UTC)
 
 `bash supabase/guest-integration/test/run.sh`: throwaway UNIX-socket Postgres;
-reconstructs baseline from canonical fixtures, no hosted queries. 71 assertions
+reconstructs baseline from canonical fixtures, no hosted queries. 72 assertions
 passed including 100 concurrent fresh joins, unchanged Auth rowcount, lost-response
 join retries, exact starter/join points, request idempotency, 100 concurrent votes,
 coherent own snapshot, paused behavior, parallel claim/ledger/counter/alias-ban,
@@ -175,8 +175,12 @@ gate (not a timing-only test): DJ playing transition, ban, profile update,
 standalone award, financial settlement and claim. All finish with reconciled
 ledgers, immutable tip owner, succeeded settlement, one-playing and alias ban.
 Separate Auth-orphan fixture refuses installation without generating data.
+Raw Auth deletion under an exclusive claim gate returns FK refusal rather than
+waiting for a profile cascade; protected retirement then deletion succeeds.
 Containment/refusal passed; separate local empty rollback restored every original
-public function definition. The test's cloned local fixtures are disposable only;
+public function definition, original profiles Auth cascade FK and removed all new
+lifecycle triggers/column. Existing payment fixture: 57 assertions plus containment
+passed on a separate throwaway database. The test's cloned local fixtures are disposable only;
 it does not demonstrate permission to delete hosted guest records.
 `deno test supabase/functions/guest-event/handler_test.ts`: 8 no-network tests passed.
 Endpoint/index Deno checks and full zero-warning eslint passed. Existing Vitest:
