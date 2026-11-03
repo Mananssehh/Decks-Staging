@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+/supabase/repair-guest-probe/runner/__pycache__/
