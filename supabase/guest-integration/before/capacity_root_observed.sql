@@ -1,7 +1,6 @@
--- READ-ONLY CAPTURE 2026-11-03: observed hosted definitions, NOT an installation script.
--- Snapshot md5 c2cda1c3e9bc5e81f3f8b0eb23b3bfbc; aliases md5 6b4fac919cee58b17435432ffb14deb7.
--- No capacity_before existed. 012 captures actual installed definitions transactionally for rollback.
-/*
+-- REFERENCE ONLY, NEVER an install script. Exact hosted staging pg_get_functiondef text (reviewer-committed
+-- 2026-11-03: snapshot 06:33:40 UTC, aliases/member 06:45:05 UTC). md5: aliases 6b4fac91..., member c1dbf1dc..., snapshot c2cda1c3...
+-- guest_runtime.aliases(uuid)
 CREATE OR REPLACE FUNCTION guest_runtime.aliases(_actor uuid)
  RETURNS uuid[]
  LANGUAGE sql
@@ -12,9 +11,19 @@ AS $function$
  SELECT coalesce(array_agg(p.id ORDER BY p.id),ARRAY[]::uuid[])
  FROM guest_runtime.app_principals p CROSS JOIN root
  WHERE p.id=root.canonical_id OR p.merged_into=root.canonical_id
-$function$
-;
-
+$function$;
+-- guest_runtime.member(uuid,uuid)
+CREATE OR REPLACE FUNCTION guest_runtime.member(_actor uuid, _event uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+ WITH identity AS MATERIALIZED (SELECT guest_runtime.aliases(_actor) ids)
+ SELECT EXISTS(SELECT 1 FROM public.event_participants p CROSS JOIN identity i WHERE p.event_id=_event AND p.user_id=ANY(i.ids))
+ AND NOT EXISTS(SELECT 1 FROM public.event_banned_guests b CROSS JOIN identity i WHERE b.event_id=_event AND b.user_id=ANY(i.ids))
+$function$;
+-- guest_runtime.snapshot(uuid,uuid)
 CREATE OR REPLACE FUNCTION guest_runtime.snapshot(_actor uuid, _event uuid)
  RETURNS jsonb
  LANGUAGE sql
@@ -30,6 +39,4 @@ AS $function$
  'ledger',coalesce((SELECT jsonb_agg(jsonb_build_object('id',t.id,'amount',t.amount,'type',t.type,'reason',t.reason,'created_at',t.created_at,'event_id',t.event_id,'song_request_id',t.song_request_id) ORDER BY t.created_at DESC,t.id) FROM (SELECT * FROM public.points_transactions WHERE user_id=ANY(self_identity.alias_ids) ORDER BY created_at DESC,id LIMIT 100) t),'[]'::jsonb),
  'truncated',(SELECT count(*)>500 FROM public.song_requests WHERE event_id=_event))
  FROM public.events e CROSS JOIN self_identity WHERE e.id=_event AND (e.dj_id=self_identity.canonical_id OR guest_runtime.member(_actor,_event))
-$function$
-;
-*/
+$function$;
