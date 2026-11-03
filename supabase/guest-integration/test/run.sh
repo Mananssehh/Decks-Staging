@@ -70,6 +70,10 @@ PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_c
 PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_capacity.sql" >>"$WORK/capacity.log" 2>&1
 PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS(SELECT 1 FROM public._root_before WHERE def IS DISTINCT FROM pg_get_functiondef(to_regprocedure(sig))) THEN RAISE EXCEPTION 'root definition restore mismatch'; END IF; END \$\$;"
 echo 'PASS 012 accepts observed root pair and rollback twice preserves exact optimized root definitions'
+PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "CREATE OR REPLACE FUNCTION guest_runtime.aliases(_actor uuid) RETURNS uuid[] LANGUAGE sql STABLE SET search_path='' AS 'SELECT ARRAY[]::uuid[]'"
+if PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1; then echo FAIL 012 drift accepted; exit 1; fi
+PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regclass('guest_runtime.capacity_before') IS NOT NULL OR position('SELECT ARRAY[]::uuid[]' in pg_get_functiondef('guest_runtime.aliases(uuid)'::regprocedure))=0 THEN RAISE EXCEPTION 'drift sentinel damaged'; END IF; END \$\$;"
+echo 'PASS 012 refuses unexpected definition drift and preserves sentinel without backup artifacts'
 PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -c "CREATE TABLE public._cap_defs_pre AS SELECT oid::regprocedure::text sig,pg_get_functiondef(oid) def FROM pg_proc WHERE pronamespace='guest_runtime'::regnamespace"
 PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1
 PGDATABASE=capacity_rollback psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_capacity.sql" >>"$WORK/capacity.log" 2>&1

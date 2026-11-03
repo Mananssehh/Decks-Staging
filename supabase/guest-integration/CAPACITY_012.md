@@ -16,7 +16,9 @@ Base source `58d36da632e4ee4ec700f2dabbc96354a4fb3e2c`. Hosted 001..011 unchange
   Edge `guest-event`: 1035x200, 47x503 (`upstream_unavailable`) = 26 + 22 (minus one in flight).
 - Role settings: `authenticator statement_timeout=8s, lock_timeout=8s`; `jit=off` (JIT not involved).
 - `pg_stat_statements`: `guest_event_api` slow group 1049 calls, mean 1613 ms, max 7853 ms. Root's own
-  `EXPLAIN ANALYZE guest_runtime.snapshot(...)` on the QA event: ~1541 ms.
+  `EXPLAIN ANALYZE guest_runtime.snapshot(...)` on the QA event: 1537.547 ms JIT ON,
+  1544.924 ms JIT OFF (default OFF). Root's minimal materialized snapshot candidate in a rolled-back
+  transaction took 54.202 ms, roughly 28x faster; this is root-reported evidence, not our hosted benchmark.
 - Data at failure: 293 `app_principals`, 149 songs, 279 votes, 175 members on the QA event.
 
 ## Cause
@@ -37,16 +39,33 @@ Not caused by Edge concurrency, JIT, deadlocks, or pool size itself.
 - `aliases()` rewritten as two index probes (UNION) with `actor()` inlined as
   `coalesce(c.merged_into,c.id)` of the single row `c.id=_actor`. Same set, same order, `'{}'` for unknown.
 - `snapshot()` computes canonical actor and alias set once (`WITH ... AS MATERIALIZED`, so the planner
-  cannot substitute the calls back per row); `profile_linkable` uses an equivalent PK left join.
+  cannot substitute the calls back per row); `profile_linkable` uses the exact root-supplied protected
+  principal/profile scalar join. `self_identity`, `canonical_id`, `alias_ids` and all DTO expressions
+  match that derivative, not a different projection or lock protocol.
   Still ONE SQL statement (single MVCC snapshot); projection/DTO unchanged.
 - Unchanged: event-before-request lock order, SHARE/UPDATE choice at entry, actor advisory mutex,
   claim exclusion, writer kernels, budgets/caps, ACLs, no browser DML, no public object touched.
 - Guards: requires 011, refuses reinstall, refuses unless installed `aliases`/`snapshot` md5 equal the
-  hosted values (`b2a23574...`, `83fa330d...`); captures exact prior definitions for rollback.
+  original hosted pair (`b2a23574...`, `83fa330d...`) OR the exact root materialization pair
+  (`6b4fac91...`, `c2cda1c3...`); captures exact prior definitions for rollback.
+  No pool, timeout, quota or instance changes (even the previous local timeout SET was removed).
   May be installed with markers enabled (only STABLE read helpers + brief SHARE lock on a small table);
   root decides. Run 912 before any 910/950 rollback.
 
 ## Local proof (`bash supabase/guest-integration/test/run.sh`, PG 17, full suite exit 0)
+
+Latest refinement run: 15 bootstrap + 100 matrix + 39 stream + 16 application + **25 capacity**
+assertions, both baseline rollback paths twice, containment and exact empty restore passed.
+Snapshot **370.5 -> 28.5 ms** (~13x); local fresh100 **37.25 -> 2.91 seconds**, zero SQL/typed
+errors after 012. All 100 final snapshots verified, not a 25-person sample. This local run did NOT
+reproduce the hosted failure (its unoptimized flow also completed); it verifies the optimization,
+not hosted acceptance. Prior local timing below is retained as historical evidence.
+
+Added rolled-back 510-song/110-ledger fixture: old/new JSON equality, 500-song cap/truncation,
+100-ledger cap, unsafe URL removal/HTTPS preservation, private DTO fields; every other public/private
+function definition unchanged; backup RLS and anon/authenticated/service-role access denial.
+Different-actor writer remains blocked behind a snapshot's event SHARE lock until release, then
+completes. No timeout or lock weakening. 12 no-network Edge observability tests and zero-warning lint pass.
 
 `test/capacity.ts` reproduces the hosted shape (293 principals, 149 songs, 280 votes) and drives 100
 fresh guests (join, snapshot, request, vote common, snapshot) through a 10-connection pool with
@@ -76,5 +95,18 @@ diagnosis above (Postgres/gateway logs sufficed); deploy only after root review.
 
 ## Hosted repeat note
 
-The unchanged event admission budget is 300 per event per 10 minutes. `GUESTQA` already admitted 175;
-a fresh-100 repeat within 10 minutes of other joins on that event can be refused as `unavailable`.
+The first hosted 100 guests ALL JOINED but request/vote/snapshot operations failed; **not a pass**.
+Root will repeat fresh100 HTTP on a **new QA event** to avoid admission-window and fixture confounding,
+then 100 WebSockets (not yet tested). The unchanged event budget is 300 admissions/10 minutes.
+Frontend flag remains OFF; root-enabled guest/stream markers are untouched here. No deployments,
+hosted writes, SQL installs, providers, Auth creation or retry identities in this refinement.
+
+## Read-only baseline discovery during refinement
+
+Read-only `pg_get_functiondef` inspection already found root's exact optimized snapshot AND a
+materialized-root `aliases()` hosted, **without `capacity_before`**. This differs from the message's
+rolled-back-only state; do not infer how/when another actor installed it or apply 012 blindly.
+Captured source: `before/capacity_root_observed.sql` (reference only, NEVER an install script).
+012 now accepts only these two explicitly reviewed pairs, not arbitrary combinations. 912 restores
+the captured installed definition; with the root pair, rollback retains the root's optimized snapshot,
+instead of regressing to old 011. Root must confirm the current baseline and review before installing.
