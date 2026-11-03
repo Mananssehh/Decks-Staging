@@ -64,3 +64,8 @@
 ## Final staging Stripe key compatibility
 - [x] Validate secret/restricted test/live keys: 7 SDK-free tests, 34 combined Edge tests, 95 frontend tests and zero-warning lint.
 - [x] Deploy all seven inventoried shared-helper dependents to staging; checkout last. No provider operations; evidence recorded.
+
+## Staging fresh-100 capacity failure
+- [x] Diagnose from hosted Postgres/gateway logs: 26x 57014 + 22x PostgREST 504 from event-row tuple convoy behind O(songs x principals) snapshot.
+- [x] Source-only 012 candidate + 912 rollback, equivalence/concurrency proof (local fresh100 58.7s -> 2.5s), safe Edge upstream logging + tests.
+- [ ] Root review/install 012 and optionally deploy logging guest-event, then repeat hosted fresh100 and 100 WS (blocked on root).
