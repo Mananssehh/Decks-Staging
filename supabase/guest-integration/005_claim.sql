@@ -14,7 +14,7 @@ DECLARE u uuid; BEGIN
  RETURN u;
 END $$;
 CREATE FUNCTION public.claim_guest_principal(_bootstrap text,_event_id uuid DEFAULT NULL,_token text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE target uuid:=auth.uid(); src uuid; h bytea; b integer; dedup integer:=0; joined integer:=0; overlaps uuid[]:=ARRAY[]::uuid[]; c guest_runtime.claims; v record; eid uuid; total bigint; BEGIN
+DECLARE target uuid:=auth.uid(); src uuid; h bytea; b integer; dedup integer:=0; joined integer:=0; overlap_events uuid[]:=ARRAY[]::uuid[]; c guest_runtime.claims; v record; eid uuid; total bigint; BEGIN
  IF target IS NULL OR NOT EXISTS(SELECT 1 FROM auth.users WHERE id=target AND NOT is_anonymous)
  THEN RETURN guest_runtime.fail(403,'registered_session_required'); END IF;
  IF NOT EXISTS(SELECT 1 FROM guest_runtime.installation WHERE id AND enabled AND contract='guest-integration-v1') THEN RETURN guest_runtime.fail(503,'guest_disabled'); END IF;
@@ -57,7 +57,7 @@ DECLARE target uuid:=auth.uid(); src uuid; h bytea; b integer; dedup integer:=0;
    OR NOT EXISTS(SELECT 1 FROM public.points_transactions WHERE user_id=src AND event_id=eid AND reason='Joined event' AND amount=1 AND type='earned' AND song_request_id IS NULL)
    OR (SELECT sum(amount) FROM public.points_transactions WHERE user_id=ANY(guest_runtime.aliases(target)) AND event_id=eid AND reason IN ('Joined event','Guest claim duplicate Joined event'))<>1
    THEN RETURN guest_runtime.fail(409,'join_reward_review_required'); END IF;
-   overlaps:=array_append(overlaps,eid); joined:=joined+1;
+   overlap_events:=array_append(overlap_events,eid); joined:=joined+1;
   END IF;
  END LOOP;
  IF b<dedup+joined THEN RETURN guest_runtime.fail(409,'balance_review_required'); END IF;
@@ -71,7 +71,7 @@ DECLARE target uuid:=auth.uid(); src uuid; h bytea; b integer; dedup integer:=0;
  DELETE FROM public.event_participants p WHERE user_id=src AND EXISTS(SELECT 1 FROM public.event_participants t WHERE t.event_id=p.event_id AND t.user_id=ANY(guest_runtime.aliases(target)));
  -- Original source ledger and financial metadata remain intact; transfer entries reconcile both balances.
  INSERT INTO public.points_transactions(user_id,amount,type,reason,created_by) VALUES(src,-b,'manual_adjustment','Guest claim transfer out',target),(target,b-dedup,'manual_adjustment','Guest claim transfer in (starter deduplicated)',target);
- FOREACH eid IN ARRAY overlaps LOOP
+ FOREACH eid IN ARRAY overlap_events LOOP
   INSERT INTO guest_runtime.merge_evidence VALUES(src,'joined_reward',jsonb_build_object('event_id',eid,'deduction',1,'source_ledger',(SELECT jsonb_agg(to_jsonb(t)) FROM public.points_transactions t WHERE user_id=src AND event_id=eid AND reason='Joined event'),'target_ledger',(SELECT jsonb_agg(to_jsonb(t)) FROM public.points_transactions t WHERE user_id=ANY(guest_runtime.aliases(target)) AND event_id=eid AND reason IN ('Joined event','Guest claim duplicate Joined event'))),now());
   INSERT INTO public.points_transactions(user_id,event_id,amount,type,reason,created_by) VALUES(target,eid,-1,'manual_adjustment','Guest claim duplicate Joined event',target);
  END LOOP;
