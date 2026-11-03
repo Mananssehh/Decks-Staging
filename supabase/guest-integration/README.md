@@ -18,8 +18,9 @@ publication or UI changes were performed. Disabled `repair_guest_probe` is untou
    requirements for independent authorization and hosted testing.
 3. Full compatibility review still required: direct Auth RLS reads of old alias
    votes/points/tips are unchanged; UI must use own-alias adapters after installation.
-   Profile profanity/spam parity is not complete (current basic length/control/URL
-   validation is not equivalent to existing frontend profanity/spam lists).
+   Claim versus all alternative point writers and direct DJ event-first paths needs
+   further lock-protocol review; those paths cannot acquire identity locks after
+   event locks. Global claim exclusion covers common kernels but not every legacy writer.
 
 This is a backend candidate with local evidence, **not a completed/deployable guest
 integration**. The existing app continues using unchanged deployed Auth boundaries.
@@ -113,11 +114,19 @@ Realtime changes once those are added. Never deploy source rollback without revi
 ## Local evidence (2026-11-03 UTC)
 
 `bash supabase/guest-integration/test/run.sh`: throwaway UNIX-socket Postgres;
-reconstructs baseline from canonical fixtures, no hosted queries. 36 assertions
+reconstructs baseline from canonical fixtures, no hosted queries. 49 assertions
 passed including 100 concurrent fresh joins, unchanged Auth rowcount, lost-response
 join retries, exact starter/join points, request idempotency, 100 concurrent votes,
 coherent own snapshot, paused behavior, parallel claim/ledger/counter/alias-ban,
-alias financial 50/100/30% boundaries, expiry/contract/ACL and containment refusal.
+alias financial 50/100/30% boundaries, expiry/contract/ACL, normalized profanity/spam,
+three-event gate, cross-event denial, 30-success/10-typed-429 mutation burst,
+independent read budget and immutable alias financial settlement/mismatch refusal.
+Containment/refusal passed; separate local empty rollback restored every original
+public function definition. The test's cloned local fixtures are disposable only;
+it does not demonstrate permission to delete hosted guest records.
 `deno test supabase/functions/guest-event/handler_test.ts`: 8 no-network tests passed.
+Endpoint/index Deno checks and full zero-warning eslint passed. Existing Vitest:
+98 passed, 9 production-bundle checks failed because no compiled dist assets exist
+in this sandbox; no app build was manually run and tests were not weakened.
 This is not hosted acceptance, venue Wi-Fi/Realtime capacity, browser persistence,
 full production compatibility, payment provider readiness or sustained load proof.
