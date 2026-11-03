@@ -104,7 +104,7 @@ const Profile = () => {
       else setIsPublic(false);
       setLoading(false);
     })().catch(e=>{if(ticket===generation.current){setFailure(e instanceof Error?e:Error('Profile unavailable.'));setLoading(false);}});
-    return()=>{generation.current++;};
+    return()=>{generation.current=ticket+1;};
   }, [user, isDJ,actor.id,guestSession,attempt]);
 
   const guestSnapshot=actor.guest?.snapshot;
