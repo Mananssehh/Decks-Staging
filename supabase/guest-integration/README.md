@@ -304,6 +304,7 @@ login does not create intent. Pending tip keys can be recovered through own alia
 **Eventual install order, one independently reviewed transaction:** targeted
 `000_targeted_bootstrap.sql`, rerun preflight, `001` through `008`, `010_stream.sql`,
 `011_application.sql`, then `009_after_catalog.sql` and application assertions.
+Capacity candidate `012_capacity.sql` (after 011; rollback `912_rollback_capacity.sql`, run before 910/950) is SOURCE ONLY; cause, hosted log evidence and local proof: `CAPACITY_012.md`.
 Keep both runtime and stream markers disabled until root explicitly verifies and
 enables them. Do not run historical migrations. Existing `001..010` files remain
 unchanged; 011 captures replaced definitions for review and empty rollback.

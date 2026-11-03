@@ -100,3 +100,5 @@ and disabled stream behavior was observed. The source frontend flag remains fals
 Root must independently enable/test HTTP, valid-proof readiness (Stripe config
 remains unready), browser/account-link flows and 100 WebSockets before turning on
 the source flag. Existing rollback/containment instructions remain authoritative.
+## 06:11-06:15 UTC fresh-100 failure
+Diagnosed from hosted logs (57014 statement timeouts and PostgREST 504 pool timeouts behind an event-row lock convoy caused by the O(songs x principals) snapshot). Source-only repair `012_capacity.sql` and safe Edge upstream logging: see `CAPACITY_012.md`. Nothing installed or deployed.
