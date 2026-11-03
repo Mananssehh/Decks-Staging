@@ -48,6 +48,7 @@ BEGIN
 
   -- idempotent request
   r := public.repair_guest_probe_rpc('request', jsonb_build_object('event_id',a.event_id,'token',tok,'idempotency_key','11111111-1111-4111-8111-111111111111','title','Song 1'));
+  IF NOT (r->>'ok')::boolean THEN RAISE EXCEPTION 'req1 %', r; END IF;
   req := (r->>'request_id')::uuid;
   r := public.repair_guest_probe_rpc('request', jsonb_build_object('event_id',a.event_id,'token',tok,'idempotency_key','11111111-1111-4111-8111-111111111111','title','Song 1'));
   IF (r->>'request_id')::uuid <> req OR NOT (r->>'replayed')::boolean THEN RAISE EXCEPTION 'idem %', r; END IF;

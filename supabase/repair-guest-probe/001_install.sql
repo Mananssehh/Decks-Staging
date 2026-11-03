@@ -303,7 +303,7 @@ BEGIN
     'changed', _old <> _value, 'upvotes', _r.upvotes, 'downvotes', _r.downvotes);
 EXCEPTION WHEN OTHERS THEN
   -- Fail closed; never echo internals.
-  RETURN repair_guest_probe.err(500, 'internal');
+  RAISE WARNING 'probe internal %', SQLSTATE; RETURN repair_guest_probe.err(500, 'internal');
 END
 $f$;
 
