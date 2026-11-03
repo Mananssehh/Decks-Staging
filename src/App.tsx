@@ -99,6 +99,7 @@ const App = () => (
               
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/activity" element={<ActivityLedger />} />
+              <Route path="/activity" element={<ActivityLedger />} />
               <Route path="/users/:userId" element={<PublicProfile />} />
               <Route path="/admin/reports" element={<RequireAdmin><AdminReports /></RequireAdmin>} />
 

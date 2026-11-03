@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ReportDialog } from "@/components/ReportDialog";
 import {useActor} from '@/hooks/useActor';
 import {guestInvoke,guestScope} from '@/lib/guestClient';
+import {GuestRecovery} from '@/components/GuestRecovery';
 
 interface RecentSong {
   id: string;
@@ -78,17 +79,26 @@ const PublicProfile = () => {
 
   const [data, setData] = useState<PublicProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failure,setFailure]=useState<Error|null>(null);
+  const [attempt,setAttempt]=useState(0);
 
   useEffect(() => {
     if (!userId) return;
+    let cancelled=false;
     (async () => {
-      setLoading(true);
-      if(guestSession){try{const r=await guestInvoke('public_profile',{...guestScope(guestSession),target_id:userId});setData(r.profile as unknown as PublicProfileData);}finally{setLoading(false);}return;}
-      const { data: res, error } = await supabase.rpc("get_public_profile", { _user_id: userId });
-      if (!error) setData(res as unknown as PublicProfileData);
-      setLoading(false);
+      setLoading(true);setFailure(null);setData(null);
+      try{
+       if(guestSession){const r=await guestInvoke('public_profile',{...guestScope(guestSession),target_id:userId});if(!cancelled)setData(r.profile as unknown as PublicProfileData);return;}
+       const { data: res, error } = await supabase.rpc("get_public_profile", { _user_id: userId });
+       if(error)throw Error('Profile temporarily unavailable. Please retry.');
+       if(!cancelled)setData(res as unknown as PublicProfileData);
+      }catch(e){if(!cancelled)setFailure(e instanceof Error?e:Error('Profile unavailable.'));}
+      finally{if(!cancelled)setLoading(false);}
     })();
-  }, [userId,actor.id,guestSession]);
+    return()=>{cancelled=true;};
+  }, [userId,actor.id,guestSession,attempt]);
+
+  if(failure)return <div><AppHeader/><GuestRecovery error={failure} retry={()=>setAttempt(n=>n+1)}/></div>;
 
   if (loading) {
     return (
@@ -211,7 +221,7 @@ const PublicProfile = () => {
                 {(data.recent_songs ?? []).length === 0 ? (
                   <p className="px-6 py-8 text-center text-sm text-muted-foreground">No requests yet.</p>
                 ) : (
-                  data.recent_songs!.map((s) => (
+                  (data.recent_songs??[]).map((s) => (
                     <div key={s.id} className="flex items-center gap-3 px-4 py-3">
                       {s.album_art ? (
                         <img src={s.album_art} alt="" className="h-10 w-10 rounded-lg object-cover" />

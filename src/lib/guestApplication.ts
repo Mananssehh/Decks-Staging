@@ -30,10 +30,17 @@ export class GuestStore{
  completeClaim(){const event=this.current()?.event_id;if(event)this.storage.setItem(this.prefix+'context-event',event);this.storage.removeItem(this.prefix+'claim');this.storage.removeItem(this.prefix+'sessions');this.storage.removeItem(this.prefix+'current');this.storage.removeItem(this.prefix+'bootstrap');}
 }
 export type Invoke=(action:string,payload:Record<string,unknown>)=>Promise<Record<string,unknown>>;
-export async function joinGuest(store:GuestStore,invoke:Invoke,code:string,nickname:string){
+export type GuestLocks=Pick<LockManager,'request'>;
+export async function joinGuest(store:GuestStore,invoke:Invoke,code:string,nickname:string,locks:GuestLocks|undefined=navigator.locks){
+ const join=async()=>{
+ // Without cross-tab exclusion only an already persisted proof may be reused.
+ // Never manufacture a second identity when browser coordination is unavailable.
+ if(!locks&&!/^[a-f0-9]{64}$/.test(store.storage.getItem(store.prefix+'bootstrap')??''))throw new GuestError(503,'guest_coordination_unavailable');
  const r=await invoke('join',{bootstrap:store.bootstrap(),code,nickname});
  const s={...r,code:code.toUpperCase(),nickname} as unknown as GuestSession;
  if(typeof s.token!=='string'||typeof s.principal_id!=='string'||typeof s.event_id!=='string')throw new GuestError(503,'invalid_response');
  store.save(s);store.select(s.event_id);return s;
+ };
+ return locks?locks.request(store.prefix+'join',join):join();
 }
 export function safeHttps(value:string|null|undefined){if(!value)return null;try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:null;}catch{return null;}}

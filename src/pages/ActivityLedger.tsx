@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Trophy, Sparkles, RotateCcw, Award } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {useActor} from '@/hooks/useActor';
 import {actorLedger,guestApplicationEnabled,guestStore} from '@/lib/guestClient';
+import {GuestRecovery} from '@/components/GuestRecovery';
 
 type Filter = "all" | "earned" | "spent" | "refunded";
 
@@ -43,6 +44,9 @@ export default function ActivityLedger() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
+  const [failure,setFailure]=useState<Error|null>(null);
+  const [attempt,setAttempt]=useState(0);
+  const generation=useRef(0);
 
   useEffect(() => {
     if (!authLoading && !actor.id) navigate("/auth", { replace: true });
@@ -54,13 +58,17 @@ export default function ActivityLedger() {
     setPage(0);
     setHasMore(true);
     void loadPage(0, true);
+    const ticket=generation.current;
+    return()=>{generation.current=ticket+1;};
+    // Pagination is driven by identity/filter; loadPage captures that render's scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actor.id, filter]);
+  }, [actor.id, actor.guest?.session?.session_id, filter,attempt]);
 
   const loadPage = async (p: number, replace = false) => {
+    const ticket=++generation.current;setFailure(null);
     const session=actor.guest?.session;
     const event=session?.event_id??guestStore().contextEvent();
-    if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);setRows(prev=>replace?entries.slice(0,PAGE_SIZE):[...prev,...entries.slice(0,PAGE_SIZE)]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}finally{setLoading(false);}return;}
+    if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);if(ticket!==generation.current)return;setRows(prev=>replace?entries.slice(0,PAGE_SIZE):[...prev,...entries.slice(0,PAGE_SIZE)]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}catch(e){if(ticket===generation.current)setFailure(e instanceof Error?e:Error('Activity unavailable.'));}finally{if(ticket===generation.current)setLoading(false);}return;}
     if (!user) return;
     setLoading(true);
     let q = supabase
@@ -75,6 +83,7 @@ export default function ActivityLedger() {
     else if (filter === "refunded") q = q.eq("type", "refunded");
 
     const { data: txs, error } = await q;
+    if(ticket!==generation.current)return;
     if (error) {
       setLoading(false);
       return;
@@ -102,6 +111,7 @@ export default function ActivityLedger() {
       event_name: t.event_id ? eventMap.get(t.event_id)?.name : undefined,
     }));
 
+    if(ticket!==generation.current)return;
     setRows((prev) => (replace ? hydrated : [...prev, ...hydrated]));
     setHasMore(txList.length === PAGE_SIZE);
     setPage(p);
@@ -118,6 +128,8 @@ export default function ActivityLedger() {
     return { earned, spent };
   }, [rows]);
 
+  const error=actor.guest?.error??failure;
+  if(error)return <div><AppHeader/><GuestRecovery error={error} retry={()=>{actor.guest?.retry?.();setAttempt(n=>n+1);}}/></div>;
   if (authLoading || !actor.id || !profile) {
     return (
       <div className="min-h-screen">

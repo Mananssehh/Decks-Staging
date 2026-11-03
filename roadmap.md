@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Guest backend integration (source-only)
+- [x] Frontend refinement: backend Web Lock join exclusion (fresh unsupported browsers fail closed), session-keyed restored snapshots/error recovery, account-bound accurate signup outcome, caught/coalesced socket refresh and Auth-only DJ/admin guards. Full suite: 132 passed, nine unchanged absent-bundle failures; zero-warning lint and automatic typecheck pass. Flag OFF; no SQL/Edge/hosted changes; root owns final build and hosted acceptance.
 - [x] Application source phase: OFF staging actor/provider, persistent proof/explicit account-bound claim, event/profile/ledger/socket paths; verified catalog/tip/consent adapters; 011 manual/URL/lifecycle/helpers. Local 16 application +100 guest +15 bootstrap +39 stream SQL assertions/rollback, 57 financial checks, 25 Edge tests; lint/typecheck pass. Hosted acceptance pending.
 - [x] Stage candidate principals/FK replacement, actor kernels, sessions, snapshots, claim and alias-aware financial boundaries; not install-ready.
 - [x] Stage bounded guest-event API and 8 no-network endpoint tests; retain probe and existing UI unchanged.

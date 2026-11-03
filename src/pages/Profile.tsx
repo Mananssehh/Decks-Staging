@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader2, LogOut, Music2, Pencil, Settings, ThumbsUp, Trophy, Sparkles, Award, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -18,6 +18,7 @@ import { fetchMyProfile } from "@/lib/publicProfiles";
 import { logWarning } from "@/lib/errorLogger";
 import {useActor} from '@/hooks/useActor';
 import {guestInvoke,guestScope,guestApplicationEnabled,guestStore,ownEventSnapshot,actorLedger} from '@/lib/guestClient';
+import {GuestRecovery} from '@/components/GuestRecovery';
 
 interface Stats {
   totalRequests: number;
@@ -60,6 +61,9 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [isPublic, setIsPublic] = useState<boolean>(true);
   const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const [failure,setFailure]=useState<Error|null>(null);
+  const [attempt,setAttempt]=useState(0);
+  const generation=useRef(0);
 
   useEffect(() => {
     if (!authLoading && !actor.id) navigate("/auth", { replace: true });
@@ -70,11 +74,12 @@ const Profile = () => {
   }, [profile?.nickname]);
 
   useEffect(() => {
-    if(guestSession&&loadGuest){void loadGuest(guestSession).then(s=>{const reqs=s.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs(s.ledger.filter(t=>t.amount>0) as TxRow[]);setIsPublic(s.profile.is_public===true);setLoading(false);});return;}
+    const ticket=++generation.current;setFailure(null);setLoading(true);
+    if(guestSession){return()=>{generation.current++;};}
     if (!user) return;
     (async () => {
       const event=guestApplicationEnabled?guestStore().contextEvent():null;
-      if(event&&!isDJ){try{const s=await ownEventSnapshot(event);const reqs=s.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs((await actorLedger(event,0,'earned')) as TxRow[]);setIsPublic(s.profile.is_public===true);}finally{setLoading(false);}return;}
+      if(event&&!isDJ){try{const s=await ownEventSnapshot(event);const entries=await actorLedger(event,0,'earned');if(ticket!==generation.current)return;const reqs=s.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs(entries as TxRow[]);setIsPublic(s.profile.is_public===true);}catch(e){if(ticket===generation.current)setFailure(e instanceof Error?e:Error('Profile unavailable.'));}finally{if(ticket===generation.current)setLoading(false);}return;}
       const [reqRes, txRes, evRes, profRes] = await Promise.all([
         supabase.from("song_requests").select("upvotes").eq("requested_by", user.id),
         supabase.from("points_transactions").select("id, amount, type, reason, created_at")
@@ -86,6 +91,7 @@ const Profile = () => {
         fetchMyProfile("Profile"),
       ]);
 
+      if(ticket!==generation.current)return;
       const reqs = reqRes.data ?? [];
       setStats({
         totalRequests: reqs.length,
@@ -97,8 +103,12 @@ const Profile = () => {
       if (profRes) setIsPublic(profRes.is_public === true);
       else setIsPublic(false);
       setLoading(false);
-    })();
-  }, [user, isDJ,actor.id,guestSession,loadGuest]);
+    })().catch(e=>{if(ticket===generation.current){setFailure(e instanceof Error?e:Error('Profile unavailable.'));setLoading(false);}});
+    return()=>{generation.current=ticket+1;};
+  }, [user, isDJ,actor.id,guestSession,attempt]);
+
+  const guestSnapshot=actor.guest?.snapshot;
+  useEffect(()=>{if(!guestSnapshot)return;const reqs=guestSnapshot.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs(guestSnapshot.ledger.filter(t=>t.amount>0) as TxRow[]);setIsPublic(guestSnapshot.profile.is_public===true);setLoading(false);},[guestSnapshot]);
 
   const togglePrivacy = async (next: boolean) => {
     if(actor.guest?.session){setSavingPrivacy(true);try{await guestInvoke('profile',{...guestScope(actor.guest.session),is_public:next});await actor.guest.load(actor.guest.session);setIsPublic(next);}catch(e){toast.error(e instanceof Error?e.message:'Could not update profile');}finally{setSavingPrivacy(false);}return;}
@@ -142,6 +152,8 @@ const Profile = () => {
     navigate("/");
   };
 
+  const error=actor.guest?.error??failure;
+  if(error)return <div><AppHeader/><GuestRecovery error={error} retry={()=>{actor.guest?.retry?.();setAttempt(n=>n+1);}}/></div>;
   if (authLoading || !actor.id || !profile) {
     return (
       <div className="min-h-screen">

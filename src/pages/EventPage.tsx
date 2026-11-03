@@ -166,7 +166,7 @@ const EventPage = () => {
     const activeLocks=voteLocks.current;
     const sync=createEventRefresh(async()=>{
       const state=guestRef.current,s=guestStore().byCode(code);if(!state||!s)throw Error('Guest session missing');
-      try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return data;}catch(e){if(e instanceof GuestError){setLoading(false);setGuestFailure(e.message);}throw e;}
+      try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return data;}catch(e){if(!cancelled&&e instanceof GuestError){setLoading(false);setGuestFailure(e.message);if(e.status===401){disposeStream?.();unlisten?.();}}throw e;}
     },s=>{setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
     refreshRef.current=sync;
     void(async()=>{try{
@@ -174,8 +174,8 @@ const EventPage = () => {
       if(!s){const state=guestRef.current;if(!state)throw Error('Guest session missing');s=await state.join(code,navNickname??guestStore().current()?.nickname??'Guest');}
       if(cancelled)return;guestRef.current?.select(s);
       await sync.refresh();if(cancelled)return;
-      disposeStream=connectGuestStream(s,()=>void sync.refresh(),()=>{setGuestFailure('This event session is unavailable.');},`${import.meta.env.VITE_SUPABASE_URL.replace('https:','wss:')}/functions/v1/guest-event-stream`);
-      unlisten=listenEventRefresh(s.event_id,s.principal_id,()=>void sync.refresh());
+      disposeStream=connectGuestStream(s,()=>sync.refresh(),()=>{setGuestFailure('This event session is unavailable.');},`${import.meta.env.VITE_SUPABASE_URL.replace('https:','wss:')}/functions/v1/guest-event-stream`);
+      unlisten=listenEventRefresh(s.event_id,s.principal_id,()=>{void sync.refresh().catch(()=>{/* typed failure is displayed by sync */});});
     }catch(e){if(!cancelled){setLoading(false);setGuestFailure(e instanceof GuestError?e.message:'This event could not load. Please retry later.');}}})();
     return()=>{cancelled=true;sync.dispose();disposeStream?.();unlisten?.();activeLocks.clear();if(refreshRef.current===sync)refreshRef.current=null;};
   },[isGuest,code,authLoading,navNickname]);
