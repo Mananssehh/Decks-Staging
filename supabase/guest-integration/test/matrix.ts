@@ -120,6 +120,8 @@ try{
  rejected=false;try{await db`delete from public.profiles where id=${g.principal_id}`;}catch{rejected=true;}
  eq(rejected,true,'claimed source profile deletion restricted by claim history');
  eq((await db`select count(*)::int n from auth.users where id=${target}`)[0].n,1,'failed claimed deletion retains real Auth identity');
+ rejected=false;try{await service(q=>q`select public.prepare_registered_profile_deletion(${target})`);}catch{rejected=true;}
+ eq(rejected,true,'protected retirement also refuses claimed alias references');
  // Deterministic interleaving: exclusive claim gate holds writers before tuples.
  await db`update public.events set requests_status='live' where id=${event}`;
  const contender=joins[80];

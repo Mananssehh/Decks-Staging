@@ -20,6 +20,12 @@ ALTER TABLE public.votes ADD CONSTRAINT votes_user_id_fkey FOREIGN KEY(user_id) 
 ALTER TABLE public.dj_tips ADD CONSTRAINT dj_tips_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.guest_funnel_events ADD CONSTRAINT guest_funnel_events_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 SQL
+# Explicit missing-profile preflight: reject, never invent a profile for an Auth orphan.
+psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE orphan_preflight TEMPLATE decks_repair'
+PGDATABASE=orphan_preflight psql -Xq -v ON_ERROR_STOP=1 -c "ALTER TABLE auth.users DISABLE TRIGGER USER; INSERT INTO auth.users(id) VALUES('00000000-0000-4000-8000-000000000777'); ALTER TABLE auth.users ENABLE TRIGGER USER"
+if PGDATABASE=orphan_preflight psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/001_principals.sql" >"$WORK/orphan.log" 2>&1; then echo FAIL orphan accepted; exit 1; fi
+grep -q 'Auth without profile' "$WORK/orphan.log"
+echo 'PASS orphan preflight refuses installation without invented data'
 psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-8]_*.sql) >"$WORK/install.log" 2>&1 || { cat "$WORK/install.log"; exit 1; }
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/matrix.ts"
 # Containment must preserve data; destructive rollback must refuse.
