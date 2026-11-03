@@ -877,7 +877,7 @@ function RequestPicker({ onPick, existing, allowExplicit = true,guestScope }: { 
       }
     })();
     return () => { cancelled = true; };
-  }, [debounced]);
+  }, [debounced,guestScope]);
 
   // Only an active request for the exact same provider track counts as a
   // duplicate — tapping it supports the existing request instead.

@@ -87,7 +87,7 @@ const PublicProfile = () => {
       if (!error) setData(res as unknown as PublicProfileData);
       setLoading(false);
     })();
-  }, [userId,actor.id]);
+  }, [userId,actor.id,actor.guest?.session]);
 
   if (loading) {
     return (

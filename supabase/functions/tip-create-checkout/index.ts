@@ -18,7 +18,7 @@ Deno.serve(async req=>{
   if(!actor.guest&&url==='https://ldxgejbzmpvsvozqmpfe.supabase.co'){const {data}=await db.rpc('application_actor_aliases',{_actor:actor.id});if(Array.isArray(data))aliases=data;}
   if(!body||typeof body.event_id!=='string'||! /^[0-9a-f-]{36}$/i.test(body.event_id))return json({error_code:'INVALID_REQUEST'},400);
   if(body.check_only===true){
-   const result=await checkReadiness(actor.id,body.event_id,body.amount_cents??100,{
+   const result=await checkReadiness(actor.id,body.event_id,typeof body.amount_cents==='number'?body.amount_cents:100,{
     db,origin:Deno.env.get('APP_ORIGIN'),backendUrl:url,mode:getStripeMode(),now:Date.now,
     event:async()=>{const {data,error}=await db.from('events').select('dj_id,is_active,ended_at,requests_status').eq('id',body.event_id).maybeSingle();if(error)throw error;return data;},
     member:async()=>{const {data,error}=await db.from('event_participants').select('id').eq('event_id',body.event_id).in('user_id',aliases).limit(1).maybeSingle();if(error)throw error;return !!data;},

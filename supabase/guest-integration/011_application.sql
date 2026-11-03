@@ -311,3 +311,39 @@ END $$;
 CREATE FUNCTION public.application_actor_aliases(_actor uuid) RETURNS uuid[] LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$ SELECT CASE WHEN auth.role()='service_role' THEN guest_runtime.aliases(_actor) ELSE ARRAY[]::uuid[] END $$;
 REVOKE ALL ON FUNCTION public.application_actor_aliases(uuid) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.application_actor_aliases(uuid) TO service_role;
+DO $$ DECLARE d text; p text; field text; BEGIN
+ d:=pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure);p:=d;
+ FOREACH field IN ARRAY ARRAY['sr.external_url','sr.preview_url','sr.album_art_url','sr.album_art','n.album_art','n.apple_url','n.spotify_url'] LOOP p:=replace(p,field,'guest_runtime.safe_url('||field||')'); END LOOP;
+ p:=replace(p,'''is_mine'',','''profile_linkable'',coalesce((SELECT is_public FROM public.profiles WHERE id=guest_runtime.actor(sr.requested_by)),false),''is_mine'',');
+ IF p=d THEN RAISE EXCEPTION 'Snapshot source drift'; END IF; EXECUTE p;
+END $$;
+CREATE FUNCTION public.guest_application_actor(_event_id uuid,_token text,_operation text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE u uuid; BEGIN
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RETURN guest_runtime.fail(403,'forbidden'); END IF;
+ IF _operation NOT IN ('catalog','tip','consent','public_profile') THEN RETURN guest_runtime.fail(400,'invalid_operation'); END IF;
+ u:=guest_runtime.validate_session(_event_id,_token,_operation='consent');
+ IF u IS NULL THEN RETURN guest_runtime.fail(401,'invalid_session'); END IF;
+ IF NOT guest_runtime.budget(u,CASE WHEN _operation='consent' THEN 'mutation' ELSE 'read' END) THEN RETURN guest_runtime.fail(429,'guest_rate_limited'); END IF;
+ IF _operation='consent' THEN INSERT INTO public.purchase_consents(user_id,version) VALUES(u,'v2-tips-2026-06-12') ON CONFLICT(user_id,version) DO NOTHING; END IF;
+ RETURN jsonb_build_object('ok',true,'actor_id',u,'alias_ids',guest_runtime.aliases(u),'event_id',_event_id,'consent_version','v2-tips-2026-06-12');
+END $$;
+REVOKE ALL ON FUNCTION public.guest_application_actor(uuid,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.guest_application_actor(uuid,text,text) TO service_role;
+CREATE FUNCTION public.guest_event_public_profile(_event_id uuid,_token text,_target uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE r jsonb; p public.profiles; BEGIN
+ r:=public.guest_application_actor(_event_id,_token,'public_profile');IF r->>'ok'<>'true' THEN RETURN r; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.event_participants WHERE event_id=_event_id AND user_id=ANY(guest_runtime.aliases(_target))) AND NOT EXISTS(SELECT 1 FROM public.song_requests WHERE event_id=_event_id AND requested_by=ANY(guest_runtime.aliases(_target))) THEN RETURN guest_runtime.fail(403,'unavailable'); END IF;
+ SELECT * INTO p FROM public.profiles WHERE id=guest_runtime.actor(_target);
+ IF p.id IS NULL OR NOT p.is_public THEN RETURN jsonb_build_object('ok',true,'profile',jsonb_build_object('found',false,'is_public',false)); END IF;
+ RETURN jsonb_build_object('ok',true,'profile',jsonb_build_object('found',true,'is_public',true,'user_id',p.id,'nickname',p.nickname,'is_dj',false,'points',p.points,'total_requests',(SELECT count(*) FROM public.song_requests WHERE event_id=_event_id AND requested_by=ANY(guest_runtime.aliases(_target))),'total_upvotes',(SELECT coalesce(sum(upvotes),0) FROM public.song_requests WHERE event_id=_event_id AND requested_by=ANY(guest_runtime.aliases(_target)))));
+END $$;
+REVOKE ALL ON FUNCTION public.guest_event_public_profile(uuid,text,uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.guest_event_public_profile(uuid,text,uuid) TO service_role;
+CREATE FUNCTION public.guest_tip_summary(_event_id uuid,_token text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE r jsonb; BEGIN
+ r:=public.guest_application_actor(_event_id,_token,'tip');IF r->>'ok'<>'true' THEN RETURN r; END IF;
+ RETURN jsonb_build_object('ok',true,'totals',coalesce((SELECT jsonb_agg(jsonb_build_object('song_request_id',song_request_id,'amount_cents',amount,'count',n)) FROM (SELECT song_request_id,sum(gross_amount_cents) amount,count(*) n FROM public.dj_tips WHERE event_id=_event_id AND status='succeeded' GROUP BY song_request_id) t),'[]'::jsonb));
+END $$;
+REVOKE ALL ON FUNCTION public.guest_tip_summary(uuid,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.guest_tip_summary(uuid,text) TO service_role;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA guest_runtime FROM PUBLIC,anon,authenticated,service_role;

@@ -86,7 +86,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
     return () => {
       cancelled = true;
     };
-  }, [open, eventId]);
+  }, [open, eventId,guest]);
 
   const customAmount = Math.max(0, parseInt(custom || "0", 10) || 0);
   const amountDollars = custom ? customAmount : selected;

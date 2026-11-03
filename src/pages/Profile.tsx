@@ -95,7 +95,7 @@ const Profile = () => {
       else setIsPublic(false);
       setLoading(false);
     })();
-  }, [user, isDJ,actor.id]);
+  }, [user, isDJ,actor.id,actor.guest]);
 
   const togglePrivacy = async (next: boolean) => {
     if(actor.guest?.session){setSavingPrivacy(true);try{await guestInvoke('profile',{...guestScope(actor.guest.session),is_public:next});await actor.guest.load(actor.guest.session);setIsPublic(next);}catch(e){toast.error(e instanceof Error?e.message:'Could not update profile');}finally{setSavingPrivacy(false);}return;}
