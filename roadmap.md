@@ -1,5 +1,11 @@
 # Roadmap
 
+## Authorized staging integration deployment
+- [x] Harden bounded JSON/UTF-8 validation: 46 no-network Edge tests, four entrypoint checks, zero-warning lint; frontend 132 passed/nine unchanged missing-bundle failures.
+- [x] Regenerate actual hosted public types; deploy only guest-event, guest-event-stream, then music-search, tip-create-checkout with four explicit gateway overrides.
+- [x] Read-only before/after disabled contract and invalid-proof HTTP checks; live UTF-8/oversize rejection and one disabled socket verified. OFF frontend and DB markers unchanged.
+- [ ] Root-owned enablement, valid-proof catalog/readiness and 100-WS/browser acceptance; blocked on independent root enablement, no guest/Auth identity created here.
+
 ## Guest backend integration (source-only)
 - [x] Frontend refinement: backend Web Lock join exclusion (fresh unsupported browsers fail closed), session-keyed restored snapshots/error recovery, account-bound accurate signup outcome, caught/coalesced socket refresh and Auth-only DJ/admin guards. Full suite: 132 passed, nine unchanged absent-bundle failures; zero-warning lint and automatic typecheck pass. Flag OFF; no SQL/Edge/hosted changes; root owns final build and hosted acceptance.
 - [x] Application source phase: OFF staging actor/provider, persistent proof/explicit account-bound claim, event/profile/ledger/socket paths; verified catalog/tip/consent adapters; 011 manual/URL/lifecycle/helpers. Local 16 application +100 guest +15 bootstrap +39 stream SQL assertions/rollback, 57 financial checks, 25 Edge tests; lint/typecheck pass. Hosted acceptance pending.
@@ -10,9 +16,9 @@
 - [x] Protected profiles-to-Auth lifecycle, orphan refusal, registered retirement and guest/claimed deletion tests; 72 local assertions plus rollback; existing 57 payment assertions pass.
 - [x] Legacy writer/claim entry and statement exclusion reviewed; concurrent DJ/ban/profile/award/financial/claim checks passed.
 - [x] Readiness source: targeted legacy-DJ repair, shared reads, safe DTO/authenticated alias snapshot, overlap compensation; 100 guest +15 repair +57 financial +8 endpoint assertions, rollback/lint.
-- [ ] Independent install review: reviewed bootstrap plus 001..008 in one transaction and actual catalog checks; hosted operations unauthorized.
+- [x] Root reports independent bootstrap+001..008+010+011 installation in one transaction with disabled markers and actual catalog/rolled-back assertions; SQL not reapplied here.
 - [x] Stream source: 010 revision overlay, private token/batch RPCs, native receive-only socket/shared hubs; 39 SQL +13 transport +8 endpoint tests, 100 guest +15 repair +57 financial regressions and rollback/lint; 001..008 byte-identical.
-- [ ] Independent core/010/011 installation, endpoint deployment and flagged browser/100-socket acceptance; awaiting root review/authorization, no anonymous channel policy or cron.
+- [x] Authorized four-endpoint staging deployment completed; independent root owns remaining enablement/flagged browser/100-socket acceptance, no anonymous channel policy or cron.
 
 ## Core staging audit repair
 - [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.

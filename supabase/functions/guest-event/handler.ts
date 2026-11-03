@@ -1,4 +1,5 @@
-// Source-only staging endpoint. Tokens never reach URLs, logs or analytics.
+// Staging endpoint. Tokens never reach URLs, logs or analytics.
+import {boundedBody,ActorError} from '../_shared/application-actor.ts';
 export const CONTRACT = 'guest-integration-v1';
 const HOST = 'ldxgejbzmpvsvozqmpfe.supabase.co';
 const actions = ['contract','join','resume','snapshot','request','vote','remove','profile','ledger','report','funnel','consent','public_profile','tip_summary'] as const;
@@ -12,13 +13,6 @@ export function staging(url?: string) { try { const u=new URL(url ?? ''); return
 const response=(status: number,body: unknown)=>new Response(JSON.stringify(body),{status,headers});
 const fail=(status: number,error: string)=>response(status,{ok:false,status,error});
 const object=(v: unknown): v is Record<string,unknown> => !!v && typeof v==='object' && !Array.isArray(v);
-export async function bounded(req: Request): Promise<string|null> {
- const reader=req.body?.getReader(); if(!reader)return '';
- const chunks: Uint8Array[]=[]; let size=0;
- try {for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>8192){await reader.cancel();return null;}chunks.push(value);}
- const bytes=new Uint8Array(size);let i=0;for(const c of chunks){bytes.set(c,i);i+=c.byteLength;}return new TextDecoder('utf-8',{fatal:true}).decode(bytes);
- }catch{await reader.cancel().catch(()=>{});return null;}finally{reader.releaseLock();}
-}
 export function validate(action: Action,p: Record<string,unknown>): Record<string,unknown>|null {
  const out: Record<string,unknown>={};
  const text=(key:string,max:number,required=false,pattern?:RegExp)=>{const v=p[key];if(v===undefined)return !required;if(typeof v!=='string'||v.length>max||(pattern&&!pattern.test(v)))return false;out[key]=v;return true;};
@@ -44,8 +38,7 @@ export function createHandler(deps: Dependencies){return async(req:Request):Prom
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
  if(!staging(deps.url)||!deps.rpc)return fail(503,'guest_unavailable');
  if(req.method!=='POST')return fail(405,'method_not_allowed');
- const raw=await bounded(req);if(raw===null)return fail(413,'payload_too_large');
- let b:unknown;try{b=JSON.parse(raw);}catch{return fail(400,'invalid_json');}
+ let b:unknown;try{b=await boundedBody(req);}catch(e){return e instanceof ActorError?fail(e.status,e.status===413?'payload_too_large':'invalid_json'):fail(503,'upstream_unavailable');}
  if(!object(b)||typeof b.action!=='string'||!(actions as readonly string[]).includes(b.action)||!object(b.payload??{}))return fail(400,'invalid_action');
  const action=b.action as Action,p=validate(action,(b.payload??{}) as Record<string,unknown>);if(!p)return fail(400,'invalid_input');
  try{const r=await deps.rpc(action,p);if(r.error||!object(r.data))return fail(503,'upstream_unavailable');

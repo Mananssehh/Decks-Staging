@@ -373,7 +373,7 @@ Deno.serve(async (req) => {
     const actor=await resolveApplicationActor(req.headers,body,'catalog',{backendUrl,auth:async token=>{const {data,error}=await userClient.auth.getUser(token);return error?null:data.user?.id??null;},guest:async(event,token,operation)=>{const {data,error}=await admin.rpc('guest_application_actor',{_event_id:event,_token:token,_operation:operation});return error?{ok:false,status:503}:data;}});
     userId=actor.id;guestActor=actor.guest;
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof ActorError&&e.status===401?'Unauthorized':'Service unavailable' }), {
+    return new Response(JSON.stringify({ error: e instanceof ActorError?e.code:'SERVICE_FAILED' }), {
       status: e instanceof ActorError?e.status:503,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

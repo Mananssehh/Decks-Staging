@@ -1,7 +1,11 @@
 # Application source review
 
-Status: source only, staging flag OFF. No hosted SQL/deployment, Auth creation,
-provider calls, publication or secrets/quotas changes. Reviewed 001..010 unchanged.
+Status (2026-11-03): root independently installed targeted bootstrap+001..008+010+011
+in one transaction, disabled. Four authorized staging endpoints are deployed;
+frontend flag remains OFF. This turn did not execute SQL, create Auth/guest identities,
+call providers, publish, or change secrets/quotas. Reviewed SQL remains unchanged.
+
+Deployment evidence: [STAGING_DEPLOYMENT.md](STAGING_DEPLOYMENT.md).
 
 Install order: targeted bootstrap, preflight, 001..008, 010, 011, 009 catalog and
 011 postcondition assertions; single independent transaction, markers disabled.
@@ -22,8 +26,8 @@ tests, Deno checks, zero-warning eslint, automatic typecheck build OK.
 Frontend full suite: **109 passed, 9 failed**; nine production-bundle
 failures are missing compiled assets, not skipped/weakened; no manual build.
 
-Remaining gates: independent schema/ACL/actual trigger review, installed disabled
-contracts, deployed endpoint acceptance, real email-confirm/PKCE claim and actual
+Remaining gates: root-owned enablement/valid-guest endpoint acceptance,
+real email-confirm/PKCE claim and actual
 two-tab event lifecycle tests; 100 integrated guests/sockets/reconnects and provider
 configuration remain root-owned acceptance, not claimed here. SQL test fixture is
 not a substitute for inspecting managed hosted report/consent trigger definitions.
