@@ -1,7 +1,7 @@
 import {authFrame,frame,validAuth,type Backend,type Peer,type Clock,clock as realClock} from './protocol.ts';
 import {Hubs} from './hubs.ts';
 export class Connection{
- private state:'waiting'|'authenticating'|'ready'|'closed'='waiting';private timer:unknown;private remove?:()=>void;private pingAt=0;
+ private state:'waiting'|'authenticating'|'ready'|'closed'='waiting';private timer:unknown;private remove?:()=>void;private pingAt=-Infinity;
  constructor(private peer:Peer,private backend:Backend,private hubs:Hubs,private clock:Clock=realClock){this.timer=clock.later(()=>this.close(1008,'auth_timeout'),5000);}
  private close(code:number,reason:string){this.cleanup();try{this.peer.close(code,reason);}catch{/* closed */}}
  cleanup(){this.state='closed';this.clock.cancel(this.timer);this.remove?.();this.remove=undefined;}
@@ -10,6 +10,7 @@ export class Connection{
   if(this.state==='ready'){
    const x=frame(data);if(!x||Object.keys(x).length!==1||!['ping','pong'].includes(String(x.type)))return this.close(1008,'receive_only');
    if(this.clock.now()-this.pingAt<1000)return this.close(1008,'ping_rate');this.pingAt=this.clock.now();this.hubs.touch(this.peer);
+   if(this.peer.bufferedAmount>65536)return this.close(1013,'slow_client');
    if(x.type==='ping')try{this.peer.send('{"type":"pong"}');}catch{this.close(1011,'transport_unavailable');}return;
   }
   if(this.state!=='waiting')return this.close(1008,'unexpected_frame');
