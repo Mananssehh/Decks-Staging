@@ -40,7 +40,7 @@ it('temporary public-profile failure is not falsely reported missing and can rec
 });
 it('ledger filter race discards the old response',async()=>{
  let resolveOld=(rows:GuestSnapshot['ledger'])=>{};m.ledger.mockImplementationOnce(()=>new Promise<GuestSnapshot['ledger']>(r=>{resolveOld=r;})).mockResolvedValue([{id:'new',amount:-1,type:'spent',reason:'Current filter',created_at:'2026-11-03T01:00:00Z',event_id:null,song_request_id:null}]);
- mount(<ActivityLedger/>);await screen.findByRole('tab',{name:'Spent'});fireEvent.click(screen.getByRole('tab',{name:'Spent'}));await screen.findByText('Current filter');await act(async()=>resolveOld([{id:'old',amount:3,type:'earned',reason:'Stale response',created_at:'2026-11-03T01:00:00Z',event_id:null,song_request_id:null}]));expect(screen.queryByText('Stale response')).toBeNull();
+ mount(<ActivityLedger/>);await screen.findByRole('tab',{name:'Spent'});fireEvent.mouseDown(screen.getByRole('tab',{name:'Spent'}),{button:0,ctrlKey:false});await screen.findByText('Current filter');await act(async()=>resolveOld([{id:'old',amount:3,type:'earned',reason:'Stale response',created_at:'2026-11-03T01:00:00Z',event_id:null,song_request_id:null}]));expect(screen.queryByText('Stale response')).toBeNull();
 });
 function Selected(){const guest=useGuest();return <><span>{guest?.snapshot?.event.id??'empty'}</span><button onClick={()=>guest?.select(session('second'))}>Select second</button></>;}
 it('selection and Auth changes cancel stale snapshot application and never reuse previous event profile',async()=>{
