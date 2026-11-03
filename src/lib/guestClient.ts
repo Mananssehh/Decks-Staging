@@ -23,3 +23,4 @@ export async function claimPendingGuest(){
  store.completeClaim();window.dispatchEvent(new Event('decks:guest-change'));return true;
 }
 export async function ownAliases(){if(!guestApplicationEnabled)return [];const r=await applicationRpc('get_my_principal_aliases');return Array.isArray(r.data)?r.data as string[]:[];}
+export async function actorLedger(event:string,offset:number,filter:string,session?:GuestSession){if(session)return (await guestInvoke('ledger',{...guestScope(session),offset,filter})).rows as GuestSnapshot['ledger'];const r=await applicationRpc('application_own_ledger',{_event_id:event,_offset:offset,_filter:filter});if(r.error)throw Error('Ledger unavailable');const p=r.data as {ok:boolean;rows:GuestSnapshot['ledger']};if(!p.ok)throw Error('Ledger unavailable');return p.rows;}

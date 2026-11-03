@@ -347,4 +347,16 @@ DECLARE r jsonb; BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.guest_tip_summary(uuid,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.guest_tip_summary(uuid,text) TO service_role;
+CREATE FUNCTION public.application_own_ledger(_event_id uuid,_token text DEFAULT NULL,_offset integer DEFAULT 0,_filter text DEFAULT 'all') RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE u uuid; rows jsonb; BEGIN
+ IF _offset<0 OR _offset>100000 OR _filter NOT IN ('all','earned','spent','refunded') THEN RETURN guest_runtime.fail(400,'invalid_input'); END IF;
+ IF auth.role()='service_role' THEN u:=guest_runtime.validate_session(_event_id,_token,false);
+ ELSE u:=guest_runtime.actor_lock(auth.uid());IF u IS NULL OR NOT EXISTS(SELECT 1 FROM public.events WHERE id=_event_id AND (dj_id=u OR guest_runtime.member(u,_event_id))) THEN RETURN guest_runtime.fail(403,'unavailable'); END IF; END IF;
+ IF u IS NULL THEN RETURN guest_runtime.fail(401,'invalid_session'); END IF;
+ IF auth.role()='service_role' AND NOT guest_runtime.budget(u,'read') THEN RETURN guest_runtime.fail(429,'guest_rate_limited'); END IF;
+ SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.created_at DESC,t.id),'[]'::jsonb) INTO rows FROM (SELECT t.id,t.amount,t.type,t.reason,t.created_at,t.event_id,t.song_request_id FROM public.points_transactions t WHERE t.user_id=ANY(guest_runtime.aliases(u)) AND (_filter='all' OR _filter='earned' AND t.amount>0 AND t.type<>'refunded' OR _filter='spent' AND t.amount<0 OR _filter='refunded' AND t.type='refunded') ORDER BY t.created_at DESC,t.id LIMIT 51 OFFSET _offset) t;
+ RETURN jsonb_build_object('ok',true,'rows',rows);
+END $$;
+REVOKE ALL ON FUNCTION public.application_own_ledger(uuid,text,integer,text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.application_own_ledger(uuid,text,integer,text) TO authenticated,service_role;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA guest_runtime FROM PUBLIC,anon,authenticated,service_role;

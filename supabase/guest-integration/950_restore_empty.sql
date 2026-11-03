@@ -26,6 +26,7 @@ DROP FUNCTION IF EXISTS public.guest_application_actor(uuid,text,text);
 DROP FUNCTION IF EXISTS public.guest_event_public_profile(uuid,text,uuid);
 DROP FUNCTION IF EXISTS public.guest_tip_summary(uuid,text);
 DROP FUNCTION IF EXISTS public.application_actor_aliases(uuid);
+DROP FUNCTION IF EXISTS public.application_own_ledger(uuid,text,integer,text);
 DROP SCHEMA guest_runtime CASCADE;
 ALTER TABLE public.profiles DROP CONSTRAINT guest_profile_identity;
 ALTER TABLE public.profiles DROP COLUMN auth_user_id;
