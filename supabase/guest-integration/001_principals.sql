@@ -106,7 +106,7 @@ DECLARE u uuid; r public.song_requests; eid uuid; earned integer; spent integer;
  SELECT event_id INTO eid FROM public.song_requests WHERE id=_request;
  PERFORM 1 FROM public.events WHERE id=eid FOR UPDATE;
  SELECT * INTO r FROM public.song_requests WHERE id=_request FOR UPDATE;
- IF u IS NULL OR r.id IS NULL OR r.requested_by<>ALL(guest_runtime.aliases(u)) OR NOT guest_runtime.member(u,eid) OR r.status<>'pending' THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
+ IF u IS NULL OR r.id IS NULL OR r.requested_by IS NULL OR r.requested_by<>ALL(guest_runtime.aliases(u)) OR NOT guest_runtime.member(u,eid) OR r.status<>'pending' THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
  SELECT coalesce(sum(amount) FILTER(WHERE amount>0),0),coalesce(-sum(amount) FILTER(WHERE amount<0 AND type='spent'),0) INTO earned,spent FROM public.points_transactions WHERE song_request_id=_request AND user_id=ANY(guest_runtime.aliases(u));
  SELECT points INTO bal FROM public.profiles WHERE id=u FOR UPDATE;
  -- Refuse an unexplained historical balance instead of clamping and breaking reconciliation.

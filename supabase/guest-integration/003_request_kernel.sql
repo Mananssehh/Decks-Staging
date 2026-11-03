@@ -18,7 +18,7 @@ declare
   _nickname text := 'Guest';
   _attempt int := 0;
 begin
-  PERFORM guest_runtime.actor_lock(_actor);
+  _uid:=guest_runtime.actor_lock(_actor);
   if _uid is null then
     return query select 'unavailable'::text, null::uuid;
     return;

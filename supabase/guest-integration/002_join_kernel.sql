@@ -7,7 +7,7 @@ DECLARE
  eb integer := 300; gb integer := 10; cfg jsonb; required integer := 4;
  anon_user boolean; ts timestamptz;
 BEGIN
- PERFORM guest_runtime.actor_lock(_actor);
+ u:=guest_runtime.actor_lock(_actor);
  IF u IS NULL THEN RETURN denied; END IF;
  -- Guest mutex serializes attempts across different events; never acquired after an event lock.
  PERFORM pg_advisory_xact_lock(hashtextextended('repair-admission-user:'||u::text,0));
