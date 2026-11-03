@@ -911,6 +911,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auth_user_id: string | null
           created_at: string
           id: string
           is_premium: boolean
@@ -920,6 +921,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auth_user_id?: string | null
           created_at?: string
           id: string
           is_premium?: boolean
@@ -929,6 +931,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auth_user_id?: string | null
           created_at?: string
           id?: string
           is_premium?: boolean
@@ -1364,6 +1367,16 @@ export type Database = {
       }
     }
     Functions: {
+      application_actor_aliases: { Args: { _actor: string }; Returns: string[] }
+      application_own_ledger: {
+        Args: {
+          _event_id: string
+          _filter?: string
+          _offset?: number
+          _token?: string
+        }
+        Returns: Json
+      }
       award_points: {
         Args: {
           _amount: number
@@ -1419,6 +1432,10 @@ export type Database = {
         Returns: undefined
       }
       claim_dj_role: { Args: never; Returns: undefined }
+      claim_guest_principal: {
+        Args: { _bootstrap: string; _event_id?: string; _token?: string }
+        Returns: Json
+      }
       create_event: {
         Args: {
           _allow_explicit?: boolean
@@ -1507,6 +1524,8 @@ export type Database = {
       get_guest_event_count: { Args: never; Returns: number }
       get_guest_join_limits: { Args: never; Returns: Json }
       get_ingest_token: { Args: { _event_id: string }; Returns: string }
+      get_my_event_snapshot: { Args: { _event_id: string }; Returns: Json }
+      get_my_principal_aliases: { Args: never; Returns: string[] }
       get_my_profile: { Args: never; Returns: Json }
       get_nickname: { Args: { _user_id: string }; Returns: string }
       get_public_nicknames: {
@@ -1517,6 +1536,34 @@ export type Database = {
         }[]
       }
       get_public_profile: { Args: { _user_id: string }; Returns: Json }
+      guest_application_actor: {
+        Args: { _event_id: string; _operation: string; _token: string }
+        Returns: Json
+      }
+      guest_event_api: {
+        Args: { _action: string; _payload: Json }
+        Returns: Json
+      }
+      guest_event_public_profile: {
+        Args: { _event_id: string; _target: string; _token: string }
+        Returns: Json
+      }
+      guest_stream_auth: {
+        Args: { _event_id: string; _token: string }
+        Returns: Json
+      }
+      guest_stream_poll: {
+        Args: { _event_id: string; _session_ids: string[] }
+        Returns: Json
+      }
+      guest_tip_summary: {
+        Args: { _event_id: string; _token: string }
+        Returns: Json
+      }
+      guest_validate_actor: {
+        Args: { _event_id: string; _token: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1540,6 +1587,10 @@ export type Database = {
         Returns: number
       }
       normalize_text: { Args: { _t: string }; Returns: string }
+      prepare_registered_profile_deletion: {
+        Args: { _id: string }
+        Returns: undefined
+      }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {
