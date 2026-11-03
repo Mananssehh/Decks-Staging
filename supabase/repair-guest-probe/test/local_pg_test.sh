@@ -62,7 +62,7 @@ grep -q "deadlock" "$D/log" && { echo FAIL deadlock in log; exit 1; }
 $P -c "DELETE FROM repair_guest_probe.join_failures"
 FE=$($P -c "SELECT event_id FROM repair_guest_probe.operator_create_event('fail', interval '1 hour', 10)")
 for i in $(seq 1 250); do
-  if [ $((i % 2)) = 0 ]; then E="$FE"; else E=$(cat /proc/sys/kernel/random/uuid); fi
+  if [ $((i % 2)) = 0 ]; then E="$FE"; else E=$(python3 -c "import uuid;print(uuid.uuid4())"); fi
   $P -c "SET ROLE service_role; SELECT public.repair_guest_probe_rpc('join', jsonb_build_object('event_id','$E','code','wrong','nickname','f'))->>'status'" &
 done | sort | uniq -c > "$D/fails"; wait
 grep -q "200 404" "$D/fails" && grep -q "50 429" "$D/fails" || { cat "$D/fails"; echo FAIL failure bucket; exit 1; }
