@@ -72,6 +72,9 @@ Edge returns 503 `probe_unavailable` unless `SUPABASE_URL` host is exactly `ldxg
 6. Remove: delete the Edge function, then run `900_disable_and_drop.sql` (disables first, refuses to drop a
    `public.repair_guest_probe_rpc` not carrying the probe comment, then drops only the RPC and schema),
    then remove the `[functions.guest-token-probe]` block from `config.toml`.
+   The drop step is idempotent: it looks the function up with `to_regprocedure` (NULL when absent) rather than a
+   literal `'<sig>'::regprocedure` cast, so re-running teardown after the objects are gone is a safe no-op while a
+   same-signature function carrying a different comment is still refused.
 
 ## Tests (no network, no hosted DB)
 - `bash supabase/repair-guest-probe/test/local_pg_test.sh` — throwaway local Postgres: install, ACL,
@@ -79,7 +82,9 @@ Edge returns 503 `probe_unavailable` unless `SUPABASE_URL` host is exactly `ldxg
   request, bounds, guest request cap, desired-state votes, immutable identity, spam 429, expiry, revocation,
   closed event, contract mismatch, disabled marker, 100 concurrent fresh joins, admission cap 429 under 30 concurrent,
   150 concurrent votes with exact counters and no deadlock, 100 barrier-released bad joins on a
-  150-row bucket → exactly 200 rows / 50 typed 429 (fails without the mutex: observed 59/41), disable+drop, app sentinel untouched.
+  150-row bucket → exactly 200 rows / 50 typed 429 (fails without the mutex: observed 59/41), disable+drop,
+  repeat teardown is a safe no-op, a same-signature function with a foreign comment is refused, app sentinel untouched.
+  The throwaway cluster is started with `max_connections=400` so the 100–150 client bursts fit.
 - `deno test supabase/functions/guest-token-probe/handler_test.ts` — host gate, methods, validation,
   field allowlist, typed error passthrough, no leakage, zero `fetch` calls (no Auth) over a full flow,
   endless stream without Content-Length → 413 + cancelled, oversized declared length, invalid UTF-8, 4 KB inner body bytes.

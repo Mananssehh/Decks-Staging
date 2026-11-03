@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # Isolated throwaway PostgreSQL test of 001/900. No network, no hosted DB.
 set -euo pipefail
-if [ "$(id -u)" = 0 ]; then exec setpriv --reuid=65534 --regid=65534 --clear-groups env HOME=/tmp bash "$0" "$@"; fi
+if [ "$(id -u)" = 0 ]; then
+  # initdb refuses to run as root; pick an unprivileged account that exists here.
+  U="$(id -u nobody 2>/dev/null || id -u lovable 2>/dev/null || echo 1000)"
+  D0="$(mktemp -d /tmp/gtp-pg.XXXXXX)"; chmod 777 "$D0"
+  exec setpriv --reuid="$U" --regid="$(id -g "$U")" --clear-groups env HOME="$D0" bash "$0" "$@"
+fi
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 D="$(mktemp -d /tmp/gtp-pg.XXXXXX)"; PORT=55439
 initdb -D "$D/data" -U postgres -A trust >/dev/null
-pg_ctl -D "$D/data" -o "-p $PORT -k $D -c listen_addresses=''" -l "$D/log" start >/dev/null
+pg_ctl -D "$D/data" -o "-p $PORT -k $D -c listen_addresses='' -c max_connections=400" -l "$D/log" start >/dev/null
 trap 'pg_ctl -D "$D/data" stop -m fast >/dev/null; rm -rf "$D"' EXIT
 P="psql -h $D -p $PORT -U postgres -v ON_ERROR_STOP=1 -qAtX"
 $P -d postgres -c "CREATE DATABASE t"
@@ -78,4 +83,23 @@ DO $z$ BEGIN
   IF (SELECT count(*) FROM public.app_sentinel) <> 1 THEN RAISE EXCEPTION 'FAIL sentinel'; END IF;
 END $z$;
 SQL
-echo "PASS local_pg_test: install, assertions, 100 concurrent joins, admission cap 429, 150 concurrent votes exact counters, 100 barrier-released parallel bad joins on 150 prefilled -> exactly 200 rows, 50x404 + 50x429, no deadlock, disable+drop, app sentinel untouched"
+# Repeat teardown must be a safe no-op (regression: a literal '<sig>'::regprocedure
+# cast in the guard is resolved at plan time and errored once the function was gone).
+$P -f "$HERE/900_disable_and_drop.sql"
+# A foreign function with the same signature but a different comment must still be refused.
+$P <<'SQL' >/dev/null
+CREATE FUNCTION public.repair_guest_probe_rpc(text, jsonb) RETURNS jsonb
+LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;
+COMMENT ON FUNCTION public.repair_guest_probe_rpc(text, jsonb) IS 'unrelated app function';
+SQL
+if $P -f "$HERE/900_disable_and_drop.sql" >/dev/null 2>&1; then echo "FAIL foreign function was dropped"; exit 1; fi
+[ -n "$($P -c "SELECT to_regprocedure('public.repair_guest_probe_rpc(text,jsonb)')")" ] || { echo "FAIL foreign function removed"; exit 1; }
+$P -c "DROP FUNCTION public.repair_guest_probe_rpc(text, jsonb)" >/dev/null
+$P -f "$HERE/900_disable_and_drop.sql"
+$P <<'SQL'
+DO $z2$ BEGIN
+  IF to_regnamespace('repair_guest_probe') IS NOT NULL OR to_regprocedure('public.repair_guest_probe_rpc(text,jsonb)') IS NOT NULL THEN RAISE EXCEPTION 'FAIL repeat teardown'; END IF;
+  IF (SELECT count(*) FROM public.app_sentinel) <> 1 THEN RAISE EXCEPTION 'FAIL sentinel'; END IF;
+END $z2$;
+SQL
+echo "PASS local_pg_test: install, assertions, 100 concurrent joins, admission cap 429, 150 concurrent votes exact counters, 100 barrier-released parallel bad joins on 150 prefilled -> exactly 200 rows, 50x404 + 50x429, no deadlock, disable+drop, repeat teardown no-op, foreign-function refusal, app sentinel untouched"
