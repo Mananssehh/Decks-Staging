@@ -1,0 +1,80 @@
+# 012 capacity repair (source-only candidate, NOT installed)
+
+Base source `58d36da632e4ee4ec700f2dabbc96354a4fb3e2c`. Hosted 001..011 unchanged; markers untouched.
+
+## Hosted evidence (staging, 2026-11-03 06:10:30-06:17:00 UTC, read-only log/catalog queries)
+
+- Postgres logs: the ONLY error class was `57014 canceling statement due to statement timeout`, 26x
+  (06:13:27-06:14:47), every one on the PostgREST call of `public.guest_event_api`.
+  No deadlocks (`40P01`), no `55P03`, no OOM/connection errors.
+- Lock waits (log_lock_waits, deadlock_timeout 1 s): ~410 waits, all on ONE tuple, relation 18087 =
+  `public.events` ctid `(0,44)` = QA event `b8a94350-...` (`GUESTQA`). `AccessExclusiveLock on tuple`
+  (queued FOR UPDATE writers) and `RowShareLock` (queued FOR SHARE readers). Mean wait grew
+  1.4 s -> 4.7 s per 30 s bucket, max 7.8 s, i.e. right up to the timeout.
+- API gateway for `/rpc/guest_event_api`: 1038x200, **26x500** (= the 57014s) and **22x504**
+  (06:13:14-06:13:54, PostgREST pool acquisition timeout while all pool connections waited on the tuple).
+  Edge `guest-event`: 1035x200, 47x503 (`upstream_unavailable`) = 26 + 22 (minus one in flight).
+- Role settings: `authenticator statement_timeout=8s, lock_timeout=8s`; `jit=off` (JIT not involved).
+- `pg_stat_statements`: `guest_event_api` slow group 1049 calls, mean 1613 ms, max 7853 ms. Root's own
+  `EXPLAIN ANALYZE guest_runtime.snapshot(...)` on the QA event: ~1541 ms.
+- Data at failure: 293 `app_principals`, 149 songs, 279 votes, 175 members on the QA event.
+
+## Cause
+
+`guest_runtime.aliases()` has `SET search_path` (never inlined) and filtered
+`id=actor(x) OR merged_into=actor(x)`; `merged_into` had no index, so every call seq-scanned all
+principals and evaluated the non-inlined `actor()` per row (~2 x 293 function calls per alias lookup).
+`snapshot()` called `aliases()` twice per song (`is_mine`, `my_vote`), so cost was O(songs x principals)
+and grew as the test itself added guests and songs: fine at 25/50, ~1.5 s at 100.
+Snapshot runs while the session holds the event row `FOR SHARE` (by design); request/vote take the same
+row `FOR UPDATE`. 1.5 s share holds made writers and later readers queue on the tuple, the 10-connection
+PostgREST pool filled with waiters (504), and queued statements hit the 8 s timeout (500 / 57014).
+Not caused by Edge concurrency, JIT, deadlocks, or pool size itself.
+
+## Fix: `012_capacity.sql` (rollback `912_rollback_capacity.sql`)
+
+- Partial index `app_principals(merged_into) WHERE merged_into IS NOT NULL`.
+- `aliases()` rewritten as two index probes (UNION) with `actor()` inlined as
+  `coalesce(c.merged_into,c.id)` of the single row `c.id=_actor`. Same set, same order, `'{}'` for unknown.
+- `snapshot()` computes canonical actor and alias set once (`WITH ... AS MATERIALIZED`, so the planner
+  cannot substitute the calls back per row); `profile_linkable` uses an equivalent PK left join.
+  Still ONE SQL statement (single MVCC snapshot); projection/DTO unchanged.
+- Unchanged: event-before-request lock order, SHARE/UPDATE choice at entry, actor advisory mutex,
+  claim exclusion, writer kernels, budgets/caps, ACLs, no browser DML, no public object touched.
+- Guards: requires 011, refuses reinstall, refuses unless installed `aliases`/`snapshot` md5 equal the
+  hosted values (`b2a23574...`, `83fa330d...`); captures exact prior definitions for rollback.
+  May be installed with markers enabled (only STABLE read helpers + brief SHARE lock on a small table);
+  root decides. Run 912 before any 910/950 rollback.
+
+## Local proof (`bash supabase/guest-integration/test/run.sh`, PG 17, full suite exit 0)
+
+`test/capacity.ts` reproduces the hosted shape (293 principals, 149 songs, 280 votes) and drives 100
+fresh guests (join, snapshot, request, vote common, snapshot) through a 10-connection pool with
+8 s statement/lock timeouts:
+
+| | snapshot mean | fresh100 wall | snapshot p95 | request p95 | vote p95 |
+|---|---|---|---|---|---|
+| 011 | 625 ms | 58.7 s | 31.3 s | 15.6 s | 3.6 s |
+| 012 | 25 ms | 2.5 s | 0.56 s | 0.58 s | 0.54 s |
+
+(Latencies include pool queueing.) Assertions: aliases identical for every principal (+ unknown actor,
+incl. merged sets); snapshot identical for every principal x small event and for DJ, all alias principals,
+40 members and 5 non-members (NULL) of the capacity event; >=5x faster; zero SQL errors and zero typed
+failures; exactly +100 requests; common upvotes exactly +100 and equal to vote rows; 25 final snapshots
+coherent (own request `is_mine`, `my_vote=1`, own profile); no leaked advisory locks; 012 reinstall
+refused; 912 twice restores exact 011 definitions and removes index/evidence table. Existing 15
+bootstrap + 100 matrix + 39 stream + 16 application assertions and containment/empty rollback still pass.
+
+## Edge observability (source only, not deployed)
+
+`guest-event` now logs one JSON line per upstream failure: `evt, cid, action, sqlstate` (5-char SQLSTATE
+or `PGRSTnnn`, else `none`), `category` (statement_timeout, pool_timeout, lock_timeout, deadlock, ...),
+`upstream_status`, `ms`. The random `cid` is returned in `x-correlation-id`; the public 503 body stays
+`upstream_unavailable`. No payload, token, bootstrap, room code, SQL detail, raw message or PII. Typed
+backend refusals are not logged; no retries. 12 Deno handler tests pass. Deployment not needed for the
+diagnosis above (Postgres/gateway logs sufficed); deploy only after root review.
+
+## Hosted repeat note
+
+The unchanged event admission budget is 300 per event per 10 minutes. `GUESTQA` already admitted 175;
+a fresh-100 repeat within 10 minutes of other joins on that event can be refused as `unavailable`.
