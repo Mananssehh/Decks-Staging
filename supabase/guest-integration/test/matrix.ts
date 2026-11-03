@@ -45,13 +45,15 @@ try{
  let releaseReads:()=>void=()=>{};const readHold=new Promise<void>(r=>{releaseReads=r;});let readers=0;
  const readTransactions=joins.map(j=>service(async q=>{await q`select public.guest_event_api('snapshot',${q.json({event_id:event,token:j.token})})`;readers++;await readHold;}));
  let mutatorDone=false;
- const mutation=call('vote',{event_id:event,token:joins[0].token,request_id:rid,value:1}).then(r=>{mutatorDone=true;return r;});
+ let mutation:Promise<{ok:boolean}>|undefined;
  try{
   for(let i=0;i<500&&readers<100;i++)await new Promise(r=>setTimeout(r,10));
   eq(readers,100,'100 read validations hold shared event locks concurrently');
+  mutation=call('vote',{event_id:event,token:joins[0].token,request_id:rid,value:1}).then(r=>{mutatorDone=true;return r;});
+  await new Promise(r=>setTimeout(r,50));
   eq(mutatorDone,false,'mutation waits for existing shared readers');
  }finally{releaseReads();await Promise.all(readTransactions);}
- eq((await mutation).ok,true,'exclusive mutator completes without lock upgrade deadlock');
+ eq((await mutation)?.ok,true,'exclusive mutator completes without lock upgrade deadlock');
  await db`update public.events set requests_status='paused' where id=${event}`;
  eq((await call('request',{...song,idempotency_key:uid(201),source_song_id:'5678'})).ok,false,'paused request blocked');eq((await call('vote',{...p,request_id:rid,value:-1})).ok,true,'paused voting preserved');
  await db`update public.events set requests_status='live' where id=${event}`;
