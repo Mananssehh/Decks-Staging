@@ -1,7 +1,8 @@
 import type { SongRequestRow } from '@/components/SongRequestCard';
 import type { NowPlayingRow } from '@/lib/nowPlaying';
 export const GUEST_BACKEND='ldxgejbzmpvsvozqmpfe';
-export const ENABLE_GUEST_APPLICATION=false;
+// Staging integration enabled; guestEnabled() hard-gates to the exact staging backend, any other backend stays OFF.
+export const ENABLE_GUEST_APPLICATION=true;
 export function guestEnabled(backend:string,flag=ENABLE_GUEST_APPLICATION){return flag&&backend===GUEST_BACKEND;}
 export interface GuestSession{principal_id:string;session_id:string;event_id:string;token:string;expires_at:string;code:string;nickname:string}
 export interface GuestSnapshot{
