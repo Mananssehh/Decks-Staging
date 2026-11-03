@@ -38,7 +38,7 @@ Deno.serve(async req=>{
    origin,live:getStripeMode()==='live',now:Date.now,
   });return json(result);
  }catch(error){
-  if(error instanceof ActorError)return json({ready:false,error_code:error.status===401?'UNAUTHORIZED':'SERVICE_FAILED'},error.status);
+  if(error instanceof ActorError)return json({ready:false,error_code:error.code},error.status);
   const message=(error as {message?:string})?.message??'';
   const codes=[['Current consent','CONSENT_REQUIRED'],['Tip limit','TIP_LIMIT_REACHED'],['Event unavailable','EVENT_NOT_FOUND'],['DJ payouts','DJ_PAYOUTS_NOT_READY'],['Invalid request','INVALID_REQUEST'],['Idempotency key payload','REQUEST_CONFLICT'],['already settled','CHECKOUT_TERMINAL'],['Reconciliation required','RECONCILIATION_REQUIRED']] as const;
   const match=codes.find(([text])=>message.includes(text));

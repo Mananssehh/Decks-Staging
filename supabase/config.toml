@@ -2,3 +2,13 @@ project_id = "ldxgejbzmpvsvozqmpfe"
 # STAGING PROBE ONLY: custom event-scoped guest token is the authorization.
 [functions.guest-token-probe]
 verify_jwt = false
+
+# Reviewed staging integration: handlers validate Auth or service-validated guest proof.
+[functions.guest-event]
+verify_jwt = false
+[functions.guest-event-stream]
+verify_jwt = false
+[functions.music-search]
+verify_jwt = false
+[functions.tip-create-checkout]
+verify_jwt = false
