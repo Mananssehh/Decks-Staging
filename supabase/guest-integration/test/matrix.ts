@@ -64,7 +64,7 @@ try{
  const targetBalance=(await db`select points from public.profiles where id=${target}`)[0].points;
  const claims=await Promise.all([claim(target,bs(1)),claim(target,bs(1))]);eq(claims.every(r=>r.ok),true,'parallel claim idempotent');
  eq((await db`select points from public.profiles where id=${g.principal_id}`)[0].points,0,'source balance zero');
- eq((await db`select points from public.profiles where id=${target}`)[0].points,targetBalance+sourceBalance-15,'target points preserved starter dedup exactly 15');
+ eq((await db`select points from public.profiles where id=${target}`)[0].points,targetBalance+sourceBalance-15-1,'target points preserved starter 15 and overlapping join 1 dedup');
  eq((await db`select count(*)::int n from public.profiles p where p.id in(${g.principal_id},${target}) and p.points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'both ledgers reconcile');
  eq((await db`select requested_by from public.song_requests where id=${rid}`)[0].requested_by,immutable,'request identity immutable after claim');
  const authSnapshot=(await authenticated(target,q=>q`select public.get_my_event_snapshot(${event}) r`))[0].r;
