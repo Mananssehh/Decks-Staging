@@ -46,6 +46,7 @@ DECLARE target uuid:=auth.uid(); src uuid; h bytea; b integer; dedup integer:=0;
  SELECT coalesce(sum(amount),0) INTO total FROM public.points_transactions WHERE user_id=src;
  IF b IS NULL OR b<>total OR b<0 THEN RETURN guest_runtime.fail(409,'balance_review_required'); END IF;
  IF NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=target) THEN RETURN guest_runtime.fail(409,'profile_required'); END IF;
+ IF (SELECT points FROM public.profiles WHERE id=target) IS DISTINCT FROM (SELECT coalesce(sum(amount),0) FROM public.points_transactions WHERE user_id=target) THEN RETURN guest_runtime.fail(409,'balance_review_required'); END IF;
  IF EXISTS(SELECT 1 FROM public.points_transactions WHERE user_id=src AND reason='Starter points') AND EXISTS(SELECT 1 FROM public.points_transactions WHERE user_id=ANY(guest_runtime.aliases(target)) AND reason='Starter points') THEN dedup:=15; END IF;
  -- Membership overlap alone is not evidence of a duplicate award. Match canonical
  -- Joined event ledger rewards, including prior claim compensations on target aliases.

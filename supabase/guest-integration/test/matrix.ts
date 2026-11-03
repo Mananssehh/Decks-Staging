@@ -220,5 +220,10 @@ try{
  eq((await db`select points from public.profiles where id=${distinctTarget}`)[0].points,17,'nonoverlap preserves both distinct one-point rewards');
  eq((await db`select count(*)::int n from public.profiles p where id in(${distinct.principal_id},${distinctTarget},${noReward.principal_id},${noRewardTarget}) and points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'nonoverlap and no-reward ledgers reconcile');
  eq((await db`select has_function_privilege('anon','public.get_my_event_snapshot(uuid)','execute') b`)[0].b,false,'own snapshot unavailable to anonymous role');
+ const corrupt=await call('join',{bootstrap:bs(3005),code:'LOCAL1',nickname:'Review'});
+ await db`update public.profiles set points=points+1 where id=${overlapTarget}`;
+ eq((await claim(overlapTarget,bs(3005))).error,'balance_review_required','unreconciled target balance refuses claim without overwrite');
+ eq((await db`select points from public.profiles where id=${corrupt.principal_id}`)[0].points,16,'refused claim leaves source balance unchanged');
+ await db`update public.profiles set points=points-1 where id=${overlapTarget}`;
  console.log(`RESULT ${checks} local database assertions passed`);
 }finally{await db.end();}

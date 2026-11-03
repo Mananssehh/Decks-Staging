@@ -173,7 +173,7 @@ Never deploy source rollback without review.
 ## Local evidence (2026-11-03 UTC)
 
 `bash supabase/guest-integration/test/run.sh`: throwaway UNIX-socket Postgres;
-reconstructs baseline from canonical fixtures, no hosted queries. Readiness assertions
+reconstructs baseline from canonical fixtures, no hosted queries. 100 readiness assertions
 passed including 100 concurrent fresh joins, unchanged Auth rowcount, lost-response
 join retries, exact starter/join points, request idempotency, 100 concurrent votes,
 coherent own snapshot, paused behavior, parallel claim/ledger/counter/alias-ban,
@@ -201,6 +201,18 @@ Endpoint/index Deno checks and full zero-warning eslint passed. Existing Vitest:
 in this sandbox; no app build was manually run and tests were not weakened.
 This is not hosted acceptance, venue Wi-Fi/Realtime capacity, browser persistence,
 full production compatibility, payment provider readiness or sustained load proof.
+
+Readiness rerun: 100 guest assertions (original lifecycle/concurrency coverage
+retained and extended), 15 separate targeted-bootstrap assertions, exact empty
+before/after function/constraint/column/guard restoration and containment passed.
+100 simultaneous read transactions held shared event locks before release; an
+exclusive mutator waited then completed without upgrade deadlock. DTO tests assert
+concrete full request/now-playing data; authenticated owner/member/alias snapshot,
+outsider/ban refusal, multiple overlap rewards, missing-reward/nonoverlap evidence,
+prior-compensation aliases, retry and both-balance reconciliation are covered.
+57 existing financial assertions and 8 unchanged no-network endpoint tests passed;
+endpoint checks and zero-warning lint passed. Unchanged frontend suite: 98 passed,
+9 failed solely because compiled bundle assets were absent, no manual build/skip.
 
 ## Exact targeted pre-install bootstrap plan (NOT EXECUTED)
 
