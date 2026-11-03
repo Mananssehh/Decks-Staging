@@ -360,3 +360,7 @@ END $$;
 REVOKE ALL ON FUNCTION public.application_own_ledger(uuid,text,integer,text) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.application_own_ledger(uuid,text,integer,text) TO authenticated,service_role;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA guest_runtime FROM PUBLIC,anon,authenticated,service_role;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM guest_runtime.installation WHERE enabled) THEN RAISE EXCEPTION 'Disable guest marker before application overlay'; END IF;
+ IF has_function_privilege('anon','public.guest_application_actor(uuid,text,text)','EXECUTE') OR has_function_privilege('authenticated','public.guest_event_public_profile(uuid,text,uuid)','EXECUTE') OR has_table_privilege('service_role','guest_runtime.retired_identities','SELECT') THEN RAISE EXCEPTION 'Application ACL mismatch'; END IF;
+END $$;
