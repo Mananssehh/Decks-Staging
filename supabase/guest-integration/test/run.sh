@@ -35,6 +35,13 @@ psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-8]_*.sql) >"$WO
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/matrix.ts"
 psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/010_stream.sql" >"$WORK/stream.log" 2>&1 || { cat "$WORK/stream.log"; exit 1; }
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/stream.ts"
+# Transport-only rollback must retain all guest data and restore exact DTO source.
+psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stream_drop TEMPLATE decks_repair'
+PGDATABASE=stream_drop psql -Xq -v ON_ERROR_STOP=1 -c "CREATE TABLE public._stream_drop_before AS SELECT (SELECT count(*) FROM guest_runtime.app_principals) principals,(SELECT count(*) FROM guest_runtime.sessions) sessions,(SELECT count(*) FROM public.points_transactions) ledger,(SELECT snapshot_before FROM guest_runtime.stream_installation) snapshot"
+PGDATABASE=stream_drop psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/910_drop_stream.sql" >"$WORK/stream-drop.log" 2>&1
+PGDATABASE=stream_drop psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/910_drop_stream.sql" >>"$WORK/stream-drop.log" 2>&1
+PGDATABASE=stream_drop psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS(SELECT 1 FROM public._stream_drop_before WHERE principals<>(SELECT count(*) FROM guest_runtime.app_principals) OR sessions<>(SELECT count(*) FROM guest_runtime.sessions) OR ledger<>(SELECT count(*) FROM public.points_transactions) OR snapshot<>pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure)) OR to_regclass('guest_runtime.event_revisions') IS NOT NULL THEN RAISE EXCEPTION 'stream rollback mismatch'; END IF; END \$\$;"
+echo 'PASS stream-only teardown twice preserves guest evidence and exact snapshot'
 # Containment must preserve data; destructive rollback must refuse.
 if psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >"$WORK/refusal" 2>&1; then echo FAIL destructive rollback accepted; exit 1; fi
 grep -q 'guest records exist' "$WORK/refusal"
