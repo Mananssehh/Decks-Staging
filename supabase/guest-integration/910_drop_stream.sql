@@ -4,6 +4,7 @@
 BEGIN;
 DO $$ DECLARE d text; r record; BEGIN
  IF to_regclass('guest_runtime.stream_installation') IS NULL THEN RETURN; END IF;
+ IF to_regclass('guest_runtime.application_before') IS NOT NULL THEN RAISE EXCEPTION 'Application overlay installed: use containment or full reviewed empty restore'; END IF;
  UPDATE guest_runtime.stream_installation SET enabled=false WHERE id;
  SELECT snapshot_before INTO d FROM guest_runtime.stream_installation WHERE id;
  IF d IS NULL THEN RAISE EXCEPTION 'Missing snapshot backup: refuse stream teardown'; END IF;

@@ -17,7 +17,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { fetchMyProfile } from "@/lib/publicProfiles";
 import { logWarning } from "@/lib/errorLogger";
 import {useActor} from '@/hooks/useActor';
-import {guestInvoke,guestScope} from '@/lib/guestClient';
+import {guestInvoke,guestScope,guestApplicationEnabled,guestStore,ownEventSnapshot,actorLedger} from '@/lib/guestClient';
 
 interface Stats {
   totalRequests: number;
@@ -73,6 +73,8 @@ const Profile = () => {
     if(guestSession&&loadGuest){void loadGuest(guestSession).then(s=>{const reqs=s.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs(s.ledger.filter(t=>t.amount>0) as TxRow[]);setIsPublic(s.profile.is_public===true);setLoading(false);});return;}
     if (!user) return;
     (async () => {
+      const event=guestApplicationEnabled?guestStore().contextEvent():null;
+      if(event&&!isDJ){try{const s=await ownEventSnapshot(event);const reqs=s.songs.filter(r=>r.is_mine);setStats({totalRequests:reqs.length,totalUpvotes:reqs.reduce((n,r)=>n+r.upvotes,0)});setTxs((await actorLedger(event,0,'earned')) as TxRow[]);setIsPublic(s.profile.is_public===true);}finally{setLoading(false);}return;}
       const [reqRes, txRes, evRes, profRes] = await Promise.all([
         supabase.from("song_requests").select("upvotes").eq("requested_by", user.id),
         supabase.from("points_transactions").select("id, amount, type, reason, created_at")

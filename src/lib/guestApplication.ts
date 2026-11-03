@@ -26,7 +26,8 @@ export class GuestStore{
  select(event:string){this.storage.setItem(this.prefix+'current',event);}
  intent(email?:string){this.storage.setItem(this.prefix+'claim',JSON.stringify({bootstrap:this.bootstrap(),requested_at:Date.now(),email:email?.trim().toLowerCase()}));}
  pending(){try{const p=JSON.parse(this.storage.getItem(this.prefix+'claim')??'null');return p&&/^[a-f0-9]{64}$/.test(p.bootstrap)?p as {bootstrap:string;requested_at:number;email?:string}:null;}catch{return null;}}
- completeClaim(){this.storage.removeItem(this.prefix+'claim');this.storage.removeItem(this.prefix+'sessions');this.storage.removeItem(this.prefix+'current');this.storage.removeItem(this.prefix+'bootstrap');}
+ contextEvent(){return this.current()?.event_id??this.storage.getItem(this.prefix+'context-event');}
+ completeClaim(){const event=this.current()?.event_id;if(event)this.storage.setItem(this.prefix+'context-event',event);this.storage.removeItem(this.prefix+'claim');this.storage.removeItem(this.prefix+'sessions');this.storage.removeItem(this.prefix+'current');this.storage.removeItem(this.prefix+'bootstrap');}
 }
 export type Invoke=(action:string,payload:Record<string,unknown>)=>Promise<Record<string,unknown>>;
 export async function joinGuest(store:GuestStore,invoke:Invoke,code:string,nickname:string){

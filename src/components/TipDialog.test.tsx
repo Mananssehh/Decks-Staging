@@ -27,3 +27,12 @@ it('double click and ambiguous retry reuse one logical key; definitive terminal 
  if(!finish)throw Error('request missing');finish({data:{error_code:'RECONCILIATION_REQUIRED'},error:null});
  await waitFor(()=>expect(button).not.toBeDisabled());
 });
+it('configuration-unready guest readiness creates no checkout or consent request',async()=>{
+ mocks.invoke.mockResolvedValue({data:{ready:false,error_code:'STRIPE_CONFIG_ERROR'},error:null});
+ render(<TipDialog open eventId="event" onOpenChange={()=>{}}/>);
+ await waitFor(()=>expect(mocks.invoke).toHaveBeenCalled());
+ fireEvent.click(screen.getByRole('checkbox'));
+ expect(screen.getByRole('button',{name:'Tip $5'})).toBeDisabled();
+ expect(mocks.consent).not.toHaveBeenCalled();
+ expect(mocks.invoke.mock.calls.every(([,opts])=>opts.body.check_only===true)).toBe(true);
+});

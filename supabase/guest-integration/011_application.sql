@@ -350,6 +350,7 @@ REVOKE ALL ON FUNCTION public.guest_tip_summary(uuid,text) FROM PUBLIC,anon,auth
 GRANT EXECUTE ON FUNCTION public.guest_tip_summary(uuid,text) TO service_role;
 CREATE FUNCTION public.application_own_ledger(_event_id uuid,_token text DEFAULT NULL,_offset integer DEFAULT 0,_filter text DEFAULT 'all') RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE u uuid; rows jsonb; BEGIN
+ IF NOT EXISTS(SELECT 1 FROM guest_runtime.installation WHERE id AND enabled AND contract='guest-integration-v1') THEN RETURN guest_runtime.fail(503,'guest_unavailable'); END IF;
  IF _offset<0 OR _offset>100000 OR _filter NOT IN ('all','earned','spent','refunded') THEN RETURN guest_runtime.fail(400,'invalid_input'); END IF;
  IF auth.role()='service_role' THEN u:=guest_runtime.validate_session(_event_id,_token,false);
  ELSE u:=guest_runtime.actor_lock(auth.uid());IF u IS NULL OR NOT EXISTS(SELECT 1 FROM public.events WHERE id=_event_id AND (dj_id=u OR guest_runtime.member(u,_event_id))) THEN RETURN guest_runtime.fail(403,'unavailable'); END IF; END IF;

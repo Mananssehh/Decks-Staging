@@ -59,7 +59,7 @@ export default function ActivityLedger() {
 
   const loadPage = async (p: number, replace = false) => {
     const session=actor.guest?.session;
-    const event=session?.event_id??guestStore().current()?.event_id;
+    const event=session?.event_id??guestStore().contextEvent();
     if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);setRows(prev=>replace?entries.slice(0,PAGE_SIZE):[...prev,...entries.slice(0,PAGE_SIZE)]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}finally{setLoading(false);}return;}
     if (!user) return;
     setLoading(true);
