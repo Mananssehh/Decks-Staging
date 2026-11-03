@@ -58,13 +58,19 @@ try{
    (select ${DJ}::uuid id) union (select id from guest_runtime.app_principals where merged_into is not null or id in(select merged_into from guest_runtime.app_principals))
    union (select user_id from public.event_participants where event_id=${EVENT} order by user_id limit 40)
    union (select id from guest_runtime.app_principals where id not in(select user_id from public.event_participants where event_id=${EVENT}) order by id limit 5)) x`;
+  await admin`create table public._cap_member as select a.id actor,e.id event,guest_runtime.member(a.id,e.id) m from guest_runtime.app_principals a cross join public.events e`;
   await admin`create table public._cap_defs as select md5(pg_get_functiondef('guest_runtime.aliases(uuid)'::regprocedure)) a, md5(pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure)) s`;
-  await admin`create table public._cap_lock_defs as select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace in('guest_runtime'::regnamespace,'public'::regnamespace) and oid not in('guest_runtime.aliases(uuid)'::regprocedure,'guest_runtime.snapshot(uuid,uuid)'::regprocedure)`;
+  await admin`create table public._cap_lock_defs as select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where pronamespace in('guest_runtime'::regnamespace,'public'::regnamespace) and oid not in('guest_runtime.aliases(uuid)'::regprocedure,'guest_runtime.member(uuid,uuid)'::regprocedure,'guest_runtime.snapshot(uuid,uuid)'::regprocedure)`;
   console.log('RESULT before baseline captured',(await admin`select count(*)::int n from public._cap_snap where s is not null`)[0].n,'visible snapshots');
  }else{
   const [{id:common,probe}]=await admin`select * from public._cap_common`;
   ok((await admin`select count(*)::int n from public._cap_aliases b where b.a is distinct from guest_runtime.aliases(b.id)`)[0].n===0,'012 aliases identical for every principal and unknown actor');
   ok((await admin`select count(*)::int n from public._cap_aliases where cardinality(a)>1`)[0].n>0,'baseline includes merged alias sets');
+  ok((await admin`select count(*)::int n from public._cap_member b where b.m is distinct from guest_runtime.member(b.actor,b.event)`)[0].n===0,'012 member outcome identical for every principal x event');
+  ok((await admin`select count(*)::int n from public._cap_member where m`)[0].n>0&&(await admin`select count(*)::int n from public._cap_member where not m`)[0].n>0,'membership baseline covers members and non-members');
+  ok((await admin`select string_agg(md5(pg_get_functiondef(oid)),',' order by oid::regprocedure::text) d from pg_proc where oid in('guest_runtime.aliases(uuid)'::regprocedure,'guest_runtime.member(uuid,uuid)'::regprocedure,'guest_runtime.snapshot(uuid,uuid)'::regprocedure)`)[0].d==='6b4fac919cee58b17435432ffb14deb7,c1dbf1dcc33b557dcbcadae71b03cdb0,c2cda1c3e9bc5e81f3f8b0eb23b3bfbc','012 reproduces exact hosted reviewer aliases/member/snapshot text');
+  ok((await admin`select count(*)::int n from guest_runtime.capacity_before`)[0].n===3,'all three original definitions captured');
+  ok((await admin`select to_regclass('guest_runtime.guest_principals_merged_into') r`)[0].r===null,'no index beyond hosted state');
   ok((await admin`select count(*)::int n from public._cap_snap b where b.s is distinct from guest_runtime.snapshot(b.actor,b.event)`)[0].n===0,'012 snapshot identical for every principal x event (incl. denied NULL)');
   ok((await admin`select count(*)::int n from public._cap_lock_defs where definition is distinct from pg_get_functiondef(to_regprocedure(signature))`)[0].n===0,'all session, actor, claim and writer lock definitions unchanged');
   ok((await admin`select relrowsecurity from pg_class where oid='guest_runtime.capacity_before'::regclass`)[0].relrowsecurity,'capacity definition backup has RLS');
@@ -92,7 +98,6 @@ try{
   const before=(await admin`select ms from public._cap_ms`)[0].ms,after=await snapshotMs(probe);
   console.log(`012 snapshot mean ${after.toFixed(1)}ms vs 011 ${before.toFixed(1)}ms`);
   ok(after*5<before,'snapshot at hosted-failure scale at least 5x faster');
-  const plan=(await admin`explain (format json) select guest_runtime.aliases(${probe}::uuid)`);ok(!!plan,'aliases plannable');
   const songsBefore=(await admin`select count(*)::int n from public.song_requests where event_id=${EVENT}`)[0].n,upBefore=(await admin`select upvotes from public.song_requests where id=${common}`)[0].upvotes;
   // The before phase admitted 275 guests; age those admissions past the unchanged 300/10-minute event budget window.
   await admin`update public.repair_admission_log set created_at=created_at-interval '11 minutes' where event_id=${EVENT}`;

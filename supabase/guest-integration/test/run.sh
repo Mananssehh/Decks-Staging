@@ -50,26 +50,29 @@ NODE_PATH=/dev-server/node_modules bun "$HERE/test/application.ts"
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/capacity.ts" before
 psql -Xq -v ON_ERROR_STOP=1 -c "CREATE DATABASE capacity_rollback TEMPLATE decks_repair"
 psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >"$WORK/capacity.log" 2>&1 || { cat "$WORK/capacity.log"; exit 1; }
-if psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1; then echo FAIL 012 reinstall accepted; exit 1; fi
+psql -Xq -v ON_ERROR_STOP=1 -c "CREATE TABLE public._cap_bk AS SELECT * FROM guest_runtime.capacity_before"
+psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1 || { echo FAIL 012 idempotent rerun refused; exit 1; }
+psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM guest_runtime.capacity_before)<>3 OR EXISTS(SELECT * FROM public._cap_bk EXCEPT SELECT * FROM guest_runtime.capacity_before) THEN RAISE EXCEPTION 'rerun altered backup'; END IF; END \$\$; DROP TABLE public._cap_bk;"
+echo 'PASS 012 rerun is idempotent and keeps original 011 backup
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/capacity.ts" after
-# Independently observed root materialization pair: exact source bodies, private backup and rollback.
+# Actual hosted reviewer baseline: exact canonical definitions, reviewer audit tables, no capacity_before.
 psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE capacity_root TEMPLATE decks_repair'
 PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
 DROP TABLE guest_runtime.capacity_before;
-DROP INDEX guest_runtime.guest_principals_merged_into;
-CREATE OR REPLACE FUNCTION guest_runtime.aliases(_actor uuid) RETURNS uuid[] LANGUAGE sql STABLE SET search_path='' AS $function$
- WITH root AS MATERIALIZED (SELECT guest_runtime.actor(_actor) canonical_id)
- SELECT coalesce(array_agg(p.id ORDER BY p.id),ARRAY[]::uuid[])
- FROM guest_runtime.app_principals p CROSS JOIN root
- WHERE p.id=root.canonical_id OR p.merged_into=root.canonical_id
-$function$;
-CREATE TABLE public._root_before AS SELECT oid::regprocedure::text sig,pg_get_functiondef(oid) def FROM pg_proc WHERE oid IN('guest_runtime.aliases(uuid)'::regprocedure,'guest_runtime.snapshot(uuid,uuid)'::regprocedure);
+CREATE TABLE guest_runtime.reviewer_snapshot_baseline AS SELECT 'evidence'::text note;
+CREATE TABLE guest_runtime.reviewer_identity_baseline AS SELECT 'evidence'::text note;
+ALTER TABLE guest_runtime.reviewer_snapshot_baseline ENABLE ROW LEVEL SECURITY; ALTER TABLE guest_runtime.reviewer_identity_baseline ENABLE ROW LEVEL SECURITY;
+CREATE TABLE public._root_before AS SELECT oid::regprocedure::text sig,pg_get_functiondef(oid) def FROM pg_proc WHERE pronamespace='guest_runtime'::regnamespace;
 SQL
-PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1 || { cat "$WORK/capacity.log"; exit 1; }
-PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_capacity.sql" >>"$WORK/capacity.log" 2>&1
-PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/912_rollback_capacity.sql" >>"$WORK/capacity.log" 2>&1
-PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS(SELECT 1 FROM public._root_before WHERE def IS DISTINCT FROM pg_get_functiondef(to_regprocedure(sig))) THEN RAISE EXCEPTION 'root definition restore mismatch'; END IF; END \$\$;"
-echo 'PASS 012 accepts observed root pair and rollback twice preserves exact optimized root definitions'
+for f in 012_capacity.sql 012_capacity.sql 912_rollback_capacity.sql 912_rollback_capacity.sql; do PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/$f" >>"$WORK/capacity.log" 2>&1 || { echo "FAIL root baseline $f"; tail "$WORK/capacity.log"; exit 1; }; done
+PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS(SELECT 1 FROM public._root_before WHERE def IS DISTINCT FROM pg_get_functiondef(to_regprocedure(sig))) OR to_regclass('guest_runtime.capacity_before') IS NOT NULL OR to_regclass('guest_runtime.reviewer_snapshot_baseline') IS NULL OR to_regclass('guest_runtime.reviewer_identity_baseline') IS NULL THEN RAISE EXCEPTION 'root baseline changed'; END IF; END \$\$;"
+echo 'PASS 012 twice + 912 twice on exact hosted reviewer state are no-ops; reviewer audit tables preserved'
+# Partial reviewer state (snapshot only, original aliases/member) is unknown drift and must be refused.
+psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE capacity_partial TEMPLATE capacity_rollback'
+PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ DECLARE d text; BEGIN EXECUTE regexp_replace(pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure),'\$function\$\n','\$function\$\n -- drift\n'); END \$\$;"
+if PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1; then echo FAIL 012 partial drift accepted; exit 1; fi
+PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regclass('guest_runtime.capacity_before') IS NOT NULL THEN RAISE EXCEPTION 'partial left backup'; END IF; END \$\$;"
+echo 'PASS 012 refuses partial/unknown snapshot drift without artifacts'
 PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "CREATE OR REPLACE FUNCTION guest_runtime.aliases(_actor uuid) RETURNS uuid[] LANGUAGE sql STABLE SET search_path='' AS 'SELECT ARRAY[]::uuid[]'"
 if PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1; then echo FAIL 012 drift accepted; exit 1; fi
 PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regclass('guest_runtime.capacity_before') IS NOT NULL OR position('SELECT ARRAY[]::uuid[]' in pg_get_functiondef('guest_runtime.aliases(uuid)'::regprocedure))=0 THEN RAISE EXCEPTION 'drift sentinel damaged'; END IF; END \$\$;"
