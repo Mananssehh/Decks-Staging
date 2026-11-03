@@ -513,7 +513,10 @@ const EventPage = () => {
       await supabase.rpc("ensure_profile", { p_nickname: fallbackNick }).then(() => null, () => null);
     }
 
-    const result=isGuest&&guest?.session?await guestInvoke('request',{...guestScope(guest.session),...Object.fromEntries(Object.entries(song).filter(([,v])=>v!==null)),source_song_id:song.source_song_id??'',idempotency_key:crypto.randomUUID()}):null;
+    const requestKeyName=`decks:guest-request:${userId}:${eventInfo.id}:${song.source_platform}:${song.source_song_id??normalizeKey(song.title,song.artist)}`;
+    let requestKey=localStorage.getItem(requestKeyName);if(!requestKey){requestKey=crypto.randomUUID();localStorage.setItem(requestKeyName,requestKey);}
+    const result=isGuest&&guest?.session?await guestInvoke('request',{...guestScope(guest.session),...Object.fromEntries(Object.entries(song).filter(([,v])=>v!==null)),source_song_id:song.source_song_id??'',idempotency_key:requestKey}):null;
+    if(result?.ok===true)localStorage.removeItem(requestKeyName);
     const { outcome, requestId } = result?{outcome:result.outcome as Awaited<ReturnType<typeof submitSongRequest>>['outcome'],requestId:result.request_id as string}:await submitSongRequest(eventInfo.id, song);
     void refreshRef.current?.refresh();
     const feedback = requestFeedback(outcome, eventInfo.cooldown_seconds ?? 30);
@@ -667,7 +670,7 @@ const EventPage = () => {
               <DialogHeader className="px-4 pt-4 pb-2 shrink-0 text-left">
                 <DialogTitle className="pr-8">Request a song</DialogTitle>
               </DialogHeader>
-              <RequestPicker onPick={handleRequestSong} existing={songs} allowExplicit={eventInfo.allow_explicit} guestScope={isGuest&&guest?.session?guestScope(guest.session):undefined} />
+              <RequestPicker onPick={song=>void handleRequestSong(song).catch(e=>toast.error(e instanceof Error?e.message:'Request failed'))} existing={songs} allowExplicit={eventInfo.allow_explicit} guestScope={isGuest&&guest?.session?guestScope(guest.session):undefined} />
             </DialogContent>
           </Dialog>
         </div>

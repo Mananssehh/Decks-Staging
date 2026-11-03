@@ -11,7 +11,7 @@ export function GuestProvider({children}:{children:ReactNode}){
  const authUser=auth.user;const refreshProfile=auth.refreshProfile;
  useEffect(()=>{if(!authUser||authUser.is_anonymous||!authUser.email_confirmed_at)return;void claimPendingGuest().then(claimed=>{if(claimed)void refreshProfile();}).catch(()=>{/* preserve proof; callback/dialog can retry explicitly */});},[authUser,refreshProfile]);
  useEffect(()=>{if(!guestApplicationEnabled)return;const sync=()=>{setSession(guestStore().current());};window.addEventListener('storage',sync);window.addEventListener('decks:guest-change',sync);return()=>{window.removeEventListener('storage',sync);window.removeEventListener('decks:guest-change',sync);};},[]);
- const select=useCallback((s:GuestSession)=>{guestStore().select(s.event_id);setSession(s);},[]);
+ const select=useCallback((s:GuestSession)=>{guestStore().select(s.event_id);setSession(prev=>prev?.event_id===s.event_id&&prev?.token===s.token?prev:s);},[]);
  const join=useCallback(async(code:string,nickname:string)=>{if(!guestApplicationEnabled)throw Error('Guest integration disabled');const s=await joinGuest(guestStore(),guestInvoke,code,nickname);select(s);return s;},[select]);
  const load=useCallback(async(s:GuestSession)=>{const data=await guestSnapshot(s);setSnapshot(data);return data;},[]);
  const value=useMemo(()=>({enabled:guestApplicationEnabled,session,snapshot,join,load,select}),[session,snapshot,join,load,select]);

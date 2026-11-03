@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef,useContext } from "react";
 import { CircleDollarSign, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { tipRequestKey, clearTerminalTipKey } from "@/lib/tipRequestKey";
 import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
 import {useGuest} from '@/contexts/guest-state';
+import {AuthContext} from '@/contexts/auth-state';
 import {guestInvoke,guestScope,ownAliases} from '@/lib/guestClient';
 
 interface Props {
@@ -41,7 +42,7 @@ export const TIP_DISCLAIMER =
   "Tips support the DJ. Tips do not affect song placement and do not guarantee playback, prioritization, or any specific action by the DJ.";
 
 export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, songRequestId, songTitleMeta, artistMeta }: Props) {
-  const guestContext=useGuest();const guest=guestContext?.enabled?guestContext.session:null;
+  const guestContext=useGuest(),authContext=useContext(AuthContext);const guest=!authContext?.user&&guestContext?.enabled?guestContext.session:null;
   const submitLock = useRef(false);
   const [selected, setSelected] = useState<number>(5);
   const [custom, setCustom] = useState<string>("");
