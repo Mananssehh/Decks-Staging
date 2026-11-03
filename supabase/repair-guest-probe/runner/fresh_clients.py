@@ -113,6 +113,34 @@ def guest_flow(c, ev, code, label):
     return ck, tok
 
 
+BURST_N = 40
+
+
+def spam_burst(c, ev, tok):
+    """Overload test: BURST_N simultaneous reads on ONE token (40 > 30/min limit). A run lasting
+    >= 60 s cannot prove the per-minute limiter, so it is reported inconclusive and fails."""
+    barrier = threading.Barrier(BURST_N)
+
+    def one(_):
+        barrier.wait()
+        return c.call("read", {"event_id": ev, "token": tok}, expect=(200, 429))
+
+    t0 = time.perf_counter(); start = now()
+    with cf.ThreadPoolExecutor(max_workers=BURST_N) as ex:
+        res = list(ex.map(one, range(BURST_N)))
+    dur = round(time.perf_counter() - t0, 3)
+    counts = {}
+    for s, _ in res:
+        counts[str(s)] = counts.get(str(s), 0) + 1
+    typed = sum(1 for s, j in res if s == 429 and j.get("error") == "guest_rate_limited")
+    conclusive = dur < 60
+    verdict = ("inconclusive_burst_ge_60s" if not conclusive else
+               "rate_limited" if typed >= 1 else "failure_no_typed_429")
+    return {"method": "concurrent_burst", "calls": BURST_N, "max_workers": BURST_N, "same_token": True,
+            "start_utc": start, "duration_s": dur, "status_counts": counts, "typed_429": typed,
+            "conclusive": conclusive, "verdict": verdict}
+
+
 def negatives(url, apikey, a, code_a, b):
     """Security checks on a dedicated fresh guest so capacity guests are not rate-limited."""
     c = Client(url, apikey)
@@ -133,17 +161,13 @@ def negatives(url, apikey, a, code_a, b):
     if tok:
         s, _ = c.call("read", {"event_id": b, "token": tok}, expect=(401,))
         out["cross_event_401"] = s == 401
-        hit = False
-        for _ in range(40):
-            s, j = c.call("read", {"event_id": a, "token": tok}, expect=(200, 429))
-            if s == 429 and j.get("error") == "guest_rate_limited":
-                hit = True
-                break
-        out["guest_spam_429"] = hit
+        burst = spam_burst(c, a, tok)
+        out["guest_spam_429"] = burst["typed_429"] >= 1 and burst["conclusive"]
     else:
         out["cross_event_401"] = out["guest_spam_429"] = False
+        burst = {"method": "concurrent_burst", "conclusive": False, "verdict": "not_run_no_security_guest"}
     del tok
-    return out, c
+    return out, c, burst
 
 
 def main():
@@ -154,7 +178,7 @@ def main():
     url = os.environ["PROBE_URL"]
     ev_a, code_a, ev_b = os.environ["PROBE_EVENT_A"], os.environ["PROBE_CODE_A"], os.environ["PROBE_EVENT_B"]
     apikey = os.environ.get("PROBE_APIKEY")
-    report = {"runner_note": "single runner; egress IP, provider quotas, Realtime and app capacity not measured",
+    report = {"runner_note": "overload check is a concurrent burst of 40 same-token reads, not sequential; single runner; egress IP, provider quotas, Realtime and app capacity not measured",
               "stages": []}
     c0 = Client(url, apikey)
     s, ct = c0.call("contract", {})
@@ -182,7 +206,8 @@ def main():
             "checks": checks, "stage_pass": stage_ok,
         })
     report["unique_tokens_overall"] = len(set(all_digests)) == len(all_digests)
-    neg, cn = negatives(url, apikey, ev_a, code_a, ev_b)
+    neg, cn, burst = negatives(url, apikey, ev_a, code_a, ev_b)
+    report["overload_test"] = burst
     report["negatives"], report["negatives_http"], report["negatives_unexpected_http"] = neg, cn.status, cn.unexpected
     report["auth_signup_calls_observed"] = AUTH_CALLS
     passed = passed and report["unique_tokens_overall"] and all(neg.values()) and cn.unexpected == 0 and AUTH_CALLS == 0

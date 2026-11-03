@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Offline check of fresh_clients.py against an in-memory loopback fake (no network egress).
 Verifies report shape, token non-disclosure, and auth-call instrumentation."""
-import http.server, json, os, secrets, subprocess, sys, threading, uuid
+import http.server, json, os, secrets, subprocess, sys, threading, time, uuid
 
 EV_A, EV_B, CODE = str(uuid.uuid4()), str(uuid.uuid4()), "fixturecode"
 sessions, requests, votes, ops, issued, sids = {}, {}, {}, {}, [], {}
-BROKEN = {"resume": False}
+BROKEN = {"resume": False, "no_limit": False}
 lock = threading.Lock()
 
 
@@ -35,9 +35,12 @@ class H(http.server.BaseHTTPRequestHandler):
                 return self.reply(401, {"ok": False, "error": "invalid_session"})
             if a == "join":
                 return self.reply(200, {"ok": True, "resumed": True, "session_id": str(uuid.uuid4()) if BROKEN["resume"] else sids[tok]})
-            ops[tok] = ops.get(tok, 0) + 1
-            if ops[tok] > 30:
+            t_now = time.monotonic()  # genuine rolling 60 s window, 30 ops
+            win = [x for x in ops.get(tok, []) if t_now - x < 60]
+            if len(win) >= 30 and not BROKEN["no_limit"]:
+                ops[tok] = win
                 return self.reply(429, {"ok": False, "error": "guest_rate_limited"})
+            ops[tok] = win + [t_now]
             if a == "request":
                 k = (tok, p["idempotency_key"])
                 rep = k in requests
@@ -67,6 +70,11 @@ assert all(c["fail"] == 0 and c["pass"] == s["fresh_clients"] for s in rep["stag
 assert rep["unique_tokens_overall"] is True and len(set(issued)) == 176  # 175 capacity + 1 security guest
 assert rep["auth_signup_calls_observed"] == 0
 assert all(rep["negatives"].values()) and rep["negatives_unexpected_http"] == 0, rep["negatives"]
+ob = rep["overload_test"]
+assert ob["method"] == "concurrent_burst" and ob["calls"] == 40 and ob["max_workers"] == 40 and ob["conclusive"], ob
+# security guest used 1 join(not counted)+cross-event(401, not counted) -> exactly 30 of 40 burst reads allowed
+assert ob["status_counts"] == {"200": 30, "429": 10} and ob["typed_429"] == 10 and ob["verdict"] == "rate_limited", ob
+assert set(rep["negatives_http"]) >= {"read:429:guest_rate_limited"}
 assert not any(t in out for t in issued), "raw token leaked into report"
 assert CODE not in out, "fixture code leaked into report"
 # Negative control: a broken resume (different session_id) must fail the run with nonzero exit.
@@ -74,6 +82,12 @@ BROKEN["resume"] = True
 p2 = subprocess.run(RUN[:3] + ["25"], env=env, capture_output=True, text=True)
 rep2 = json.loads(p2.stdout)
 assert p2.returncode == 1 and rep2["pass"] is False and rep2["stages"][0]["checks"]["resume_same_session"]["fail"] == 25
+# Negative control: no limiter -> overload check must fail with exit 1.
+BROKEN["resume"] = False; BROKEN["no_limit"] = True
+p3 = subprocess.run(RUN[:3] + ["25"], env=env, capture_output=True, text=True)
+rep3 = json.loads(p3.stdout)
+assert p3.returncode == 1 and rep3["pass"] is False and rep3["negatives"]["guest_spam_429"] is False
+assert rep3["overload_test"]["verdict"] == "failure_no_typed_429" and rep3["overload_test"]["status_counts"] == {"200": 40}
 print("PASS runner offline: 25/50/100 concurrent fresh clients all checks, 176 unique tokens, 0 auth calls, negatives ok, "
-      "no token/code in report; broken resume -> pass:false exit 1")
+      "no token/code in report; broken resume -> pass:false exit 1; 40-read burst 30x200/10x429; no limiter -> exit 1")
 srv.shutdown()
