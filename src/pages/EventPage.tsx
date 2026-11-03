@@ -174,8 +174,8 @@ const EventPage = () => {
       if(!s){const state=guestRef.current;if(!state)throw Error('Guest session missing');s=await state.join(code,navNickname??guestStore().current()?.nickname??'Guest');}
       if(cancelled)return;guestRef.current?.select(s);
       await sync.refresh();if(cancelled)return;
-      disposeStream=connectGuestStream(s,()=>void sync.refresh(),()=>{setGuestFailure('This event session is unavailable.');},`${import.meta.env.VITE_SUPABASE_URL.replace('https:','wss:')}/functions/v1/guest-event-stream`);
-      unlisten=listenEventRefresh(s.event_id,s.principal_id,()=>void sync.refresh());
+      disposeStream=connectGuestStream(s,()=>sync.refresh(),()=>{setGuestFailure('This event session is unavailable.');},`${import.meta.env.VITE_SUPABASE_URL.replace('https:','wss:')}/functions/v1/guest-event-stream`);
+      unlisten=listenEventRefresh(s.event_id,s.principal_id,()=>{void sync.refresh().catch(()=>{/* typed failure is displayed by sync */});});
     }catch(e){if(!cancelled){setLoading(false);setGuestFailure(e instanceof GuestError?e.message:'This event could not load. Please retry later.');}}})();
     return()=>{cancelled=true;sync.dispose();disposeStream?.();unlisten?.();activeLocks.clear();if(refreshRef.current===sync)refreshRef.current=null;};
   },[isGuest,code,authLoading,navNickname]);

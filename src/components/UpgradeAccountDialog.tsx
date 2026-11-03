@@ -48,10 +48,10 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
       // Anonymous upgrade — keeps the same auth.uid().
       if(actor.kind==='guest'){
         guestStore().intent(emailParse.data);
-        const {error}=await supabase.auth.signUp({email:emailParse.data,password:passParse.data,options:{data:{nickname:actor.profile?.nickname??'Guest'},emailRedirectTo:`${window.location.origin}/auth/callback`}});
+        const {data,error}=await supabase.auth.signUp({email:emailParse.data,password:passParse.data,options:{data:{nickname:actor.profile?.nickname??'Guest'},emailRedirectTo:`${window.location.origin}/auth/callback`}});
         if(error)throw error;
-        await claimPendingGuest();await refreshProfile();onOpenChange(false);
-        toast.success('Check your email to confirm your account. Your guest progress stays saved until linking completes.');return;
+        const claimed=await claimPendingGuest();if(claimed)await refreshProfile();onOpenChange(false);
+        toast.success(claimed?'Account created — your guest progress is linked.':data.session?.user.email_confirmed_at?'Account created. Your guest progress stays saved until linking completes.':'Check your email to confirm your account. Your guest progress stays saved until linking completes.');return;
       }
       const { error: upErr } = await supabase.auth.updateUser({
         email: emailParse.data,

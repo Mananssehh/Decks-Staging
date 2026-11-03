@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Guest backend integration (source-only)
+- [ ] Frontend refinement: cross-tab join exclusion, restored-session snapshot/error recovery, account-bound accurate signup outcome, safe socket refresh and guard regressions; flag stays OFF, root owns hosted acceptance.
 - [x] Application source phase: OFF staging actor/provider, persistent proof/explicit account-bound claim, event/profile/ledger/socket paths; verified catalog/tip/consent adapters; 011 manual/URL/lifecycle/helpers. Local 16 application +100 guest +15 bootstrap +39 stream SQL assertions/rollback, 57 financial checks, 25 Edge tests; lint/typecheck pass. Hosted acceptance pending.
 - [x] Stage candidate principals/FK replacement, actor kernels, sessions, snapshots, claim and alias-aware financial boundaries; not install-ready.
 - [x] Stage bounded guest-event API and 8 no-network endpoint tests; retain probe and existing UI unchanged.
