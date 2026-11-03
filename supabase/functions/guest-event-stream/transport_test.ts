@@ -37,3 +37,13 @@ Deno.test('GET upgrade only, exact staging, token URL and subprotocol rejected w
  const handler=createHandler('https://ldxgejbzmpvsvozqmpfe.supabase.co',s.backend,s.hubs,upgrade);
  eq(handler(new Request('https://local',{method:'POST'})).status,405);eq(handler(new Request('https://local')).status,426);eq(handler(new Request('https://local?token=secret',{headers:{upgrade:'websocket'}})).status,400);eq(handler(new Request('https://local',{headers:{upgrade:'websocket','sec-websocket-protocol':'secret'}})).status,400);eq(createHandler('https://wrong',s.backend,s.hubs,upgrade)(new Request('https://local')).status,503);eq(upgrades,0);
 });
+Deno.test('native adapter path upgrades then auths, closes cleanly and releases deadline/hub timers',async()=>{
+ const s=setup(),socket=Object.assign(new Socket(),{onmessage:null as ((e:{data:unknown})=>void)|null,onclose:null as (()=>void)|null,onerror:null as (()=>void)|null});
+ const handler=createHandler('https://ldxgejbzmpvsvozqmpfe.supabase.co',s.backend,s.hubs,()=>({socket,response:new Response('upgraded')}),s.time);
+ eq(handler(new Request('https://local',{headers:{upgrade:'websocket'}})).status,200);
+ socket.onmessage?.({data:JSON.stringify({type:'auth',event_id:event,token})});for(let i=0;i<20;i++)await Promise.resolve();eq(socket.messages[0],{type:'ready',revision:'1',resync:true});eq(s.hubs.connections,1);
+ socket.onclose?.();eq(s.hubs.connections,0);eq(s.time.tasks.size,0);
+});
+Deno.test('bounded connection rollover gives reconnect resync and cleans up instead of assuming worker lifetime',async()=>{
+ const s=setup(),p=new Socket(),c=new Connection(p,s.backend,s.hubs,s.time);await c.message(JSON.stringify({type:'auth',event_id:event,token}));await s.time.advance(120000);eq(p.messages.some(m=>m.type==='reconnect'&&m.resync===true),true);eq(p.closed[0].code,1001);eq(s.hubs.connections,0);eq(s.time.tasks.size,0);
+});

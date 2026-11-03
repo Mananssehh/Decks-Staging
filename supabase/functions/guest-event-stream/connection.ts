@@ -24,6 +24,7 @@ export class Connection{
    this.clock.cancel(this.timer);this.state='ready';
    this.remove=this.hubs.add(r.event_id,r.session_id,Date.parse(r.expires_at),r.revision,this.peer)??undefined;
    if(!this.remove)this.close(1013,'capacity');
+   else this.timer=this.clock.later(()=>{try{this.peer.send('{"type":"reconnect","resync":true}');}catch{/* closed */}this.close(1001,'connection_rollover');},120000);
   }catch{try{this.peer.send('{"type":"service_unavailable","retry":true}');}catch{/* closed */}this.close(1013,'service_unavailable');}
  }
 }
