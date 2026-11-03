@@ -33,6 +33,7 @@ export class Hubs{
    // Validate/close entire batch BEFORE sending ANY new revision.
    for(const c of batch)if(h.clients.has(c)&&(!valid.has(c.session)||c.expiry<=this.clock.now()))this.close(h,c,1008,'session_unavailable');
    for(const c of batch)if(h.clients.has(c)){
+    if(c.peer.bufferedAmount>65536){this.close(h,c,1013,'slow_client');continue;}
     if(this.clock.now()-c.lastPing>60000){this.close(h,c,1001,'heartbeat_timeout');continue;}
     if(BigInt(r.revision)>BigInt(c.revision)){c.revision=r.revision;this.send(h,c,{type:'invalidate',revision:r.revision,lifecycle:r.lifecycle});}
    }

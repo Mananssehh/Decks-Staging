@@ -32,8 +32,8 @@ if PGDATABASE=orphan_preflight psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/001_prin
 grep -q 'Auth without profile' "$WORK/orphan.log"
 echo 'PASS orphan preflight refuses installation without invented data'
 psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-8]_*.sql) >"$WORK/install.log" 2>&1 || { cat "$WORK/install.log"; exit 1; }
-NODE_PATH=/dev-server/node_modules bun "$HERE/test/matrix.ts"
 psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/010_stream.sql" >"$WORK/stream.log" 2>&1 || { cat "$WORK/stream.log"; exit 1; }
+NODE_PATH=/dev-server/node_modules bun "$HERE/test/matrix.ts"
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/stream.ts"
 # Transport-only rollback must retain all guest data and restore exact DTO source.
 psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stream_drop TEMPLATE decks_repair'
