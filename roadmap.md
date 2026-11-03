@@ -66,6 +66,7 @@
 - [x] Deploy all seven inventoried shared-helper dependents to staging; checkout last. No provider operations; evidence recorded.
 
 ## Staging fresh-100 capacity failure
+- [ ] Incorporate root's exact materialized snapshot derivative; capture observed definitions and prove old/new equality, privacy, large-queue bounds, coherence and unchanged concurrency locks locally.
 - [x] Diagnose from hosted Postgres/gateway logs: 26x 57014 + 22x PostgREST 504 from event-row tuple convoy behind O(songs x principals) snapshot.
 - [x] Source-only 012 candidate + 912 rollback, equivalence/concurrency proof (local fresh100 58.7s -> 2.5s), safe Edge upstream logging + tests.
 - [ ] Root review/install 012 and optionally deploy logging guest-event, then repeat hosted fresh100 and 100 WS (blocked on root).
