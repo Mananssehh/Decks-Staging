@@ -1,26 +1,23 @@
-# Guest integration — SOURCE REVIEW CANDIDATE, NOT INSTALL-READY
+# Guest integration — SOURCE REVIEW CANDIDATE, DISABLED / NOT INSTALLED
 
-Baseline: `6c093735ccb2a7f1846f46cda26583a3c808e2e6`. Staging only. No hosted
+Lifecycle-pass baseline: `ca6ba866d4d6849e6b4d4c4e10fb36329136c966`. Staging only. No hosted
 SQL, deployment, Auth signup/session minting, provider calls, secrets, quota,
 publication or UI changes were performed. Disabled `repair_guest_probe` is untouched.
 
 ## Explicit unresolved review gates
 
-1. Requested private `app_principals.auth_user_id → auth.users` FK conflicts with
-   current managed schema rules (only public profiles/user_roles may reference
-   Auth). **No substitute is represented as equivalent protection.** Candidate
-   backfills Auth IDs and inserts principals in existing bootstrap trigger but
-   does not yet preserve Auth deletion cascade/lifecycle. Do not install until
-   an approved identity/FK lifecycle design replaces this gap.
-2. Anonymous receive-only private capability Broadcast policy conflicts with
-   current supported per-Auth-user topic guidance. No policy/cron/Realtime mutation
-   was authored. `REALTIME_DESIGN.md` records exact coalescing/rotation/wake/drain
-   requirements for independent authorization and hosted testing.
-3. Full compatibility review still required: direct Auth RLS reads of old alias
-   votes/points/tips are unchanged; UI must use own-alias adapters after installation.
-   Claim versus all alternative point writers and direct DJ event-first paths needs
-   further lock-protocol review; those paths cannot acquire identity locks after
-   event locks. Global claim exclusion covers common kernels but not every legacy writer.
+1. Root reports 118 Auth users /117 profiles. `000_preflight.sql` lists missing
+   profiles and their event/request/ledger/tip references, without emails or tokens.
+   Installation REFUSES any orphan; root must inspect and resolve its disposition
+   explicitly. No missing nickname/balance/profile is fabricated by this package.
+2. Root must inspect actual FK definitions, writer bodies/ACLs and dependencies
+   against the before/after catalogs. Protected lifecycle and writer protocol are
+   implemented and tested locally, not certified against the hosted catalog.
+   Registered deletion is now a protected two-step retirement, not raw cascade;
+   the deliberate fail-closed behavior below requires review before installation.
+3. Receive-only Edge WebSocket relay is the chosen NEXT bounded phase, not built.
+   No anonymous Realtime policy will be authored. Platform/source review and tests
+   are outstanding, as are frontend own-alias adapters, browser persistence and UI.
 
 This is a backend candidate with local evidence, **not a completed/deployable guest
 integration**. The existing app continues using unchanged deployed Auth boundaries.
@@ -30,10 +27,11 @@ Stripe config was independently reported not ready; provider checkout not tested
 
 `000_preflight.sql`: read-only catalog/FK/ACL/ledger inventory; root must compare
 actual installed core/payment definitions and save outputs before proceeding.
-`001_principals.sql`: backfill every Auth ID; captures actual before-functions and
-exact named ownership constraints, replaces ONLY profiles.id, requests.requested_by,
-votes.user_id, tips.user_id and funnel.user_id FK targets; preserves delete action.
-Private RLS/no browser or service table access. No normal DJ/account FK changed.
+`001_principals.sql`: fail on Auth/profile orphan; add protected nullable
+profiles.auth_user_id → auth.users and registered id consistency; private principals
+reference profile id and (id,auth_user_id), not Auth. Capture actual before-functions
+and named ownership constraints. Replace request/vote/tip/funnel ownership targets,
+preserving original actions. No normal DJ/account Auth FK or identity changed.
 `002_join_kernel.sql`: existing repaired admission, explicit actor/aliases.
 `003_request_kernel.sql`: existing normalization/blocklist/cooldown/dedup, explicit
 actor; authenticated request signature unchanged; shared vote kernel.
@@ -44,14 +42,19 @@ immutable history, overlap evidence/dedup and ledger transfer with 15 starter de
 `006_financial_aliases.sql`: existing financial functions with canonical mutex,
 alias cap/membership/consent/idempotency; frozen provider identity/params untouched.
 `007_acl.sql`: RLS/ACL/backfill checks, installed marker DISABLED.
+`008_writer_lifecycle.sql`: outer legacy-writer exclusion, statement guards,
+immutable profile links, registered retirement and standalone alias-aware award.
+`009_after_catalog.sql`: read-only post-install FK/trigger/function/rowcount evidence;
+capture alongside `000_preflight.sql`. This is not an installation mutation.
 `before/`: canonical baseline function source copies; installation captures actual
 hosted definitions for restoration. Source copies alone do not prove live parity.
 
 ## Installation — only AFTER gates resolved and independent review
 
 Do NOT replay historical repairs/migrations. Root runs read-only preflight, reviews
-all files, then executes **001..007 in one transaction**. Candidate deliberately
-starts disabled. Root checks rowcounts, five FK replacements and every remaining
+all files, then executes **001..008 in one transaction**. Candidate deliberately
+starts disabled. Root captures `009_after_catalog.sql` and checks rowcounts,
+four ownership FK replacements, the protected profile chain and every remaining
 Auth FK/action, all private table RLS/ACL, service-only API, authenticated-only claim,
 all original function/table policy fingerprints not intentionally modified.
 Only after blockers/tests pass, root may enable marker in a separate reviewed step.
@@ -79,7 +82,7 @@ POST body `{action, payload}` only; never tokens/codes in URLs, logs or analytic
 Snapshot is one SQL statement returning safe event state, latest 500 songs with own
 vote/ownership, points, now-playing, latest 100 own-alias ledger entries, truncation
 flag. No private Auth/profile PII, provider params, bootstrap/hash/secret projection.
-No Broadcast topic supplied while the capability policy remains blocked.
+No Broadcast topic supplied; receive-only Edge feed implementation remains next phase.
 
 Budgets: 120 reads/min and 30 mutations/min/principal; bootstrap failed joins
 10/10min, existing admission 300/event/10min and 10/identity/10min; three-event
@@ -92,13 +95,54 @@ not silent token renewal. Treat 4xx as final; no tight client retry loops.
 Source historical request/vote/financial identities remain unchanged. Duplicate
 votes/memberships are captured privately before removal; counter delta triggers run.
 Claim takes exclusive integration guard, ordered identity/tip/event/profile locks;
-normal kernels take shared guard. This is correctness-first but global claim
-exclusion is a throughput limitation needing review. Guest balance must reconcile
+normal kernels take shared guard. Legacy DJ transition/position/broadcast and
+profile update acquire shared guard at entry using actual captured bodies.
+Direct app DML and financial evidence/reservation DML acquire the shared guard
+BEFORE STATEMENT, before tuple locks; award resolves aliases only after exclusion.
+Never first acquire exclusion from a row trigger or after SELECT FOR UPDATE.
+Operator multi-statement transactions must take the shared gate at entry before
+any explicit row lock; arbitrary owner SQL is not a supported app writer.
+This is correctness-first but global claim exclusion limits throughput. Guest balance must reconcile
 exactly; inconsistent or spent-below-starter balance is refused for manual review.
 Target existing balance preserved; source transfer-out zeros source ledger/balance;
 target gets source minus duplicate 15 via explicit auditable transfer-in. Existing
 original Starter ledger entries remain evidence. Claim retries to same account and
 credential are idempotent; other accounts refused; source credentials revoked.
+
+## Protected identity lifecycle and deletion
+
+- Registered root: `profiles(id,auth_user_id)` with `auth_user_id=id` when nonnull;
+  real FK to Auth uses RESTRICT. Auth principal composite FK requires that exact
+  registered profile; guest principals use a profile-id FK, no Auth relationship.
+- Backfill only existing profiles validated by their original Auth FK. The 118/117
+  orphan aborts before any source schema change can commit. Root resolves it, not
+  an automated guessed profile. No fake Auth rows or shared identities.
+- Signup: existing app-owned handle_new_user inserts protected profile first,
+  then principal, existing guest role and starter ledger once. An AFTER profile
+  insert trigger also supports legacy ensure/upgrade recovery; BEFORE insert
+  derives link only from an existing real Auth row. Existing profile ownership and
+  sensitive-column guards are not weakened; links cannot be edited or cleared.
+- Raw Auth DELETE is restricted while a profile exists: no new Auth deletion
+  trigger, and no Auth tuple → profile cascade → claim-gate inversion.
+- Operator retirement: service-only `prepare_registered_profile_deletion(id)`
+  acquires exclusive claim gate BEFORE Auth tuple, authorizes profile removal only
+  for that transaction, then deletes profile/principal/credentials atomically.
+  After commit the operator's existing Auth deletion process can remove the real
+  Auth account. This source never calls an Auth provider. If deletion later fails,
+  account remains real but without a profile; operator must finish or explicitly
+  repair before reinstall preflight (no silent backfill). Prefer one operator
+  transaction for retirement + authorized Auth deletion where available.
+- Direct registered profile DELETE refuses while its Auth account exists.
+  Unclaimed guest profile DELETE cascades principal and credentials. Original
+  request SET NULL / vote+tip+funnel CASCADE remain; point ledger is historical.
+  Other financial evidence FKs can deliberately refuse removal; do not force it.
+- Claimed source or target deletion is RESTRICTED by claims/merged_into genuine
+  FKs; both raw Auth deletion and protected retirement refuse atomically. Keep
+  alias history and original provider owners; an eventual retention/deletion
+  workflow needs independent review, not dangling unchecked Auth UUIDs.
+- Direct ban writes share claim exclusion; source bans remain alias-effective.
+  This is claim compatibility, not a new strict event-mutex ordering guarantee
+  for ban versus ordinary vote/reservation authorization checks.
 
 ## Disable / containment / destructive rollback
 
@@ -108,19 +152,29 @@ installed. Does not disable app events, Auth, payments, email or isolated probe.
 `950_restore_empty.sql` restores captured function definitions/FK constraints and
 drops only integration objects **only if ZERO guest principals exist**. Any guest
 records, even claimed/revoked, force refusal. Do not delete guests to bypass guard.
-Full rollback must additionally review grants/default ACL and future lifecycle/
-Realtime changes once those are added. Never deploy source rollback without review.
+Rollback removes new guards/retirement functions/profile column and restores actual
+captured FKs/functions; it refuses even revoked/claimed guest history. Preserve
+before/after catalog and ACL evidence and review defaults before executing.
+Never deploy source rollback without review.
 
 ## Local evidence (2026-11-03 UTC)
 
 `bash supabase/guest-integration/test/run.sh`: throwaway UNIX-socket Postgres;
-reconstructs baseline from canonical fixtures, no hosted queries. 49 assertions
+reconstructs baseline from canonical fixtures, no hosted queries. 71 assertions
 passed including 100 concurrent fresh joins, unchanged Auth rowcount, lost-response
 join retries, exact starter/join points, request idempotency, 100 concurrent votes,
 coherent own snapshot, paused behavior, parallel claim/ledger/counter/alias-ban,
 alias financial 50/100/30% boundaries, expiry/contract/ACL, normalized profanity/spam,
 three-event gate, cross-event denial, 30-success/10-typed-429 mutation burst,
 independent read budget and immutable alias financial settlement/mismatch refusal.
+Additional lifecycle assertions prove real FK rejection, immutable registered
+links, ensure/upgrade compatibility, raw Auth/profile deletion refusal, protected
+retirement, guest credential cascade, claimed-source/target and retirement refusal.
+Six concurrent writer/claim transactions are observed waiting on the exclusion
+gate (not a timing-only test): DJ playing transition, ban, profile update,
+standalone award, financial settlement and claim. All finish with reconciled
+ledgers, immutable tip owner, succeeded settlement, one-playing and alias ban.
+Separate Auth-orphan fixture refuses installation without generating data.
 Containment/refusal passed; separate local empty rollback restored every original
 public function definition. The test's cloned local fixtures are disposable only;
 it does not demonstrate permission to delete hosted guest records.
