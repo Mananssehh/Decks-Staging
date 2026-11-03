@@ -26,8 +26,14 @@ DECLARE s guest_runtime.sessions; ev public.events; u uuid; BEGIN
  SELECT * INTO s FROM guest_runtime.sessions WHERE event_id=_event AND token_hash=guest_runtime.digest(_token);
  IF s.id IS NULL THEN RETURN NULL; END IF;
  u:=guest_runtime.actor_lock(s.principal_id);
- SELECT * INTO ev FROM public.events WHERE id=_event FOR UPDATE;
- SELECT * INTO s FROM guest_runtime.sessions WHERE id=s.id FOR UPDATE;
+ -- Choose lock strength before any event lock; never upgrade SHARE to UPDATE.
+ IF _mutating THEN
+  SELECT * INTO ev FROM public.events WHERE id=_event FOR UPDATE;
+  SELECT * INTO s FROM guest_runtime.sessions WHERE id=s.id FOR UPDATE;
+ ELSE
+  SELECT * INTO ev FROM public.events WHERE id=_event FOR SHARE;
+  SELECT * INTO s FROM guest_runtime.sessions WHERE id=s.id FOR SHARE;
+ END IF;
  IF NOT EXISTS(SELECT 1 FROM guest_runtime.installation WHERE id AND enabled AND contract='guest-integration-v1') OR s.revoked_at IS NOT NULL OR s.expires_at<=clock_timestamp() OR u IS DISTINCT FROM s.principal_id OR NOT guest_runtime.member(u,_event) OR ev.id IS NULL OR (_mutating AND (NOT ev.is_active OR ev.ended_at IS NOT NULL OR ev.requests_status NOT IN ('live','paused'))) THEN RETURN NULL; END IF;
  RETURN u;
 END $$;
@@ -51,12 +57,22 @@ CREATE FUNCTION guest_runtime.snapshot(_actor uuid,_event uuid) RETURNS jsonb LA
  -- ONE SQL statement: coherent counters and desired votes, no credential/PII projections.
  SELECT jsonb_build_object('event',jsonb_build_object('id',e.id,'name',e.name,'venue',e.venue,'dj_name',e.dj_name,'is_active',e.is_active,'requests_status',e.requests_status,'ended_at',e.ended_at,'allow_explicit',e.allow_explicit,'require_approval',e.require_approval,'cooldown_seconds',e.cooldown_seconds,'rules_text',e.rules_text),
  'profile',(SELECT jsonb_build_object('id',p.id,'nickname',p.nickname,'points',p.points) FROM public.profiles p WHERE p.id=guest_runtime.actor(_actor)),
- 'songs',coalesce((SELECT jsonb_agg(jsonb_build_object('id',sr.id,'title',sr.title,'artist',sr.artist,'album_art',sr.album_art,'album_art_url',sr.album_art_url,'status',sr.status,'boost',sr.boost,'upvotes',sr.upvotes,'downvotes',sr.downvotes,'created_at',sr.created_at,'queue_position',sr.queue_position,'requester_name',sr.requester_name,'is_mine',sr.requested_by=ANY(guest_runtime.aliases(_actor)),'my_vote',(SELECT v.value FROM public.votes v WHERE v.song_request_id=sr.id AND v.user_id=ANY(guest_runtime.aliases(_actor)) LIMIT 1)) ORDER BY sr.created_at,sr.id) FROM (SELECT * FROM public.song_requests WHERE event_id=_event ORDER BY created_at DESC,id LIMIT 500) sr),'[]'::jsonb),
- 'now_playing',(SELECT jsonb_build_object('title',n.title,'artist',n.artist,'album_art',n.album_art,'status',n.status,'started_at',n.started_at,'apple_url',n.apple_url,'spotify_url',n.spotify_url) FROM public.now_playing n WHERE n.event_id=_event),
+ 'songs',coalesce((SELECT jsonb_agg(jsonb_build_object('id',sr.id,'event_id',sr.event_id,'title',sr.title,'artist',sr.artist,'album_art',sr.album_art,'album_art_url',sr.album_art_url,'status',sr.status,'boost',sr.boost,'upvotes',sr.upvotes,'downvotes',sr.downvotes,'created_at',sr.created_at,'queue_position',sr.queue_position,'requester_name',sr.requester_name,'external_url',sr.external_url,'requested_by',sr.requested_by,'album',sr.album,'duration_ms',sr.duration_ms,'preview_url',sr.preview_url,'source_platform',sr.source_platform,'source_song_id',sr.source_song_id,'explicit',sr.explicit,'played_at',sr.played_at,'played_by_source',sr.played_by_source,'is_mine',sr.requested_by=ANY(guest_runtime.aliases(_actor)),'my_vote',(SELECT v.value FROM public.votes v WHERE v.song_request_id=sr.id AND v.user_id=ANY(guest_runtime.aliases(_actor)) LIMIT 1)) ORDER BY sr.created_at,sr.id) FROM (SELECT * FROM public.song_requests WHERE event_id=_event ORDER BY created_at DESC,id LIMIT 500) sr),'[]'::jsonb),
+ 'now_playing',(SELECT jsonb_build_object('id',n.id,'event_id',n.event_id,'title',n.title,'artist',n.artist,'album_art',n.album_art,'source',n.source,'status',n.status,'updated_at',n.updated_at,'created_at',n.created_at,'source_track_id',n.source_track_id,'now_playing_request_id',n.now_playing_request_id,'started_at',n.started_at,'apple_url',n.apple_url,'spotify_url',n.spotify_url) FROM public.now_playing n WHERE n.event_id=_event),
  'ledger',coalesce((SELECT jsonb_agg(jsonb_build_object('id',t.id,'amount',t.amount,'type',t.type,'reason',t.reason,'created_at',t.created_at,'event_id',t.event_id,'song_request_id',t.song_request_id) ORDER BY t.created_at DESC,t.id) FROM (SELECT * FROM public.points_transactions WHERE user_id=ANY(guest_runtime.aliases(_actor)) ORDER BY created_at DESC,id LIMIT 100) t),'[]'::jsonb),
  'truncated',(SELECT count(*)>500 FROM public.song_requests WHERE event_id=_event))
- FROM public.events e WHERE e.id=_event AND guest_runtime.member(_actor,_event)
+ FROM public.events e WHERE e.id=_event AND (e.dj_id=guest_runtime.actor(_actor) OR guest_runtime.member(_actor,_event))
 $$;
+CREATE FUNCTION public.get_my_event_snapshot(_event_id uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE u uuid; e public.events; BEGIN
+ IF auth.uid() IS NULL THEN RETURN guest_runtime.fail(403,'forbidden'); END IF;
+ u:=guest_runtime.actor_lock(auth.uid());
+ SELECT * INTO e FROM public.events WHERE id=_event_id FOR SHARE;
+ IF u IS NULL OR e.id IS NULL OR NOT(e.dj_id=u OR guest_runtime.member(u,_event_id)) THEN RETURN guest_runtime.fail(403,'unavailable'); END IF;
+ RETURN jsonb_build_object('ok',true,'snapshot',guest_runtime.snapshot(u,_event_id));
+END $$;
+REVOKE ALL ON FUNCTION public.get_my_event_snapshot(uuid) FROM PUBLIC,anon,service_role;
+GRANT EXECUTE ON FUNCTION public.get_my_event_snapshot(uuid) TO authenticated;
 CREATE FUNCTION public.guest_event_api(_action text,_payload jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r jsonb; s guest_runtime.sessions; logical_key uuid; op jsonb; cat text; target uuid; nowts timestamptz:=clock_timestamp(); BEGIN
  IF auth.role() IS DISTINCT FROM 'service_role' THEN RETURN guest_runtime.fail(403,'forbidden'); END IF;

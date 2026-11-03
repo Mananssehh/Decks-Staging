@@ -18,6 +18,7 @@ DROP FUNCTION public.guest_event_api(text,jsonb);
 DROP FUNCTION public.guest_validate_actor(uuid,text);
 DROP FUNCTION public.claim_guest_principal(text,uuid,text);
 DROP FUNCTION public.get_my_principal_aliases();
+DROP FUNCTION public.get_my_event_snapshot(uuid);
 DROP FUNCTION public.prepare_registered_profile_deletion(uuid);
 DROP SCHEMA guest_runtime CASCADE;
 ALTER TABLE public.profiles DROP CONSTRAINT guest_profile_identity;

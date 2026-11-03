@@ -7,7 +7,8 @@
 - [x] Document capability Broadcast constraints and independent hosted review gates.
 - [x] Protected profiles-to-Auth lifecycle, orphan refusal, registered retirement and guest/claimed deletion tests; 72 local assertions plus rollback; existing 57 payment assertions pass.
 - [x] Legacy writer/claim entry and statement exclusion reviewed; concurrent DJ/ban/profile/award/financial/claim checks passed.
-- [ ] Independent install review: resolve actual 118 Auth /117 profile orphan and inspect actual catalog/FK/ACL/writer snapshots; hosted operations unauthorized.
+- [x] Readiness source: targeted legacy-DJ repair, shared reads, safe DTO/authenticated alias snapshot, overlap compensation; 100 guest +15 repair +57 financial +8 endpoint assertions, rollback/lint.
+- [ ] Independent install review: reviewed bootstrap plus 001..008 in one transaction and actual catalog checks; hosted operations unauthorized.
 - [ ] Next bounded phase: source review and platform testing of receive-only Edge WebSocket invalidations; no anonymous channel policy.
 
 ## Core staging audit repair

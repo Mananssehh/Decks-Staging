@@ -1,10 +1,10 @@
--- SOURCE ONLY. Execute 000 preflight and all 001..007 in ONE transaction.
+-- SOURCE ONLY. Reviewed targeted bootstrap (when applicable) and 001..008 in ONE transaction.
 SET LOCAL lock_timeout='5s';
 CREATE SCHEMA guest_runtime;
 REVOKE ALL ON SCHEMA guest_runtime FROM PUBLIC,anon,authenticated,service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA guest_runtime REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 -- Protected identity root: only the allowed public profile table links to Auth.
--- Never invent the missing staging profile: root must resolve the 118/117 discrepancy.
+-- The separate root-authorized existing-account repair must precede this gate.
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM auth.users a LEFT JOIN public.profiles p ON p.id=a.id WHERE p.id IS NULL)
  THEN RAISE EXCEPTION 'Auth without profile: inspect preflight orphan inventory; no automatic profile fabrication'; END IF;
