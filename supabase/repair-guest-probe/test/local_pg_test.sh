@@ -83,4 +83,23 @@ DO $z$ BEGIN
   IF (SELECT count(*) FROM public.app_sentinel) <> 1 THEN RAISE EXCEPTION 'FAIL sentinel'; END IF;
 END $z$;
 SQL
-echo "PASS local_pg_test: install, assertions, 100 concurrent joins, admission cap 429, 150 concurrent votes exact counters, 100 barrier-released parallel bad joins on 150 prefilled -> exactly 200 rows, 50x404 + 50x429, no deadlock, disable+drop, app sentinel untouched"
+# Repeat teardown must be a safe no-op (regression: a literal '<sig>'::regprocedure
+# cast in the guard is resolved at plan time and errored once the function was gone).
+$P -f "$HERE/900_disable_and_drop.sql"
+# A foreign function with the same signature but a different comment must still be refused.
+$P <<'SQL' >/dev/null
+CREATE FUNCTION public.repair_guest_probe_rpc(text, jsonb) RETURNS jsonb
+LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;
+COMMENT ON FUNCTION public.repair_guest_probe_rpc(text, jsonb) IS 'unrelated app function';
+SQL
+if $P -f "$HERE/900_disable_and_drop.sql" >/dev/null 2>&1; then echo "FAIL foreign function was dropped"; exit 1; fi
+[ -n "$($P -c "SELECT to_regprocedure('public.repair_guest_probe_rpc(text,jsonb)')")" ] || { echo "FAIL foreign function removed"; exit 1; }
+$P -c "DROP FUNCTION public.repair_guest_probe_rpc(text, jsonb)" >/dev/null
+$P -f "$HERE/900_disable_and_drop.sql"
+$P <<'SQL'
+DO $z2$ BEGIN
+  IF to_regnamespace('repair_guest_probe') IS NOT NULL OR to_regprocedure('public.repair_guest_probe_rpc(text,jsonb)') IS NOT NULL THEN RAISE EXCEPTION 'FAIL repeat teardown'; END IF;
+  IF (SELECT count(*) FROM public.app_sentinel) <> 1 THEN RAISE EXCEPTION 'FAIL sentinel'; END IF;
+END $z2$;
+SQL
+echo "PASS local_pg_test: install, assertions, 100 concurrent joins, admission cap 429, 150 concurrent votes exact counters, 100 barrier-released parallel bad joins on 150 prefilled -> exactly 200 rows, 50x404 + 50x429, no deadlock, disable+drop, repeat teardown no-op, foreign-function refusal, app sentinel untouched"
