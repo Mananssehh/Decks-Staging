@@ -11,3 +11,4 @@
 - Event song counters and user-selected votes are read with one left-embedded relational statement; split HTTP reads can observe different transaction snapshots.
 - The MCP Vite plugin owns its generated function output; exclude that exact artifact from lint while keeping all authored MCP inputs linted.
 - Stripe key format validation lives in an SDK-free shared helper used by all Stripe constructors and mode inference; this keeps restricted-key compatibility consistent and testable without provider calls.
+- The guest-token probe is isolated in schema `repair_guest_probe` behind one service-role RPC and the `guest-token-probe` function; it must never read/write app tables or auth, so it can be dropped without touching the app.
