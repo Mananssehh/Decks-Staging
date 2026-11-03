@@ -92,5 +92,52 @@ try{
  eq((await call('snapshot',{event_id:event,token:joins[1].token})).status,401,'expired session denied');
  eq((await db`select has_schema_privilege('anon','guest_runtime','usage') b`)[0].b,false,'private schema inaccessible');
  eq((await db`select has_function_privilege('authenticated','public.guest_event_api(text,jsonb)','execute') b`)[0].b,false,'guest API service only');
+ // Protected FK lifecycle: no fake Auth identities, no silent unchecked UUIDs.
+ let rejected=false;
+ try{await db`insert into public.profiles(id,auth_user_id,nickname) values(${uid(700)},${uid(700)},'Missing')`;}catch{rejected=true;}
+ eq(rejected,true,'missing Auth row rejected by real profile FK');
+ rejected=false;try{await db`update public.profiles set auth_user_id=null where id=${target}`;}catch{rejected=true;}
+ eq(rejected,true,'registered link cannot be cleared');
+ const disposable=uid(701);
+ await db`insert into auth.users(id) values(${disposable})`;
+ eq((await db`select auth_user_id from public.profiles where id=${disposable}`)[0].auth_user_id,disposable,'bootstrap creates protected profile first');
+ eq((await db`select auth_user_id from guest_runtime.app_principals where id=${disposable}`)[0].auth_user_id,disposable,'bootstrap principal references registered profile');
+ await db`delete from auth.users where id=${disposable}`;
+ eq((await db`select count(*)::int n from public.profiles where id=${disposable}`)[0].n,0,'Auth deletion cascades profile');
+ eq((await db`select count(*)::int n from guest_runtime.app_principals where id=${disposable}`)[0].n,0,'Auth deletion cascades principal');
+ await db`delete from public.profiles where id=${joins[90].principal_id}`;
+ eq((await db`select count(*)::int n from guest_runtime.sessions where principal_id=${joins[90].principal_id}`)[0].n,0,'unclaimed guest profile deletion removes credentials');
+ eq((await db`select count(*)::int n from guest_runtime.app_principals where id=${joins[90].principal_id}`)[0].n,0,'guest profile deletion cascades principal');
+ rejected=false;try{await db`delete from auth.users where id=${target}`;}catch{rejected=true;}
+ eq(rejected,true,'claimed target Auth deletion restricted atomically by alias history');
+ rejected=false;try{await db`delete from public.profiles where id=${g.principal_id}`;}catch{rejected=true;}
+ eq(rejected,true,'claimed source profile deletion restricted by claim history');
+ eq((await db`select count(*)::int n from auth.users where id=${target}`)[0].n,1,'failed claimed deletion retains real Auth identity');
+ // Deterministic interleaving: exclusive claim gate holds writers before tuples.
+ await db`update public.events set requests_status='live' where id=${event}`;
+ const contender=joins[80];
+ const contenderSong=await call('request',{event_id:event,token:contender.token,idempotency_key:uid(780),source_platform:'itunes',source_song_id:'780',title:'Concurrent',artist:'Artist'});
+ assert.ok(contenderSong.request_id);
+ const pendingTip=uid(781);
+ await db`insert into public.dj_tips(id,user_id,dj_id,event_id,gross_amount_cents,platform_fee_cents,net_amount_cents,status) values(${pendingTip},${contender.principal_id},${dj},${event},100,30,70,'pending')`;
+ let release:()=>void=()=>{};let acquired:()=>void=()=>{};
+ const ready=new Promise<void>(r=>{acquired=r;});const hold=new Promise<void>(r=>{release=r;});
+ const blocker=db.begin(async q=>{await q`select pg_advisory_xact_lock(8713201,1)`;acquired();await hold;});await ready;
+ const award=db.begin(q=>q`select public.award_points(${contender.principal_id},${event},2,'earned','Concurrent award')`);
+ const playing=authenticated(dj,q=>q`select public.dj_transition_request(${event},${contenderSong.request_id},'playing')`);
+ const profile=authenticated(target,q=>q`select public.update_my_profile('Target',true)`);
+ const ban=db.begin(q=>q`insert into public.event_banned_guests(event_id,user_id) values(${event},${contender.principal_id})`);
+ const paid=service(q=>q`select public.followup_apply_financial_event(${q.json({event_id:'evt_concurrent',event_type:'payment_intent.succeeded',tip_id:pendingTip,kind:'paid',payment_intent:'pi_concurrent',amount_cents:100,currency:'usd',livemode:false})})`);
+ const merging=claim(target,bs(81));
+ // Poll actual lock wait inventory; timing alone never constitutes barrier evidence.
+ let waiting=0;for(let i=0;i<200;i++){waiting=(await db`select count(*)::int n from pg_stat_activity where datname=current_database() and wait_event='advisory'`)[0].n;if(waiting>=6)break;await new Promise(r=>setTimeout(r,10));}
+ release();await blocker;
+ await Promise.all([award,playing,profile,ban,paid,merging]);
+ eq(waiting>=6,true,'DJ ban profile award settlement and claim wait at exclusion gate before tuples');
+ eq((await db`select count(*)::int n from public.song_requests where event_id=${event} and status='playing'`)[0].n,1,'DJ claim interleaving keeps one playing request');
+ eq((await db`select count(*)::int n from public.profiles p where id in(${contender.principal_id},${target}) and points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'concurrent award and claim reconcile both ledgers');
+ eq((await db`select user_id from public.dj_tips where id=${pendingTip}`)[0].user_id,contender.principal_id,'claim settlement leaves immutable owner');
+ eq((await db`select status from public.dj_tips where id=${pendingTip}`)[0].status,'succeeded','parallel financial settlement succeeds');
+ eq((await authenticated(target,q=>q`select public.is_event_member(${event}) m`))[0].m,false,'concurrent source ban remains effective after claim');
  console.log(`RESULT ${checks} local database assertions passed`);
 }finally{await db.end();}
