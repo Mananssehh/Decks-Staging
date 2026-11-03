@@ -19,15 +19,31 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
  IF TG_OP='UPDATE' AND (new.id IS DISTINCT FROM old.id OR new.auth_user_id IS DISTINCT FROM old.auth_user_id)
  THEN RAISE EXCEPTION 'Immutable profile identity' USING ERRCODE='42501'; END IF;
- IF TG_OP='INSERT' AND EXISTS(SELECT 1 FROM auth.users WHERE id=new.id) AND new.auth_user_id IS DISTINCT FROM new.id
- THEN RAISE EXCEPTION 'Registered profile requires protected Auth link' USING ERRCODE='23514'; END IF;
- IF TG_OP='INSERT' AND current_user NOT IN ('postgres','supabase_admin') AND new.auth_user_id IS NULL
- THEN RAISE EXCEPTION 'Guest profile creation is server-only' USING ERRCODE='42501'; END IF;
+ -- Legacy ensure/upgrade INSERTs omit the new column; derive only from an actual
+ -- Auth row and let the real FK validate it. No invented Auth UUID is accepted.
+ IF TG_OP='INSERT' AND new.auth_user_id IS NULL AND EXISTS(SELECT 1 FROM auth.users WHERE id=new.id)
+ THEN new.auth_user_id:=new.id; END IF;
  RETURN new;
 END $$;
 REVOKE ALL ON FUNCTION public.guest_profile_identity_guard() FROM PUBLIC,anon,authenticated,service_role;
 CREATE TRIGGER guest_profile_identity BEFORE INSERT OR UPDATE ON public.profiles
 FOR EACH ROW EXECUTE FUNCTION public.guest_profile_identity_guard();
+CREATE FUNCTION public.guest_profile_lifecycle() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF old.auth_user_id IS NOT NULL AND EXISTS(SELECT 1 FROM auth.users WHERE id=old.auth_user_id)
+  THEN RAISE EXCEPTION 'Delete registered identity through Auth, not profile' USING ERRCODE='23503'; END IF;
+  RETURN old;
+ END IF;
+ IF new.auth_user_id IS NOT NULL THEN
+  INSERT INTO guest_runtime.app_principals(id,auth_user_id,kind) VALUES(new.id,new.auth_user_id,'auth') ON CONFLICT(id) DO NOTHING;
+ END IF;
+ RETURN new;
+END $$;
+REVOKE ALL ON FUNCTION public.guest_profile_lifecycle() FROM PUBLIC,anon,authenticated,service_role;
+CREATE TRIGGER guest_registered_profile_delete BEFORE DELETE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.guest_profile_lifecycle();
+CREATE TRIGGER guest_registered_profile_insert AFTER INSERT ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.guest_profile_lifecycle();
 -- Outer entry wrappers acquire gate before event/reservation/tuple locks.
 -- Preserve actual installed bodies and signatures, not historical copies.
 DO $$ DECLARE r record; definition text; BEGIN

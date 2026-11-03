@@ -102,6 +102,10 @@ try{
  await db`insert into auth.users(id) values(${disposable})`;
  eq((await db`select auth_user_id from public.profiles where id=${disposable}`)[0].auth_user_id,disposable,'bootstrap creates protected profile first');
  eq((await db`select auth_user_id from guest_runtime.app_principals where id=${disposable}`)[0].auth_user_id,disposable,'bootstrap principal references registered profile');
+ rejected=false;try{await db`delete from public.profiles where id=${disposable}`;}catch{rejected=true;}
+ eq(rejected,true,'registered profile deletion cannot orphan existing Auth');
+ eq((await authenticated(disposable,q=>q`select public.ensure_profile('Registered') r`))[0].r.id,disposable,'legacy ensure profile remains usable with protected link');
+ eq((await authenticated(disposable,q=>q`select public.upgrade_anonymous_profile('Registered') r`))[0].r.id,disposable,'legacy upgrade preserves real provider identity');
  await db`delete from auth.users where id=${disposable}`;
  eq((await db`select count(*)::int n from public.profiles where id=${disposable}`)[0].n,0,'Auth deletion cascades profile');
  eq((await db`select count(*)::int n from guest_runtime.app_principals where id=${disposable}`)[0].n,0,'Auth deletion cascades principal');
