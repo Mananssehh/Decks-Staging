@@ -20,6 +20,10 @@ try{
  eq((await db`select count(*)::int n from public.purchase_consents where user_id=${g.principal_id} and version='v2-tips-2026-06-12'`)[0].n,1,'guest consent evidence recorded once');
  const pub=(await service(q=>q`select public.guest_event_public_profile(${event},${g.token},${g.principal_id}) r`))[0].r;eq(pub.profile,{found:false,is_public:false},'private guest profile no disclosure');
  eq((await service(q=>q`select public.application_own_ledger(${event},${g.token},0,'all') r`))[0].r.rows.length,4,'guest ledger reads starter, join and two request awards');
+ await db`update guest_runtime.sessions set expires_at=now()-interval '1 second' where id=${g.session_id}`;
+ eq((await call('snapshot',scope)).status,401,'expired session denied without identity replacement');
+ const resumed=await call('join',{bootstrap,code:'APPTEST',nickname:'Updated'});eq([resumed.principal_id,resumed.session_id,resumed.token],[g.principal_id,g.session_id,g.token],'explicit bootstrap rejoin resumes expired own identity no token rotation');
+ eq((await db`select points from public.profiles where id=${g.principal_id}`)[0].points,18,'expiry rejoin preserves starter join and request balance');
  await db`update public.song_requests set external_url='javascript:evil',preview_url='data:evil',album_art='javascript:evil' where id=${r.request_id}`;
  const snap=(await call('snapshot',scope)).snapshot;const row=snap.songs.find((s:{id:string})=>s.id===r.request_id);eq([row.external_url,row.preview_url,row.album_art,row.profile_linkable],[null,null,null,false],'snapshot sanitizes stored unsafe links and hides private profile links');
  await service(q=>q`select public.prepare_registered_profile_deletion(${id})`);await db`delete from auth.users where id=${id}`;

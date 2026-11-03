@@ -250,6 +250,7 @@ DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r js
    UPDATE public.profiles SET nickname=nick,updated_at=now() WHERE id=u AND nickname IS DISTINCT FROM nick;
    tok:=guest_runtime.session_token(bs,eid);
    INSERT INTO guest_runtime.sessions(principal_id,event_id,token_hash) VALUES(u,eid,guest_runtime.digest(tok)) ON CONFLICT(principal_id,event_id) DO NOTHING;
+   UPDATE guest_runtime.sessions SET expires_at=now()+interval '12 hours' WHERE principal_id=u AND event_id=eid AND revoked_at IS NULL AND expires_at<=clock_timestamp();
    SELECT * INTO s FROM guest_runtime.sessions WHERE principal_id=u AND event_id=eid;
    IF s.revoked_at IS NOT NULL OR s.expires_at<=clock_timestamp() THEN RAISE EXCEPTION 'guest_admission_denied' USING ERRCODE='P0004'; END IF;
    RETURN jsonb_build_object('ok',true,'principal_id',u,'session_id',s.id,'event_id',eid,'token',tok,'expires_at',s.expires_at,'event',j->'event');
