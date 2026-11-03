@@ -11,3 +11,5 @@ SELECT c.oid::regclass,t.tgname,pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN 
 WHERE t.tgname IN ('guest_writer_gate','guest_profile_identity','guest_registered_profile_insert','guest_registered_profile_delete') ORDER BY 1,2;
 SELECT oid::regprocedure,pg_get_functiondef(oid) FROM pg_proc WHERE pronamespace='public'::regnamespace
 AND proname IN ('handle_new_user','award_points','dj_transition_request','dj_set_queue_position','repair_write_broadcast','update_my_profile');
+SELECT attrelid::regclass,attname,format_type(atttypid,atttypmod),attnotnull FROM pg_attribute WHERE attnum>0 AND NOT attisdropped AND attrelid IN(SELECT oid FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind='r') ORDER BY 1,2;
+SELECT oid::regprocedure,proacl,pg_get_functiondef(oid) FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname IN ('get_my_event_snapshot','get_my_principal_aliases');

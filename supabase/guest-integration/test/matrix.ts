@@ -201,5 +201,24 @@ try{
  eq((await claim(overlapTarget,bs(3001))).already_claimed,true,'overlap claim retry idempotent');
  eq((await db`select count(*)::int n from public.points_transactions where user_id=${overlapTarget} and reason='Guest claim duplicate Joined event'`)[0].n,2,'retry no repeated compensation');
  eq((await db`select count(*)::int n from public.profiles p where id in(${overlap.principal_id},${overlapTarget}) and points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'overlap both balances reconcile exactly');
+ const nextOverlap=await call('join',{bootstrap:bs(3002),code:'LOCAL1',nickname:'Next'});
+ eq((await claim(overlapTarget,bs(3002))).joined_deduplicated,1,'later claim recognizes already compensated alias reward net');
+ eq((await db`select points from public.profiles where id=${nextOverlap.principal_id}`)[0].points,0,'later claimed source remains zero');
+ const noRewardTarget=uid(801);await db`insert into auth.users(id) values(${noRewardTarget})`;
+ const noReward=await call('join',{bootstrap:bs(3003),code:'LOCAL1',nickname:'No reward'});
+ await db`insert into public.event_participants(event_id,user_id,nickname) values(${event},${noRewardTarget},'Target')`;
+ // Construct genuine membership without reward evidence, not assumed point award.
+ await db`delete from public.points_transactions where user_id=${noRewardTarget} and event_id=${event} and reason='Joined event'`;
+ await db`update public.profiles set points=points-1 where id=${noRewardTarget}`;
+ const noRewardBalance=(await db`select points from public.profiles where id=${noRewardTarget}`)[0].points;
+ eq((await claim(noRewardTarget,bs(3003))).joined_deduplicated,0,'membership overlap without target reward never deducts');
+ eq((await db`select points from public.profiles where id=${noRewardTarget}`)[0].points,noRewardBalance+1,'source actual nonduplicate join reward transfers');
+ const distinctTarget=uid(802);await db`insert into auth.users(id) values(${distinctTarget})`;
+ const distinct=await call('join',{bootstrap:bs(3004),code:'LOCAL1',nickname:'Distinct'});
+ await authenticated(distinctTarget,q=>q`select public.join_event_by_code('EXTRA1','Target')`);
+ eq((await claim(distinctTarget,bs(3004))).joined_deduplicated,0,'different event rewards never deduplicated');
+ eq((await db`select points from public.profiles where id=${distinctTarget}`)[0].points,17,'nonoverlap preserves both distinct one-point rewards');
+ eq((await db`select count(*)::int n from public.profiles p where id in(${distinct.principal_id},${distinctTarget},${noReward.principal_id},${noRewardTarget}) and points<>(select coalesce(sum(amount),0) from public.points_transactions t where t.user_id=p.id)`)[0].n,0,'nonoverlap and no-reward ledgers reconcile');
+ eq((await db`select has_function_privilege('anon','public.get_my_event_snapshot(uuid)','execute') b`)[0].b,false,'own snapshot unavailable to anonymous role');
  console.log(`RESULT ${checks} local database assertions passed`);
 }finally{await db.end();}
