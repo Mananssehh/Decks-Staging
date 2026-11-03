@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$(id -u)" = 0 ]; then
+ U="$(id -u nobody 2>/dev/null || id -u lovable)"; H="$(mktemp -d /tmp/guest-home.XXXXXX)"; chmod 777 "$H"
+ exec setpriv --reuid="$U" --regid="$(id -g "$U")" --clear-groups env HOME="$H" bash "$0"
+fi
+HERE="$(cd "$(dirname "$0")/.." && pwd)"; WORK="$(mktemp -d /tmp/guest-integration-pg.XXXXXX)"
+export PGHOST="$WORK" PGPORT=55442 PGUSER=postgres PGDATABASE=decks_repair
+initdb -D "$WORK/data" -U postgres -A trust >/dev/null
+pg_ctl -D "$WORK/data" -o "-k $WORK -p $PGPORT -c listen_addresses='' -c max_connections=160" -l "$WORK/log" -w start >/dev/null
+trap 'pg_ctl -D "$WORK/data" -m immediate stop >/dev/null; rm -rf "$WORK"' EXIT
+createdb "$PGDATABASE"
+psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/../repair-staged/fixture/00_fixture.sql" >"$WORK/setup.log" 2>&1 || { cat "$WORK/setup.log"; exit 1; }
+for f in "$HERE"/../repair-staged/0[1-6]_*.sql "$HERE"/../repair-followup/0[12]_*.sql; do psql -Xq -v ON_ERROR_STOP=1 -1 -f "$f" >>"$WORK/setup.log" 2>&1 || { tail -40 "$WORK/setup.log"; exit 1; }; done
+# Restore exact ownership FKs omitted by historical catalog fixture; fixture auth UID exists.
+psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY(id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.song_requests ADD CONSTRAINT song_requests_requested_by_fkey FOREIGN KEY(requested_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.votes ADD CONSTRAINT votes_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.dj_tips ADD CONSTRAINT dj_tips_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.guest_funnel_events ADD CONSTRAINT guest_funnel_events_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+SQL
+psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-7]_*.sql) >"$WORK/install.log" 2>&1 || { cat "$WORK/install.log"; exit 1; }
+NODE_PATH=/dev-server/node_modules bun "$HERE/test/matrix.ts"
+# Containment must preserve data; destructive rollback must refuse.
+if psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >"$WORK/refusal" 2>&1; then echo FAIL destructive rollback accepted; exit 1; fi
+grep -q 'guest records exist' "$WORK/refusal"
+psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/900_contain.sql"
+psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT enabled FROM guest_runtime.installation) THEN RAISE EXCEPTION 'containment failed'; END IF; IF EXISTS(SELECT 1 FROM guest_runtime.sessions WHERE revoked_at IS NULL) THEN RAISE EXCEPTION 'live session'; END IF; END \$\$;"
+echo 'PASS containment and destructive refusal'
+psql -Xq -v ON_ERROR_STOP=1 -c "CREATE DATABASE empty_restore TEMPLATE decks_repair"
+# Explicitly discard local guest fixtures only in cloned THROWAWAY DB, then reconstruct pre-install state.
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
+DELETE FROM public.dj_tips WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
+DELETE FROM public.guest_funnel_events WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
+DELETE FROM public.votes WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
+DELETE FROM public.song_requests WHERE requested_by IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
+DELETE FROM public.profiles WHERE id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
+DELETE FROM guest_runtime.claims;
+DELETE FROM guest_runtime.sessions;
+DELETE FROM guest_runtime.bootstraps;
+DELETE FROM guest_runtime.app_principals WHERE kind='guest';
+SQL
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >>"$WORK/empty.log" 2>&1 || { cat "$WORK/empty.log"; exit 1; }
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE public._before_restore AS SELECT oid::regprocedure::text sig,pg_get_functiondef(oid) def FROM pg_proc WHERE pronamespace='public'::regnamespace;
+SQL
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -1 $(printf -- '-f %s ' "$HERE"/00[1-7]_*.sql) >>"$WORK/empty.log" 2>&1
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -f "$HERE/950_restore_empty.sql" >>"$WORK/empty.log" 2>&1 || { tail -40 "$WORK/empty.log"; exit 1; }
+PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regnamespace('guest_runtime') IS NOT NULL OR EXISTS(SELECT 1 FROM public._before_restore WHERE def IS DISTINCT FROM pg_get_functiondef(to_regprocedure(sig))) THEN RAISE EXCEPTION 'restore mismatch'; END IF; END \$\$;"
+echo 'PASS empty rollback restores every original public function definition'

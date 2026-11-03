@@ -1,5 +1,11 @@
 # Roadmap
 
+## Guest backend integration (source-only)
+- [ ] Stage principals, exact ownership-FK replacement, actor kernels, sessions, snapshots, claim and alias-aware financial boundaries.
+- [ ] Stage bounded guest-event API and no-network endpoint tests; retain probe and existing UI unchanged.
+- [ ] Local database authorization/concurrency/claim/ledger/financial regressions, preflight, backups and containment rollback.
+- [ ] Document capability Broadcast constraints and independent hosted verification/install/deployment gates.
+
 ## Core staging audit repair
 - [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.
 - [x] Switch join, bridge and DJ source callers to repaired boundaries without deployment.
