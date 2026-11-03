@@ -4,14 +4,51 @@ Hypothesis under test: 100 fresh guests can join an event and perform server-aut
 request/read/vote operations **without any Supabase anonymous sign-in**, using an
 event-scoped, server-issued, hashed-at-rest guest token.
 
-**Status: SOURCE ONLY.** Not installed, not deployed. Root reviews/installs SQL and deploys.
+**Status: INSTALLED + DEPLOYED IN STAGING, then DISABLED AFTER TEST.** `001_install.sql` and the
+`guest-token-probe` Edge function are installed on the DECKS staging backend, the probe was exercised
+over real HTTP, and it was then disabled (marker off, all probe events closed, all sessions revoked).
+The app's own guest flow is **not** integrated with it and **not** replaced. Production was never
+touched, deployed to, or published from this work. Dated hosted results are below.
 
 ## What this is NOT
 - Not a migration of the app's guest model and not a UI replacement.
 - Does **not** integrate production guest points, payments/tips, boosts, DJ UI, Realtime,
   `public.*` app tables or `auth.users`. No reads/writes/foreign keys to any of them.
 - Does **not** certify app capacity, Realtime fan-out, provider quotas, or egress-IP behaviour.
-  The runner's "auth_signup_calls_observed = 0" is source/test instrumentation, not network proof.
+  The runner's "auth_signup_calls_observed = 0" is client-side counting in the test driver, not
+  network proof (the hosted run's 1273-call / 0-Auth tally is the same kind of evidence).
+
+## Hosted staging results (2026-11-03 UTC — Nov 2 America/New_York)
+
+Installed and deployed by root's independent review, exercised over real HTTP, then disabled.
+
+- **Capacity (fresh clients):** 25/25 full flows in 39.61 s, 50/50 in 25.59 s, 100/100 in 26.29 s.
+  No unexpected HTTP errors; every request / read / vote / idempotency / resume check passed.
+  The runner made 1273 calls, all to the probe endpoint, with 0 Auth calls.
+- **Rate limiter (same-token burst):** 40 simultaneous reads on one guest token → 30× 200 plus
+  10× typed 429 in 4.082 s.
+- **Totals** across both capacity runs plus the security/independent burst: 353 unique hashed probe
+  sessions, 350 requests, 350 votes, and 0 counter / admission / request-count mismatches.
+  `auth.users` stayed at 118.
+- **App untouched:** six original app fingerprints matched (profiles, events, requests, votes,
+  function definitions, table permissions).
+- **Disabled after test** at 2026-11-03 02:07:43 UTC: marker off, all probe events closed, all 353
+  sessions revoked. Verified over HTTP: `contract` reports `enabled:false` and `join` returns
+  503 `probe_disabled`. The objects are still installed; the step-6 teardown remains available.
+
+### Run-history honesty
+- The **first** overall runner run reported `pass:false`. Every capacity stage passed; the failure came
+  from the spam check, whose driver issued its reads sequentially (~13/min at real HTTP latency) and so
+  never reached the 30/min limit. That was a test-driver defect, not a limiter or capacity finding.
+- The **corrected** driver fires the reads as one simultaneous burst; the final overall run is
+  `pass:true`, with the burst result above (30× 200 + 10× 429).
+
+### What the hosted result does NOT establish
+- One runner on one egress path. The runner's egress IP was **not independently verified**, so the
+  30/hour-per-IP+project Auth limit was never exercised as a comparison — the probe simply never used Auth.
+- Not venue WiFi, not Realtime fan-out, not sustained or long-duration capacity, not UI/browser persistence.
+- Not points, payments/tips, boosts, DJ UI or any app integration; the app guest flow is untouched.
+- Not production: nothing here was deployed to or published from production.
 
 ## Objects (only these)
 - Schema `repair_guest_probe`: `marker`, `events`, `sessions`, `requests`, `votes`, `op_log`,
