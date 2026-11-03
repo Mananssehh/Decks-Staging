@@ -13,4 +13,9 @@ if(url&&key&&staging(url)){
 const unavailable:Backend={auth:async()=>({ok:false,status:503}),poll:async()=>({ok:false,status:503})};
 const hubs=new Hubs(backend??unavailable);
 addEventListener('beforeunload',()=>hubs.shutdown());
-Deno.serve(createHandler(url,backend,hubs,req=>Deno.upgradeWebSocket(req)));
+Deno.serve(createHandler(url,backend,hubs,req=>{
+ const upgraded=Deno.upgradeWebSocket(req),native=upgraded.socket;
+ const adapter={get bufferedAmount(){return native.bufferedAmount;},send:(message:string)=>native.send(message),close:(code:number,reason:string)=>native.close(code,reason),onmessage:null as ((e:{data:unknown})=>void)|null,onclose:null as (()=>void)|null,onerror:null as (()=>void)|null};
+ native.onmessage=e=>adapter.onmessage?.({data:e.data});native.onclose=()=>adapter.onclose?.();native.onerror=()=>adapter.onerror?.();
+ return {socket:adapter,response:upgraded.response};
+}));

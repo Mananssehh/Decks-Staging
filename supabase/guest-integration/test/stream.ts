@@ -25,7 +25,7 @@ try{
  await db`update public.song_requests set title='Changed' where id=${request.request_id}`;eq(await rev(event)>unchanged,true,'actual song update bumps');
  const transactional=await rev(event);try{await db.begin(async q=>{await q`update public.song_requests set title='Rollback' where id=${request.request_id}`;throw Error('rollback');});}catch{/* intentional */}eq(await rev(event),transactional,'rolled-back revision not visible');
  await db`insert into public.now_playing(event_id,title,source) values(${event},'Stream song','manual')`;const np=await rev(event);await db`update public.now_playing set title='New track' where event_id=${event}`;eq(await rev(event)>np,true,'now-playing change bumps');
- const voteBefore=await rev(event);await call('vote',{event_id:event,token:join.token,request_id:request.request_id,value:1});eq(await rev(event)>voteBefore,true,'vote counter change bumps via songs');
+ const voteBefore=await rev(event);await call('vote',{event_id:event,token:join.token,request_id:request.request_id,value:-1});eq(await rev(event)>voteBefore,true,'vote counter change bumps via songs');
  await db`insert into public.event_banned_guests(event_id,user_id) values(${event},${join.principal_id})`;
  eq((await poll(event,[join.session_id])).valid_session_ids,[],'ban excluded with new revision in same poll');eq((await auth(event,join.token)).status,401,'banned auth rejected');
  await db`delete from public.event_banned_guests where event_id=${event}`;eq((await poll(event,[join.session_id])).valid_session_ids,[join.session_id],'unban authorized membership resumes');
