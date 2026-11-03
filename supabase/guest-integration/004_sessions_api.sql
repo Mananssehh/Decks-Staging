@@ -58,7 +58,7 @@ CREATE FUNCTION guest_runtime.snapshot(_actor uuid,_event uuid) RETURNS jsonb LA
  FROM public.events e WHERE e.id=_event AND guest_runtime.member(_actor,_event)
 $$;
 CREATE FUNCTION public.guest_event_api(_action text,_payload jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r jsonb; s guest_runtime.sessions; key uuid; op jsonb; cat text; target uuid; nowts timestamptz:=clock_timestamp(); BEGIN
+DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r jsonb; s guest_runtime.sessions; logical_key uuid; op jsonb; cat text; target uuid; nowts timestamptz:=clock_timestamp(); BEGIN
  IF auth.role() IS DISTINCT FROM 'service_role' THEN RETURN guest_runtime.fail(403,'forbidden'); END IF;
  IF _action='contract' THEN RETURN (SELECT jsonb_build_object('ok',true,'contract',contract,'enabled',enabled) FROM guest_runtime.installation WHERE id); END IF;
  IF NOT EXISTS(SELECT 1 FROM guest_runtime.installation WHERE id AND contract='guest-integration-v1') THEN RETURN guest_runtime.fail(503,'contract_mismatch'); END IF;
@@ -110,15 +110,15 @@ DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r js
  IF _action IN ('snapshot','ledger') THEN RETURN jsonb_build_object('ok',true,'snapshot',guest_runtime.snapshot(u,eid)); END IF;
  IF _action='profile' THEN RETURN jsonb_build_object('ok',true,'profile',guest_runtime.profile_kernel(u,_payload->>'nickname')); END IF;
  IF _action='request' THEN
-  key:=(_payload->>'idempotency_key')::uuid; IF key IS NULL THEN RETURN guest_runtime.fail(400,'invalid_key'); END IF;
+  logical_key:=(_payload->>'idempotency_key')::uuid; IF logical_key IS NULL THEN RETURN guest_runtime.fail(400,'invalid_key'); END IF;
   op:=_payload-'token';
-  SELECT result INTO r FROM guest_runtime.request_keys WHERE principal_id=ANY(guest_runtime.aliases(u)) AND event_id=eid AND guest_runtime.request_keys.key=key LIMIT 1;
+  SELECT result INTO r FROM guest_runtime.request_keys WHERE principal_id=ANY(guest_runtime.aliases(u)) AND event_id=eid AND guest_runtime.request_keys.key=logical_key LIMIT 1;
   IF r IS NOT NULL THEN
-   IF NOT EXISTS(SELECT 1 FROM guest_runtime.request_keys WHERE principal_id=ANY(guest_runtime.aliases(u)) AND event_id=eid AND guest_runtime.request_keys.key=key AND payload=op) THEN RETURN guest_runtime.fail(409,'idempotency_mismatch'); END IF;
+   IF NOT EXISTS(SELECT 1 FROM guest_runtime.request_keys WHERE principal_id=ANY(guest_runtime.aliases(u)) AND event_id=eid AND guest_runtime.request_keys.key=logical_key AND payload=op) THEN RETURN guest_runtime.fail(409,'idempotency_mismatch'); END IF;
    RETURN r;
   END IF;
   SELECT jsonb_build_object('ok',outcome IN ('created','supported_existing','already_supported'),'outcome',outcome,'request_id',request_id,'status',CASE WHEN outcome IN ('created','supported_existing','already_supported') THEN 200 ELSE 403 END,'error',outcome) INTO r FROM guest_runtime.request_kernel(u,eid,_payload->>'source_platform',_payload->>'source_song_id',_payload->>'title',_payload->>'artist',_payload->>'album',_payload->>'album_art_url',(_payload->>'duration_ms')::integer,_payload->>'preview_url',coalesce((_payload->>'explicit')::boolean,false),_payload->>'external_url');
-  IF r->>'ok'='true' THEN INSERT INTO guest_runtime.request_keys VALUES(u,eid,key,op,r); END IF;
+  IF r->>'ok'='true' THEN INSERT INTO guest_runtime.request_keys VALUES(u,eid,logical_key,op,r); END IF;
   RETURN r;
  END IF;
  IF _action IN ('vote','remove') THEN
