@@ -1,7 +1,7 @@
 -- Sequential behaviour assertions (run as postgres; RPC calls use SET ROLE service_role).
 DO $t$
 DECLARE
-  a record; b record; r jsonb; tok text; tok2 text; req uuid; i int; adm int;
+  a record; b record; r jsonb; tok text; tok_ann text; tok2 text; req uuid; i int; adm int;
   f text := 'repair_guest_probe_rpc';
 BEGIN
   -- ACL
@@ -28,7 +28,7 @@ BEGIN
   IF r->>'error' <> 'invalid_nickname' THEN RAISE EXCEPTION 'nick %', r; END IF;
 
   r := public.repair_guest_probe_rpc('join', jsonb_build_object('event_id',a.event_id,'code',a.code,'nickname','Ann'));
-  tok := r->>'token';
+  tok := r->>'token'; tok_ann := tok;
   IF tok !~ '^[0-9a-f]{64}$' OR (r->>'resumed')::boolean THEN RAISE EXCEPTION 'join %', r; END IF;
   IF EXISTS (SELECT 1 FROM repair_guest_probe.sessions WHERE convert_to(tok,'UTF8') = token_hash) THEN RAISE EXCEPTION 'raw token stored'; END IF;
   SELECT admissions INTO adm FROM repair_guest_probe.events WHERE id=a.event_id;
@@ -100,6 +100,16 @@ BEGIN
   IF r->>'error' <> 'guest_rate_limited' THEN RAISE EXCEPTION 'spam %', r; END IF;
 
   -- revocation / expiry / closed event
+  r := public.repair_guest_probe_rpc('join', jsonb_build_object('event_id',a.event_id,'code',a.code,'nickname','Exp'));
+  tok := r->>'token';
+  IF public.repair_guest_probe_rpc('read', jsonb_build_object('event_id',a.event_id,'token',tok))->>'ok' <> 'true' THEN RAISE EXCEPTION 'pre-expiry'; END IF;
+  UPDATE repair_guest_probe.sessions SET expires_at = now() - interval '1 second' WHERE token_hash = sha256(convert_to(tok,'UTF8'));
+  r := public.repair_guest_probe_rpc('read', jsonb_build_object('event_id',a.event_id,'token',tok));
+  IF r->>'status' <> '401' OR r->>'error' <> 'invalid_session' THEN RAISE EXCEPTION 'expired %', r; END IF;
+  r := public.repair_guest_probe_rpc('join', jsonb_build_object('event_id',a.event_id,'token',tok));
+  IF r->>'status' <> '401' THEN RAISE EXCEPTION 'expired resume %', r; END IF;
+  -- first session token (Ann) revoked below
+  tok := tok_ann;
   UPDATE repair_guest_probe.sessions SET revoked_at = now() WHERE token_hash = sha256(convert_to(tok,'UTF8'));
   r := public.repair_guest_probe_rpc('join', jsonb_build_object('event_id',a.event_id,'token',tok));
   IF r->>'status' <> '401' THEN RAISE EXCEPTION 'revoked %', r; END IF;
@@ -107,6 +117,13 @@ BEGIN
   r := public.repair_guest_probe_rpc('join', jsonb_build_object('event_id',b.event_id,'code',b.code,'nickname','x'));
   IF r->>'status' <> '410' THEN RAISE EXCEPTION 'closed %', r; END IF;
 
+  -- contract mismatch fails closed even when enabled
+  UPDATE repair_guest_probe.marker SET contract = 'guest-token-probe-v0';
+  r := public.repair_guest_probe_rpc('read', jsonb_build_object('event_id',a.event_id,'token',tok2));
+  IF r->>'error' <> 'probe_contract_mismatch' OR r->>'status' <> '503' THEN RAISE EXCEPTION 'contract mismatch %', r; END IF;
+  r := public.repair_guest_probe_rpc('join', jsonb_build_object('event_id',a.event_id,'code',a.code,'nickname','m'));
+  IF r->>'error' <> 'probe_contract_mismatch' THEN RAISE EXCEPTION 'contract mismatch join %', r; END IF;
+  UPDATE repair_guest_probe.marker SET contract = 'guest-token-probe-v1';
   -- disabled marker
   UPDATE repair_guest_probe.marker SET enabled = false;
   r := public.repair_guest_probe_rpc('read', jsonb_build_object('event_id',a.event_id,'token',tok2));
@@ -114,5 +131,6 @@ BEGIN
   UPDATE repair_guest_probe.marker SET enabled = true;
 
   DELETE FROM repair_guest_probe.events;
+  DELETE FROM repair_guest_probe.join_failures;
   RAISE NOTICE 'assertions passed';
 END $t$;

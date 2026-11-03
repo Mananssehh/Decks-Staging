@@ -195,6 +195,7 @@ BEGIN
   IF _action = 'contract' THEN
     RETURN jsonb_build_object('ok', true, 'contract', _contract, 'enabled', coalesce(_enabled, false));
   END IF;
+  IF _contract IS DISTINCT FROM 'guest-token-probe-v1' THEN RETURN repair_guest_probe.err(503, 'probe_contract_mismatch'); END IF;
   IF NOT coalesce(_enabled, false) THEN RETURN repair_guest_probe.err(503, 'probe_disabled'); END IF;
   IF _action NOT IN ('join', 'request', 'read', 'vote') THEN RETURN repair_guest_probe.err(400, 'invalid_action'); END IF;
   IF _event_id IS NULL THEN RETURN repair_guest_probe.err(400, 'invalid_event_id'); END IF;
@@ -210,6 +211,10 @@ BEGIN
   IF _action = 'join' AND _token IS NULL THEN
     -- Fresh admission. Unknown event and wrong code are indistinguishable.
     IF _ev.id IS NULL OR _ev.code_hash <> sha256(convert_to(coalesce(_payload->>'code', ''), 'UTF8')) THEN
+      -- Global failure bucket serialized by a probe-specific xact advisory mutex.
+      -- Order: (optional) event row lock -> this mutex; no path takes the mutex before an event lock.
+      PERFORM pg_advisory_xact_lock(7420113, 1);
+      DELETE FROM repair_guest_probe.join_failures WHERE at <= now() - interval '10 minutes';
       SELECT count(*) INTO _n FROM repair_guest_probe.join_failures WHERE at > now() - interval '10 minutes';
       IF _n >= c_join_fail_per_10min THEN RETURN repair_guest_probe.err(429, 'join_rate_limited'); END IF;
       INSERT INTO repair_guest_probe.join_failures DEFAULT VALUES;
