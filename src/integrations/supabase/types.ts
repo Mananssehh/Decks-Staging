@@ -1564,6 +1564,10 @@ export type Database = {
         Args: { _code: string; _ip: string }
         Returns: Json
       }
+      repair_guest_probe_rpc: {
+        Args: { _action: string; _payload: Json }
+        Returns: Json
+      }
       repair_prune_limiter_logs: { Args: never; Returns: undefined }
       repair_write_broadcast: {
         Args: {
