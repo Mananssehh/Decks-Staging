@@ -69,7 +69,9 @@ PGDATABASE=capacity_root psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS
 echo 'PASS 012 twice + 912 twice on exact hosted reviewer state are no-ops; reviewer audit tables preserved'
 # Partial reviewer state (snapshot only, original aliases/member) is unknown drift and must be refused.
 psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE capacity_partial TEMPLATE capacity_rollback'
-PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ DECLARE d text; BEGIN EXECUTE regexp_replace(pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure),'\$function\$\n','\$function\$\n -- drift\n'); END \$\$;"
+PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
+DO $x$ BEGIN EXECUTE replace(pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure),'AS $function$','AS $function$ -- drift'); END $x$;
+SQL
 if PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1; then echo FAIL 012 partial drift accepted; exit 1; fi
 PGDATABASE=capacity_partial psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regclass('guest_runtime.capacity_before') IS NOT NULL THEN RAISE EXCEPTION 'partial left backup'; END IF; END \$\$;"
 echo 'PASS 012 refuses partial/unknown snapshot drift without artifacts'
