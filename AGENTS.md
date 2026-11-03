@@ -15,4 +15,5 @@
 - Real guest backend candidates live under `supabase/guest-integration` with explicit actor kernels and a service-only API; disabled/source-only independent installation preserves deployed Auth behavior and probe isolation.
 - Guest principals reference protected public profile keys; only profiles link to Auth, and registered profile retirement precedes restricted Auth deletion to avoid managed deletion triggers and cascade lock inversion.
 - Guest claim exclusion is acquired at outer writer entry or BEFORE STATEMENT before tuple locks; legacy late row-trigger exclusion must never be introduced because it can invert event locks.
-- Guest live invalidations will use a verified-token receive-only Edge WebSocket relay with server-only subscriptions; no anonymous realtime.messages policies are permitted.
+- Guest live invalidations will use a verified-token receive-only Edge WebSocket relay with worker-shared two-second private revision polling; one poller/event/worker stops with the last socket, avoiding Realtime policies, quotas and idle cron jobs.
+- Guest read session validation chooses shared event/session locks at entry while mutations choose exclusive locks; authenticated and guest snapshots share one safe alias-aware SQL projection to avoid DTO and transaction drift.
