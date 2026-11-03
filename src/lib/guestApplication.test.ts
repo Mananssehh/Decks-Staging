@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import {GuestStore,joinGuest,guestEnabled,GuestError,safeHttps} from './guestApplication';
 import {tipRequestKey} from './tipRequestKey';
-function storage(){const m=new Map<string,string>();return {getItem:(k:string)=>m.get(k)??null,setItem:(k:string,v:string)=>m.set(k,v),removeItem:(k:string)=>m.delete(k)} as Storage;}
+function storage(){const m=new Map<string,string>();return {get length(){return m.size;},clear:()=>m.clear(),key:(i:number)=>[...m.keys()][i]??null,getItem:(k:string)=>m.get(k)??null,setItem:(k:string,v:string)=>{m.set(k,v);},removeItem:(k:string)=>{m.delete(k);}} satisfies Storage;}
 describe('real guest identity boundaries',()=>{
  it('flag defaults OFF and cannot enable another backend',()=>{expect(guestEnabled('ldxgejbzmpvsvozqmpfe')).toBe(false);expect(guestEnabled('production',true)).toBe(false);expect(guestEnabled('ldxgejbzmpvsvozqmpfe',true)).toBe(true);});
  it('fresh join uses zero Auth signup calls and same bootstrap across lost response/two tabs',async()=>{const s=storage(),a=new GuestStore(s,'staging'),b=new GuestStore(s,'staging');const signup=vi.fn();let attempts=0;const proofs:string[]=[];const invoke=vi.fn(async(_action:string,p:Record<string,unknown>)=>{proofs.push(String(p.bootstrap));if(attempts++===0)throw new GuestError(503,'unavailable');return {principal_id:'real-guest',session_id:'session',event_id:'event',token:'a'.repeat(64),expires_at:'2030-01-01'};});await expect(joinGuest(a,invoke,'ROOM1','Guest')).rejects.toThrow();await joinGuest(b,invoke,'ROOM1','Guest');expect(new Set(proofs).size).toBe(1);expect(a.bootstrap()).toMatch(/^[a-f0-9]{64}$/);expect(a.current()?.principal_id).toBe('real-guest');expect(signup).not.toHaveBeenCalled();});

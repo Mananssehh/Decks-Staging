@@ -17,7 +17,7 @@ import { ENABLE_LIVE_STRIPE } from "@/lib/featureFlags";
 import { supabase } from "@/integrations/supabase/client";
 import { tipRequestKey, clearTerminalTipKey } from "@/lib/tipRequestKey";
 import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
-import {useActor} from '@/hooks/useActor';
+import {useGuest} from '@/contexts/guest-state';
 import {guestInvoke,guestScope,ownAliases} from '@/lib/guestClient';
 
 interface Props {
@@ -41,7 +41,7 @@ export const TIP_DISCLAIMER =
   "Tips support the DJ. Tips do not affect song placement and do not guarantee playback, prioritization, or any specific action by the DJ.";
 
 export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, songRequestId, songTitleMeta, artistMeta }: Props) {
-  const actor=useActor();const guest=actor.guest?.session;
+  const guestContext=useGuest();const guest=guestContext?.enabled?guestContext.session:null;
   const submitLock = useRef(false);
   const [selected, setSelected] = useState<number>(5);
   const [custom, setCustom] = useState<string>("");
