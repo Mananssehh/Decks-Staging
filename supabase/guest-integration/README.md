@@ -1,15 +1,15 @@
 # Guest integration — SOURCE REVIEW CANDIDATE, DISABLED / NOT INSTALLED
 
-Lifecycle-pass baseline: `ca6ba866d4d6849e6b4d4c4e10fb36329136c966`. Staging only. No hosted
+Readiness-pass baseline: `8a813500b545f966ef342cffcd0ad2ac989ba4f3`. Staging only. No hosted
 SQL, deployment, Auth signup/session minting, provider calls, secrets, quota,
 publication or UI changes were performed. Disabled `repair_guest_probe` is untouched.
 
 ## Explicit unresolved review gates
 
-1. Root reports 118 Auth users /117 profiles. `000_preflight.sql` lists missing
-   profiles and their event/request/ledger/tip references, without emails or tokens.
-   Installation REFUSES any orphan; root must inspect and resolve its disposition
-   explicitly. No missing nickname/balance/profile is fabricated by this package.
+1. Root identified and authorized repair of the sole genuine missing bootstrap
+   profile: existing anonymous legacy DJ `46d7d47d-1b21-4351-a268-a1ccf95e1f42`.
+   Separate `000_targeted_bootstrap.sql` is ready for independent review, NOT run.
+   The normal orphan gate still refuses every other unresolved missing profile.
 2. Root must inspect actual FK definitions, writer bodies/ACLs and dependencies
    against the before/after catalogs. Protected lifecycle and writer protocol are
    implemented and tested locally, not certified against the hosted catalog.
@@ -27,7 +27,8 @@ Stripe config was independently reported not ready; provider checkout not tested
 
 `000_preflight.sql`: read-only catalog/FK/ACL/ledger inventory; root must compare
 actual installed core/payment definitions and save outputs before proceeding.
-`001_principals.sql`: fail on Auth/profile orphan; add protected nullable
+`000_targeted_bootstrap.sql`: separately reviewed exact existing-account repair.
+`001_principals.sql`: fail on remaining Auth/profile orphan; add protected nullable
 profiles.auth_user_id → auth.users and registered id consistency; private principals
 reference profile id and (id,auth_user_id), not Auth. Capture actual before-functions
 and named ownership constraints. Replace request/vote/tip/funnel ownership targets,
@@ -52,7 +53,7 @@ hosted definitions for restoration. Source copies alone do not prove live parity
 ## Installation — only AFTER gates resolved and independent review
 
 Do NOT replay historical repairs/migrations. Root runs read-only preflight, reviews
-all files, then executes **001..008 in one transaction**. Candidate deliberately
+all files, then executes **000_targeted_bootstrap, rerun 000_preflight, then 001..008 in one transaction**. Candidate deliberately
 starts disabled. Root captures `009_after_catalog.sql` and checks rowcounts,
 four ownership FK replacements, the protected profile chain and every remaining
 Auth FK/action, all private table RLS/ACL, service-only API, authenticated-only claim,
@@ -79,9 +80,17 @@ POST body `{action, payload}` only; never tokens/codes in URLs, logs or analytic
 - future payment adapter: service-only `guest_validate_actor(event_id,token)`;
   NO provider adapter changes/deployment in this phase.
 
-Snapshot is one SQL statement returning safe event state, latest 500 songs with own
+Authenticated-only `get_my_event_snapshot(event_id)` derives Auth UID, authorizes
+event owner or unbanned alias member, and shares the snapshot kernel; supplied UUID
+alone does not authorize. `get_my_principal_aliases()` remains available. Table RLS
+is unchanged. Snapshot is one SQL statement returning safe event state, latest 500 songs with own
 vote/ownership, points, now-playing, latest 100 own-alias ledger entries, truncation
 flag. No private Auth/profile PII, provider params, bootstrap/hash/secret projection.
+Songs include every existing SongRequestRow field (including immutable requested_by,
+external/preview URLs, album/duration/source/explicit/playback evidence); now-playing
+includes id/event_id/source/updated_at plus playback/link fields matching current row.
+Profile projection is whitelisted and contains no Auth/provider PII. Reads acquire
+shared event/session locks, mutations exclusive locks from entry, never upgrades.
 No Broadcast topic supplied; receive-only Edge feed implementation remains next phase.
 
 Budgets: 120 reads/min and 30 mutations/min/principal; bootstrap failed joins
@@ -105,7 +114,11 @@ any explicit row lock; arbitrary owner SQL is not a supported app writer.
 This is correctness-first but global claim exclusion limits throughput. Guest balance must reconcile
 exactly; inconsistent or spent-below-starter balance is refused for manual review.
 Target existing balance preserved; source transfer-out zeros source ledger/balance;
-target gets source minus duplicate 15 via explicit auditable transfer-in. Existing
+target gets source minus duplicate 15 and matched overlapping Joined event rewards.
+Each canonical one-point overlap has an explicit negative target ledger entry and
+private source/target ledger evidence. Membership alone is not duplicate reward
+evidence; nonoverlap rewards transfer fully. Unexpected reward amounts/net balance
+refuse review. Prior alias compensations count in net reward evidence. Existing
 original Starter ledger entries remain evidence. Claim retries to same account and
 credential are idempotent; other accounts refused; source credentials revoked.
 
@@ -115,8 +128,8 @@ credential are idempotent; other accounts refused; source credentials revoked.
   real FK to Auth uses RESTRICT. Auth principal composite FK requires that exact
   registered profile; guest principals use a profile-id FK, no Auth relationship.
 - Backfill only existing profiles validated by their original Auth FK. The 118/117
-  orphan aborts before any source schema change can commit. Root resolves it, not
-  an automated guessed profile. No fake Auth rows or shared identities.
+  orphan gate remains mandatory after the separately reviewed repair. No fake Auth
+  rows or shared identities.
 - Signup: existing app-owned handle_new_user inserts protected profile first,
   then principal, existing guest role and starter ledger once. An AFTER profile
   insert trigger also supports legacy ensure/upgrade recovery; BEFORE insert
@@ -160,7 +173,7 @@ Never deploy source rollback without review.
 ## Local evidence (2026-11-03 UTC)
 
 `bash supabase/guest-integration/test/run.sh`: throwaway UNIX-socket Postgres;
-reconstructs baseline from canonical fixtures, no hosted queries. 72 assertions
+reconstructs baseline from canonical fixtures, no hosted queries. Readiness assertions
 passed including 100 concurrent fresh joins, unchanged Auth rowcount, lost-response
 join retries, exact starter/join points, request idempotency, 100 concurrent votes,
 coherent own snapshot, paused behavior, parallel claim/ledger/counter/alias-ban,
@@ -188,3 +201,31 @@ Endpoint/index Deno checks and full zero-warning eslint passed. Existing Vitest:
 in this sandbox; no app build was manually run and tests were not weakened.
 This is not hosted acceptance, venue Wi-Fi/Realtime capacity, browser persistence,
 full production compatibility, payment provider readiness or sustained load proof.
+
+## Exact targeted pre-install bootstrap plan (NOT EXECUTED)
+
+Root confirmed the named Auth ID is anonymous, sole role DJ, owns one existing
+event, has metadata nickname, and no profile/ledger/membership/request/vote/tip/
+payout evidence. The repair copies actual metadata nickname using the canonical
+`coalesce(metadata nickname, 'Guest')` fallback. Inserts +1 profile with 15 points,
+is_public=false/is_premium=false and +1 earned Starter points ledger of 15; default
+current timestamps, never backdated. Existing 117 profiles unchanged; Auth/roles/
+events unchanged (+0 each). Planned totals after repair: 118 Auth /118 profiles,
+ledger +1, total points +15. 001 backfills 118 registered principals (+118), keeps
+legacy IDs, and installs the protected profile FK chain. Retry of exact completed
+bootstrap changes zero rows. Existing unexpected profile/ledger, changed identity/
+role/event counts or financial/ownership evidence abort rather than overwrite.
+Root saves preflight before repair and reruns it after repair in the same transaction,
+verifying exactly one Starter ledger and points=15, no orphan, unchanged fingerprints
+of the other 117 profiles and the original Auth/role/event. No repair was run hosted.
+Empty integration rollback preserves this legitimate audited bootstrap repair; it
+restores the catalog captured after repair, not the previously broken missing profile.
+
+## Next adapter / stream gates (not implemented)
+
+Before guest UI integration: verified guest-capable music-search and tip/consent
+adapters must validate event credentials server-side, retain canonical pricing,
+consent/cap/idempotency and immutable financial parameters. No provider or Edge
+changes here; current Stripe config remains unready. Worker-shared private revision
+polling WebSocket feed is next bounded phase, then root platform acceptance and
+frontend persistence/alias adapters. See REALTIME_DESIGN.md; no policies or cron.
