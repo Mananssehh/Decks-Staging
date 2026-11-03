@@ -21,3 +21,4 @@
 - Guest application source uses a backend-scoped default-off actor provider and a separate 011 overlay; explicit claim intent and service-validated supporting adapters preserve Auth identity and independent core review.
 - Guest joins serialize bootstrap and session access with a backend-scoped Web Lock; unsupported browsers may reuse persisted proof but must refuse fresh creation, preventing cross-tab identity forks.
 - Guest provider snapshots are keyed to the selected event/session and coalesce in-flight reads; stale selection/Auth/unmount results never supply another actor's profile.
+- Guest API and supporting POST handlers share SDK-free bounded object-JSON parsing before actor resolution; typed malformed/UTF-8 and size errors prevent Auth/provider work.

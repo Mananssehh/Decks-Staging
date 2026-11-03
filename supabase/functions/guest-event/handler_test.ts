@@ -10,3 +10,8 @@ Deno.test('oversized streaming body canceled without content length',async()=>{l
 Deno.test('one call only, typed 429 preserved, no retry',async()=>{let calls=0;const h=createHandler({url,rpc:async()=>{calls++;return {data:{ok:false,status:429,error:'guest_rate_limited'},error:null};}});const r=await h(new Request('https://local',{method:'POST',body:JSON.stringify({action:'snapshot',payload:{event_id:id,token}})}));equal(r.status,429);equal(calls,1);});
 Deno.test('error objects never leak upstream details',async()=>{const h=createHandler({url,rpc:async()=>({data:null,error:{token}})});const r=await h(new Request('https://local',{method:'POST',body:'{"action":"contract"}'}));equal(r.status,503);equal((await r.text()).includes(token),false);});
 Deno.test('input type and request bounds',()=>{equal(validate('request',{event_id:id,token,idempotency_key:id,source_platform:'itunes',source_song_id:'1',title:'x',artist:'a',duration_ms:1.5}),null);equal(validate('profile',{event_id:id,token,nickname:'x'.repeat(25)}),null);});
+
+Deno.test('malformed, nonobject and invalid UTF-8 return 400 without app calls',async()=>{
+ let calls=0;const h=createHandler({url,rpc:async()=>{calls++;return {data:{ok:true},error:null};}});
+ for(const body of ['{','null','[]','true','"x"',new Uint8Array([0xff])]){const r=await h(new Request('https://local',{method:'POST',body}));equal(r.status,400);equal((await r.json()).error,'invalid_json');}equal(calls,0);
+});
