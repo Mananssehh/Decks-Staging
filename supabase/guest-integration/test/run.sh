@@ -53,7 +53,7 @@ psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >"$WORK/capacity.log"
 psql -Xq -v ON_ERROR_STOP=1 -c "CREATE TABLE public._cap_bk AS SELECT * FROM guest_runtime.capacity_before"
 psql -Xq -v ON_ERROR_STOP=1 -1 -f "$HERE/012_capacity.sql" >>"$WORK/capacity.log" 2>&1 || { echo FAIL 012 idempotent rerun refused; exit 1; }
 psql -Xq -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM guest_runtime.capacity_before)<>3 OR EXISTS(SELECT * FROM public._cap_bk EXCEPT SELECT * FROM guest_runtime.capacity_before) THEN RAISE EXCEPTION 'rerun altered backup'; END IF; END \$\$; DROP TABLE public._cap_bk;"
-echo 'PASS 012 rerun is idempotent and keeps original 011 backup
+echo 'PASS 012 rerun is idempotent and keeps original 011 backup'
 NODE_PATH=/dev-server/node_modules bun "$HERE/test/capacity.ts" after
 # Actual hosted reviewer baseline: exact canonical definitions, reviewer audit tables, no capacity_before.
 psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE DATABASE capacity_root TEMPLATE decks_repair'
