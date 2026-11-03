@@ -323,6 +323,7 @@ CREATE FUNCTION public.guest_application_actor(_event_id uuid,_token text,_opera
 DECLARE u uuid; BEGIN
  IF auth.role() IS DISTINCT FROM 'service_role' THEN RETURN guest_runtime.fail(403,'forbidden'); END IF;
  IF _operation NOT IN ('catalog','tip','consent','public_profile') THEN RETURN guest_runtime.fail(400,'invalid_operation'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM guest_runtime.installation WHERE id AND enabled AND contract='guest-integration-v1') THEN RETURN guest_runtime.fail(503,'guest_unavailable'); END IF;
  u:=guest_runtime.validate_session(_event_id,_token,_operation='consent');
  IF u IS NULL THEN RETURN guest_runtime.fail(401,'invalid_session'); END IF;
  IF NOT guest_runtime.budget(u,CASE WHEN _operation='consent' THEN 'mutation' ELSE 'read' END) THEN RETURN guest_runtime.fail(429,'guest_rate_limited'); END IF;

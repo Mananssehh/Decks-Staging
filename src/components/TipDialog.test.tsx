@@ -27,7 +27,7 @@ it('double click and ambiguous retry reuse one logical key; definitive terminal 
  if(!finish)throw Error('request missing');finish({data:{error_code:'RECONCILIATION_REQUIRED'},error:null});
  await waitFor(()=>expect(button).not.toBeDisabled());
 });
-it('configuration-unready guest readiness creates no checkout or consent request',async()=>{
+it('configuration-unready readiness creates no checkout or consent request',async()=>{
  mocks.invoke.mockResolvedValue({data:{ready:false,error_code:'STRIPE_CONFIG_ERROR'},error:null});
  render(<TipDialog open eventId="event" onOpenChange={()=>{}}/>);
  await waitFor(()=>expect(mocks.invoke).toHaveBeenCalled());

@@ -19,7 +19,7 @@ Private tables: application_before and retired_identities, RLS/no direct access.
 Tests: 16 new SQL, 100 core guest, 15 bootstrap, 39 stream, 57 financial assertions;
 exact empty rollback/catalog and containment pass. 25 no-network Edge/transport
 tests, Deno checks, zero-warning eslint, automatic typecheck build OK.
-Frontend full suite: see final result recorded below; nine production-bundle
+Frontend full suite: **109 passed, 9 failed**; nine production-bundle
 failures are missing compiled assets, not skipped/weakened; no manual build.
 
 Remaining gates: independent schema/ACL/actual trigger review, installed disabled
