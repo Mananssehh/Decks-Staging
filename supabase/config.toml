@@ -1,1 +1,4 @@
 project_id = "ldxgejbzmpvsvozqmpfe"
+# STAGING PROBE ONLY: custom event-scoped guest token is the authorization.
+[functions.guest-token-probe]
+verify_jwt = false
