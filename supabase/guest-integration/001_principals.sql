@@ -63,6 +63,12 @@ CREATE FUNCTION guest_runtime.member(_actor uuid,_event uuid) RETURNS boolean LA
  SELECT EXISTS(SELECT 1 FROM public.event_participants WHERE event_id=_event AND user_id=ANY(guest_runtime.aliases(_actor)))
  AND NOT EXISTS(SELECT 1 FROM public.event_banned_guests WHERE event_id=_event AND user_id=ANY(guest_runtime.aliases(_actor)))
 $$;
+CREATE FUNCTION guest_runtime.valid_nickname(_nick text) RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path='' AS $$
+ SELECT _nick IS NOT NULL AND length(btrim(_nick)) BETWEEN 2 AND 24
+ AND _nick !~ '[[:cntrl:]]' AND _nick !~* '(.)\1{4,}|https?://|www\.|@[a-z0-9_]{3,}'
+ AND NOT EXISTS(SELECT 1 FROM unnest(ARRAY['fuck','shit','bitch','cunt','dick','asshole','bastard','slut','whore','nigger','nigga','faggot','retard','kike','spic','chink','tranny']) w
+ WHERE position(w IN regexp_replace(lower(_nick),'[^a-z0-9]+','','g'))>0)
+$$;
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
  INSERT INTO guest_runtime.app_principals(id,auth_user_id,kind) VALUES(new.id,new.id,'auth') ON CONFLICT(id) DO NOTHING;

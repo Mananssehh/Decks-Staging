@@ -41,7 +41,7 @@ END $$;
 CREATE FUNCTION guest_runtime.profile_kernel(_actor uuid,_nickname text) RETURNS jsonb LANGUAGE plpgsql SET search_path='' AS $$
 DECLARE u uuid:=guest_runtime.actor_lock(_actor); p public.profiles; BEGIN
  IF _nickname IS NOT NULL THEN
-  IF length(btrim(_nickname)) NOT BETWEEN 2 AND 24 OR _nickname ~ '[[:cntrl:]]' OR _nickname ~* '(https?://|www\.)' THEN RAISE EXCEPTION 'Invalid nickname' USING ERRCODE='22023'; END IF;
+  IF NOT guest_runtime.valid_nickname(_nickname) THEN RAISE EXCEPTION 'Invalid nickname' USING ERRCODE='22023'; END IF;
   UPDATE public.profiles SET nickname=btrim(_nickname),updated_at=now() WHERE id=u;
  END IF;
  SELECT * INTO p FROM public.profiles WHERE id=u;
@@ -67,7 +67,7 @@ DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r js
  IF _action NOT IN ('join','resume','snapshot','request','vote','remove','profile','ledger','report','funnel') THEN RETURN guest_runtime.fail(400,'invalid_action'); END IF;
  IF _action='join' THEN
   bs:=_payload->>'bootstrap'; code:=upper(regexp_replace(coalesce(_payload->>'code',''),'\s+','','g')); nick:=btrim(coalesce(_payload->>'nickname','Guest'));
-  IF bs IS NULL OR bs!~'^[0-9a-f]{64}$' OR length(nick) NOT BETWEEN 2 AND 24 OR nick ~ '[[:cntrl:]]' OR nick ~* '(https?://|www\.)' THEN RETURN guest_runtime.fail(400,'invalid_join'); END IF;
+  IF bs IS NULL OR bs!~'^[0-9a-f]{64}$' OR NOT guest_runtime.valid_nickname(nick) THEN RETURN guest_runtime.fail(400,'invalid_join'); END IF;
   -- Bootstrap lock spans first join retries BEFORE any principal/profile is created.
   PERFORM pg_advisory_xact_lock_shared(8713201,1);
   PERFORM pg_advisory_xact_lock(hashtextextended('guest-bootstrap:'||encode(guest_runtime.digest(bs),'hex'),0));
