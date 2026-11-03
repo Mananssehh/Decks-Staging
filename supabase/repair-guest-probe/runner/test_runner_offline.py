@@ -53,6 +53,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.reply(200, {"ok": True, "changed": ch, "my_vote": p["value"], "request_id": p["request_id"], "upvotes": up})
 
 
+http.server.ThreadingHTTPServer.request_queue_size = 256  # fake must not drop 100 concurrent connects
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 env = dict(os.environ, PROBE_URL=f"http://127.0.0.1:{srv.server_port}/functions/v1/guest-token-probe",
