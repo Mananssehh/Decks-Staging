@@ -2,6 +2,9 @@
 BEGIN;
 DO $$ DECLARE r record; BEGIN
  IF EXISTS(SELECT 1 FROM guest_runtime.app_principals WHERE kind='guest') THEN RAISE EXCEPTION 'Refuse destructive rollback: guest records exist; use 900 containment'; END IF;
+ FOR r IN SELECT c.oid::regclass rel,t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE t.tgname IN ('guest_writer_gate','guest_profile_identity') AND c.relnamespace='public'::regnamespace LOOP
+  EXECUTE format('DROP TRIGGER %I ON %s',r.tgname,r.rel);
+ END LOOP;
  FOR r IN SELECT * FROM guest_runtime.before_functions LOOP EXECUTE r.definition; END LOOP;
  ALTER TABLE public.profiles DROP CONSTRAINT guest_profile_auth_fkey;
  ALTER TABLE public.profiles DROP CONSTRAINT guest_profile_registered_id;
