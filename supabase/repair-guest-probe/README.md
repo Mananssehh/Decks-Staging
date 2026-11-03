@@ -29,7 +29,8 @@ event-scoped, server-issued, hashed-at-rest guest token.
 - Token: `gen_random_bytes(32)` hex (256-bit), only `sha256` stored, bound to one event,
   expiry = event expiry, revocable. Unknown/forged/malformed/wrong-event/expired/revoked → 401.
 - Unknown event vs wrong code are indistinguishable (404 `invalid_event_or_code`); failures logged,
-  global 200 failed joins/10 min → 429.
+  global 200 failed joins/10 min → 429; that bucket is serialized by a probe-specific transaction
+  advisory mutex taken only after any event row lock (event → mutex; never mutex → event).
 - Lock order: event row (FOR UPDATE for join/request, FOR SHARE for read/vote) → session row
   FOR UPDATE → request row FOR UPDATE → vote row. Admission atomic under the event lock.
 - Resume (`join` with token) returns the same session, no admission consumed, no new token.
@@ -39,8 +40,9 @@ event-scoped, server-issued, hashed-at-rest guest token.
 - Request idempotency: unique `(session_id, idempotency_key uuid)`; replay returns `replayed: true`.
 - Vote: desired state -1/0/1 (JSON number only), PK `(request_id, session_id)`, counters updated
   under request row lock; repeat is `changed: false`. Identity columns immutable via trigger.
-- Bounds: nickname ≤ 40, title ≤ 120, body ≤ 4096 bytes, Edge body ≤ 8 KB.
-- Marker `enabled=false` → every non-contract action 503 `probe_disabled`. Unexpected errors →
+- Bounds: nickname ≤ 40, title ≤ 120, body ≤ 4096 bytes, Edge body ≤ 8 KB read via a bounded stream (Content-Length not trusted; stream cancelled on overflow).
+- Marker contract must equal exactly `guest-token-probe-v1` (else 503 `probe_contract_mismatch`) and
+  `enabled=true` (else 503 `probe_disabled`), checked on every non-contract action. Unexpected errors →
   500 `internal` (only SQLSTATE logged server-side; never payload/token).
 
 ## Operation JSON (POST body `{ "action", "payload" }`)
@@ -63,8 +65,9 @@ Edge returns 503 `probe_unavailable` unless `SUPABASE_URL` host is exactly `ldxg
 3. Fixtures (operator SQL only; codes are shown once — keep them out of logs/reports):
    `SELECT * FROM repair_guest_probe.operator_create_event('probe-A', interval '2 hours', 300);`
    `SELECT * FROM repair_guest_probe.operator_create_event('probe-B', interval '2 hours', 10);`
-4. Run: `PROBE_URL=… PROBE_EVENT_A=… PROBE_CODE_A=… PROBE_EVENT_B=… PROBE_CODE_B=… python3 runner/fresh_clients.py --stages 25,50,100 > report.json`
-   (25+50+100 = 175 admissions on event A; keep `max_admissions` ≥ 176.)
+4. Run: `PROBE_URL=… PROBE_EVENT_A=… PROBE_CODE_A=… PROBE_EVENT_B=… PROBE_CODE_B=… python3 runner/fresh_clients.py --stages 25,50,100 --workers 100 > report.json`
+   Report has `pass`; exit code 1 on any failed check or unexpected HTTP status. 176 admissions used (175 + 1 security guest).
+   (keep event A `max_admissions` ≥ 176; event B only receives cross-event attempts.)
 5. Disable immediately if needed: step 1 block of `900_disable_and_drop.sql` (marker off, events inactive, sessions revoked).
 6. Remove: delete the Edge function, then run `900_disable_and_drop.sql` (disables first, refuses to drop a
    `public.repair_guest_probe_rpc` not carrying the probe comment, then drops only the RPC and schema),
@@ -73,10 +76,14 @@ Edge returns 503 `probe_unavailable` unless `SUPABASE_URL` host is exactly `ldxg
 ## Tests (no network, no hosted DB)
 - `bash supabase/repair-guest-probe/test/local_pg_test.sh` — throwaway local Postgres: install, ACL,
   hashing-at-rest, wrong/unknown code, resume, missing/forged/malformed/cross-event tokens, idempotent
-  request, bounds, guest request cap, desired-state votes, immutable identity, spam 429, revocation,
-  closed event, disabled marker, 100 concurrent fresh joins, admission cap 429 under 30 concurrent,
-  150 concurrent votes with exact counters and no deadlock, disable+drop, app sentinel untouched.
+  request, bounds, guest request cap, desired-state votes, immutable identity, spam 429, expiry, revocation,
+  closed event, contract mismatch, disabled marker, 100 concurrent fresh joins, admission cap 429 under 30 concurrent,
+  150 concurrent votes with exact counters and no deadlock, 100 barrier-released bad joins on a
+  150-row bucket → exactly 200 rows / 50 typed 429 (fails without the mutex: observed 59/41), disable+drop, app sentinel untouched.
 - `deno test supabase/functions/guest-token-probe/handler_test.ts` — host gate, methods, validation,
-  field allowlist, typed error passthrough, no leakage, zero `fetch` calls (no Auth) over a full flow.
+  field allowlist, typed error passthrough, no leakage, zero `fetch` calls (no Auth) over a full flow,
+  endless stream without Content-Length → 413 + cancelled, oversized declared length, invalid UTF-8, 4 KB inner body bytes.
 - `python3 supabase/repair-guest-probe/runner/test_runner_offline.py` — runner vs loopback fake:
-  25/50/100 fresh clients, unique tokens, 0 auth calls, negatives, no token/code in report.
+  25/50/100 concurrent fresh clients with every check required, SHA-256 token uniqueness, same
+  session on resume, 0 auth calls, negatives on a separate security guest, no token/code in report, and a
+  broken-resume control that must yield `pass:false` and exit 1.
