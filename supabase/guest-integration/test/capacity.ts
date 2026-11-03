@@ -11,13 +11,14 @@ const admin=postgres({...opts,max:2});
 const pool=postgres({...opts,max:10}); // PostgREST-sized pool
 let n=0;function ok(c:unknown,label:string){assert.ok(c,label);n++;console.log('PASS',label);}
 const DJ='00000000-0000-4000-8000-00000000c001',EVENT='00000000-0000-4000-8000-00000000c002',CODE='CAPQA';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped JSON rows from SQL
 type R=Record<string,any>;
 async function call(a:string,p:R):Promise<R>{
  return (await pool.begin(async q=>{await q`set local role service_role`;await q`select set_config('request.jwt.claim.role','service_role',true)`;
   await q`set local statement_timeout='8s'`;await q`set local lock_timeout='8s'`;return q`select public.guest_event_api(${a},${q.json(p)}) r`;}))[0].r;
 }
 const hex=()=>[...crypto.getRandomValues(new Uint8Array(32))].map(b=>b.toString(16).padStart(2,'0')).join('');
-async function timed<T>(f:()=>Promise<T>,lat:number[],errs:R){const t=performance.now();try{return await f();}catch(e:any){errs[e?.code??'thrown']=(errs[e?.code??'thrown']??0)+1;return null;}finally{lat.push(performance.now()-t);}}
+async function timed<T>(f:()=>Promise<T>,lat:number[],errs:R){const t=performance.now();try{return await f();}catch(e){const c=(e as {code?:string})?.code??"thrown";errs[c]=(errs[c]??0)+1;return null;}finally{lat.push(performance.now()-t);}}
 const pct=(a:number[],p:number)=>{const s=[...a].sort((x,y)=>x-y);return Math.round(s[Math.min(s.length-1,Math.floor(p*s.length))]??0);};
 async function snapshotMs(actor:string,iterations=10){
  const r=await admin.begin(async q=>{const t0=(await q`select clock_timestamp() t`)[0].t;for(let i=0;i<iterations;i++)await q`select guest_runtime.snapshot(${actor},${EVENT})`;return (await q`select extract(epoch from clock_timestamp()-${t0}::timestamptz)*1000/${iterations} ms`)[0].ms;});
