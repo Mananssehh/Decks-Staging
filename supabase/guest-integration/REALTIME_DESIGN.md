@@ -1,4 +1,4 @@
-# Receive-only Edge WebSocket feed — NEXT BOUNDED PHASE, NOT IMPLEMENTED
+# Receive-only Edge WebSocket feed — SOURCE BUILT, NOT INSTALLED / DEPLOYED
 
 Chosen design: guest authenticates to an Edge WebSocket server with a verified
 event token. Only the server polls private event revisions using service-role credentials,
@@ -16,7 +16,7 @@ That is feasibility evidence, not permission to bypass managed policy guidance.
   Token sent in a bounded initial socket frame, never URL/query/log/subprotocol.
 - Receive-only after authentication: reject client mutation/broadcast frames;
   bounded frame sizes, connection/session budgets, heartbeat and idle cleanup.
-- Next phase adds service-only revision and batch-session-validation RPCs. DB
+- 010 adds service-only revision and batch-session-validation RPCs. DB
   triggers bump private revisions for relevant app changes, preserving core lock
   order; no raw-vote broadcasts. No Realtime subscriptions or quota dependence.
 - Per-event monotonically increasing revisions, coalesced to at most one emission
@@ -40,4 +40,7 @@ Root reviews WebSocket source and platform runtime/upgrades separately: upgrade
 support, lifetime/resource limits, cross-instance behavior, reconnect/trailing
 flush, revoked connections, no token exposure, no guest-send delivery, and no Auth
 signup. Venue Wi-Fi, sustained 100+ sockets and browser persistence remain untested.
-This lifecycle pass does not implement or deploy the feed or frontend.
+Source implementation is under guest-event-stream and 010_stream.sql; no hosted
+SQL/deployment or frontend integration. Native upgrades and 100-socket acceptance
+remain independent root checks. 120s rollover is a conservative cleanup policy,
+not a promise of worker lifetime; platform may terminate earlier.

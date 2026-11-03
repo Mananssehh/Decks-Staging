@@ -17,3 +17,4 @@
 - Guest claim exclusion is acquired at outer writer entry or BEFORE STATEMENT before tuple locks; legacy late row-trigger exclusion must never be introduced because it can invert event locks.
 - Guest live invalidations will use a verified-token receive-only Edge WebSocket relay with worker-shared two-second private revision polling; one poller/event/worker stops with the last socket, avoiding Realtime policies, quotas and idle cron jobs.
 - Guest read session validation chooses shared event/session locks at entry while mutations choose exclusive locks; authenticated and guest snapshots share one safe alias-aware SQL projection to avoid DTO and transaction drift.
+- Guest stream SQL is a separate 010 overlay with private transactional revisions and service-only token/batch RPCs; native socket adapters stay separate from pure hubs and protocol tests so no-network lifecycle checks cover shared polling.

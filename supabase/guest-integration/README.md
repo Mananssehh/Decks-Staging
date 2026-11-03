@@ -15,7 +15,8 @@ publication or UI changes were performed. Disabled `repair_guest_probe` is untou
    implemented and tested locally, not certified against the hosted catalog.
    Registered deletion is now a protected two-step retirement, not raw cascade;
    the deliberate fail-closed behavior below requires review before installation.
-3. Receive-only Edge WebSocket relay is the chosen NEXT bounded phase, not built.
+3. Receive-only Edge WebSocket transport and 010 revision overlay are source-built,
+   disabled and not installed/deployed; hosted native upgrades/capacity await root.
    No anonymous Realtime policy will be authored. Platform/source review and tests
    are outstanding, as are frontend own-alias adapters, browser persistence and UI.
 
@@ -47,13 +48,16 @@ alias cap/membership/consent/idempotency; frozen provider identity/params untouc
 immutable profile links, registered retirement and standalone alias-aware award.
 `009_after_catalog.sql`: read-only post-install FK/trigger/function/rowcount evidence;
 capture alongside `000_preflight.sql`. This is not an installation mutation.
+`010_stream.sql`: private revisions, transactional triggers, coherent snapshot
+revision overlay, token auth and bounded batch polling; stream marker DISABLED.
+`910_drop_stream.sql`: transport-only teardown retaining guest core and evidence.
 `before/`: canonical baseline function source copies; installation captures actual
 hosted definitions for restoration. Source copies alone do not prove live parity.
 
 ## Installation — only AFTER gates resolved and independent review
 
 Do NOT replay historical repairs/migrations. Root runs read-only preflight, reviews
-all files, then executes **000_targeted_bootstrap, rerun 000_preflight, then 001..008 in one transaction**. Candidate deliberately
+all files, then executes **000_targeted_bootstrap, rerun 000_preflight, then 001..008 and 010_stream in one transaction**. Candidate deliberately
 starts disabled. Root captures `009_after_catalog.sql` and checks rowcounts,
 four ownership FK replacements, the protected profile chain and every remaining
 Auth FK/action, all private table RLS/ACL, service-only API, authenticated-only claim,
@@ -239,5 +243,45 @@ Before guest UI integration: verified guest-capable music-search and tip/consent
 adapters must validate event credentials server-side, retain canonical pricing,
 consent/cap/idempotency and immutable financial parameters. No provider or Edge
 changes here; current Stripe config remains unready. Worker-shared private revision
-polling WebSocket feed is next bounded phase, then root platform acceptance and
+polling WebSocket feed is now source-built; next are root platform acceptance and
 frontend persistence/alias adapters. See REALTIME_DESIGN.md; no policies or cron.
+
+## Stream phase evidence and protocol (source only)
+
+Baseline `9cde36149c75fa6573750b32c7cdcddebc36757a`; 001..008 unchanged.
+`supabase/functions/guest-event-stream/` contains SDK-free protocol, connection,
+hubs, injected upgrade handler, thin native Deno entrypoint and no-network tests.
+GET upgrade only, exact staging backend, no query/subprotocol credentials. First
+frame `{type:"auth",event_id,token}` within 5s, max 4KB; trusted session/expiry
+retained, token not retained in connection/hub state. After auth only bounded
+`{type:"ping"}` / `{type:"pong"}` at most one/second; client publishing/re-auth denied.
+Initial `{type:"ready",revision,resync:true}` always requires full API snapshot.
+Poll every 2s/event/worker (one inflight), batch <=256, <=256 sockets/event and
+1024/worker including pending upgrades, no IP cap. Empty hubs stop all poll timers;
+5s backend timeout and 64KB outbound backpressure limit. Invalid batch sessions
+close1008 BEFORE sending changed revision to survivors. Ended events remain readable
+and yield lifecycle hints; event deletion/missing membership closes access.
+503/network failures send service_unavailable/retry and close1013, not invalid Auth;
+clients must preserve credentials. Worker shutdown/120s connection rollover send
+reconnect/resync then close1001. Heartbeat stale after60s closes. UI jittered reconnect
+and low-rate snapshot fallback are NEXT phase. No claim of hosted runtime acceptance.
+
+010 revision triggers cover events/songs/now-playing/bans/memberships/sessions,
+including claim revocation and profile/session cascades; actual no-op writes skip.
+Bumps use only existing revision UPDATE after child writes, no identity/event mutex
+acquisition or FK upsert that reverses event locks. Event insert seeds a row; event
+delete cascades without resurrection. Transaction rollback rolls back revision.
+Snapshot overlay modifies the captured safe SQL expression to include revision in
+the SAME SQL view and refuses unrecognized source; revision encoded decimal text.
+Both enabled contract markers required for stream auth/poll, marker starts disabled.
+No idle cron, Realtime channel/policy, provider or Auth API. Poll is one MVCC read,
+service-only IDs from successful token auth stored server-side, never public auth.
+
+Local: 100 guest assertions with overlay installed +15 targeted bootstrap, 39 new
+stream SQL assertions, 13 pure/native-adapter transport tests +8 existing endpoint
+tests, 57 financial assertions; containment, stream-only teardown twice and exact
+empty catalog restoration. Deno checks/lint verified. Frontend unchanged:98 pass,
+9 absent-production-bundle failures, no manual build/weakening. Root must review
+SQL/source and enable markers before separately authorized deployment; future new
+endpoint deployment verify_jwt=false only guest-event-stream, configuration unchanged
+here. Actual100 API+100socket/reconnect capacity and platform limits remain untested.

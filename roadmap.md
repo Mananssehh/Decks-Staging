@@ -9,7 +9,8 @@
 - [x] Legacy writer/claim entry and statement exclusion reviewed; concurrent DJ/ban/profile/award/financial/claim checks passed.
 - [x] Readiness source: targeted legacy-DJ repair, shared reads, safe DTO/authenticated alias snapshot, overlap compensation; 100 guest +15 repair +57 financial +8 endpoint assertions, rollback/lint.
 - [ ] Independent install review: reviewed bootstrap plus 001..008 in one transaction and actual catalog checks; hosted operations unauthorized.
-- [ ] Next bounded phase: source review and platform testing of receive-only Edge WebSocket invalidations; no anonymous channel policy.
+- [x] Stream source: 010 revision overlay, private token/batch RPCs, native receive-only socket/shared hubs; 39 SQL +13 transport +8 endpoint tests, 100 guest +15 repair +57 financial regressions and rollback/lint; 001..008 byte-identical.
+- [ ] Independent platform review/deployment and 100-socket acceptance; UI, music-search and tip/consent adapters next, no anonymous channel policy or cron.
 
 ## Core staging audit repair
 - [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.
