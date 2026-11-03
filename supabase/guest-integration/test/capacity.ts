@@ -50,7 +50,13 @@ try{
   await freshFlow('011 fresh100',songs[0],'b');
   // Exact baseline for equivalence: every principal's aliases and every member/DJ snapshot.
   await admin`create table public._cap_aliases as select id, guest_runtime.aliases(id) a from guest_runtime.app_principals union all select gen_random_uuid(), guest_runtime.aliases(gen_random_uuid())`;
-  await admin`create table public._cap_snap as select a.id actor,e.id event,guest_runtime.snapshot(a.id,e.id) s from guest_runtime.app_principals a cross join public.events e`;
+  // Small events: every principal x event. Capacity event (~0.5 s per 011 snapshot): DJ, every merged/alias
+  // principal, 40 members and 5 non-members (denied NULL), bounding the 011 baseline cost.
+  await admin`create table public._cap_snap as select a.id actor,e.id event,guest_runtime.snapshot(a.id,e.id) s from guest_runtime.app_principals a cross join public.events e where e.id<>${EVENT}`;
+  await admin`insert into public._cap_snap select x.id,${EVENT}::uuid,guest_runtime.snapshot(x.id,${EVENT}) from (
+   (select ${DJ}::uuid id) union (select id from guest_runtime.app_principals where merged_into is not null or id in(select merged_into from guest_runtime.app_principals))
+   union (select user_id from public.event_participants where event_id=${EVENT} order by user_id limit 40)
+   union (select id from guest_runtime.app_principals where id not in(select user_id from public.event_participants where event_id=${EVENT}) order by id limit 5)) x`;
   await admin`create table public._cap_defs as select md5(pg_get_functiondef('guest_runtime.aliases(uuid)'::regprocedure)) a, md5(pg_get_functiondef('guest_runtime.snapshot(uuid,uuid)'::regprocedure)) s`;
   console.log('RESULT before baseline captured',(await admin`select count(*)::int n from public._cap_snap where s is not null`)[0].n,'visible snapshots');
  }else{
