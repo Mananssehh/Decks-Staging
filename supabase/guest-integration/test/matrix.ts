@@ -63,6 +63,28 @@ try{
  eq(reserved.filter(x=>x.status==='fulfilled').length,1,'alias financial cap accepts one 50 then blocks rest');
  eq((await db`select sum(gross_amount_cents)::int n from public.dj_tips where user_id=any(guest_runtime.aliases(${target}))`)[0].n,10000,'combined alias cap unchanged 100 dollars');
  eq((await db`select platform_fee_cents from public.dj_tips where user_id=${target}`)[0].platform_fee_cents,1500,'30 percent fee unchanged');
+ const scope3={event_id:event,token:joins[2].token};
+ eq((await call('join',{bootstrap:bs(2000),code:'LOCAL1',nickname:'s.h.i.t'})).status,400,'normalized profanity blocked in DB');
+ eq((await call('profile',{...scope3,nickname:'aaaaa'})).status,400,'spam nickname blocked in DB');
+ const extraEvents=[uid(101),uid(102),uid(103)];
+ for(let i=0;i<3;i++)await db`insert into public.events(id,dj_id,name,dj_name,room_code,cooldown_seconds) values(${extraEvents[i]},${dj},'Extra','DJ',${'EXTRA'+i},0)`;
+ for(let i=0;i<2;i++)eq((await call('join',{bootstrap:bs(3),code:'EXTRA'+i,nickname:'Guest'})).ok,true,'guest joins event '+(i+2));
+ eq((await call('join',{bootstrap:bs(3),code:'EXTRA2',nickname:'Guest'})).ok,false,'fourth distinct event blocked');
+ eq((await call('snapshot',{event_id:extraEvents[0],token:joins[2].token})).status,401,'cross-event token denied');
+ await db`delete from guest_runtime.operations where principal_id=${joins[3].principal_id}`;
+ const burst=await Promise.all(Array.from({length:40},()=>call('vote',{event_id:event,token:joins[3].token,request_id:rid,value:1})));
+ eq(burst.filter(r=>r.ok).length,30,'mutation burst allows exactly 30');
+ eq(burst.filter(r=>r.status===429&&r.error==='guest_rate_limited').length,10,'mutation burst returns exactly 10 typed 429');
+ eq((await call('snapshot',{event_id:event,token:joins[3].token})).ok,true,'read budget independent of mutation budget');
+ const aliasTip=(await db`select id from public.dj_tips where user_id=${g.principal_id}`)[0].id;
+ const evidence={event_id:'evt_local_paid',event_type:'payment_intent.succeeded',tip_id:aliasTip,kind:'paid',payment_intent:'pi_local',amount_cents:5000,currency:'usd',livemode:false};
+ await service(q=>q`select public.followup_apply_financial_event(${q.json(evidence)})`);
+ eq((await db`select user_id from public.dj_tips where id=${aliasTip}`)[0].user_id,g.principal_id,'alias settlement preserves immutable financial owner');
+ let mismatch=false;try{await service(q=>q`select public.followup_apply_financial_event(${q.json({...evidence,event_id:'evt_wrong',payment_intent:'pi_wrong'})})`);}catch{mismatch=true;}
+ eq(mismatch,true,'provider identity mismatch refused without provider call');
+ await db`update public.events set requests_status='ended' where id=${event}`;
+ eq((await call('vote',{...scope3,request_id:rid,value:1})).status,401,'ended mutation credential refused');
+ eq((await call('snapshot',scope3)).snapshot.event.requests_status,'ended','ended authoritative state readable');
  // Contract mismatch every noncontract op.
  await db`update guest_runtime.installation set contract='wrong'`;
  eq((await call('snapshot',{event_id:event,token:joins[1].token})).error,'contract_mismatch','contract mismatch fails closed');await db`update guest_runtime.installation set contract='guest-integration-v1'`;
