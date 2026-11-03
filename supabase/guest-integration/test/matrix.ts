@@ -8,6 +8,7 @@ function eq(a:unknown,b:unknown,label:string){assert.deepEqual(a,b,label);checks
 const service=<T>(f:(q:postgres.TransactionSql)=>Promise<T>)=>db.begin(async q=>{await q`set local role service_role`;await q`select set_config('request.jwt.claim.role','service_role',true)`;return f(q);});
 const call=async(action:string,p:Record<string,unknown>)=>(await service(q=>q`select public.guest_event_api(${action},${q.json(p)}) r`))[0].r;
 const claim=async(target:string,bootstrap:string)=>(await db.begin(async q=>{await q`set local role authenticated`;await q`select set_config('request.jwt.claim.sub',${target},true)`;return q`select public.claim_guest_principal(${bootstrap}) r`;}))[0].r;
+const authenticated=<T>(target:string,f:(q:postgres.TransactionSql)=>Promise<T>)=>db.begin(async q=>{await q`set local role authenticated`;await q`select set_config('request.jwt.claim.sub',${target},true)`;return f(q);});
 try{
  const dj=uid(1),target=uid(2),event=uid(100);
  await db`insert into auth.users(id) values(${dj}),(${target})`;
@@ -39,8 +40,7 @@ try{
  eq((await call('request',{...song,idempotency_key:uid(201),source_song_id:'5678'})).ok,false,'paused request blocked');eq((await call('vote',{...p,request_id:rid,value:-1})).ok,true,'paused voting preserved');
  await db`update public.events set requests_status='live' where id=${event}`;
  await db`insert into public.event_participants(event_id,user_id,nickname) values(${event},${target},'Target')`;
- await db`select set_config('request.jwt.claim.sub',${target},false)`;
- await db`select public.set_song_vote(${rid},1)`;
+ await authenticated(target,q=>q`select public.set_song_vote(${rid},1)`);
  const immutable=(await db`select requested_by from public.song_requests where id=${rid}`)[0].requested_by;
  const sourceBalance=(await db`select points from public.profiles where id=${g.principal_id}`)[0].points;
  const targetBalance=(await db`select points from public.profiles where id=${target}`)[0].points;
@@ -53,7 +53,7 @@ try{
  eq((await call('snapshot',p)).status,401,'claim revokes source token');
  eq((await call('join',{bootstrap:bs(1),code:'LOCAL1',nickname:'Guest'})).status,401,'claim revokes bootstrap');
  await db`insert into public.event_banned_guests(event_id,user_id) values(${event},${g.principal_id})`;
- eq((await db`select public.is_event_member(${event}) m`)[0].m,false,'alias ban cannot be bypassed');
+ eq((await authenticated(target,q=>q`select public.is_event_member(${event}) m`))[0].m,false,'alias ban cannot be bypassed');
  await db`delete from public.event_banned_guests where user_id=${g.principal_id}`;
  // Alias financial caps preserve old identity and provider parameters, no provider calls.
  await db`insert into public.dj_payout_accounts(user_id,stripe_account_id,charges_enabled,payouts_enabled) values(${dj},'acct_local',true,true)`;
