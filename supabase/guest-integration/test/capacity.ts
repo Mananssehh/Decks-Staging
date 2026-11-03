@@ -69,6 +69,8 @@ try{
   ok(after*5<before,'snapshot at hosted-failure scale at least 5x faster');
   const plan=(await admin`explain (format json) select guest_runtime.aliases(${probe}::uuid)`);ok(!!plan,'aliases plannable');
   const songsBefore=(await admin`select count(*)::int n from public.song_requests where event_id=${EVENT}`)[0].n,upBefore=(await admin`select upvotes from public.song_requests where id=${common}`)[0].upvotes;
+  // The before phase admitted 275 guests; age those admissions past the unchanged 300/10-minute event budget window.
+  await admin`update public.repair_admission_log set created_at=created_at-interval '11 minutes' where event_id=${EVENT}`;
   const {guests,errs,typed}=await freshFlow('012 fresh100',common,'a');
   ok(Object.keys(errs).length===0&&Object.keys(typed).length===0,'no SQL timeouts/typed failures across 100 fresh guests x 4 ops');
   ok((await admin`select count(*)::int n from public.song_requests where event_id=${EVENT}`)[0].n===songsBefore+100,'exactly 100 new requests');
