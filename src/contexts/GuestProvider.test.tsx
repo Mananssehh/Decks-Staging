@@ -7,6 +7,7 @@ import {GuestStore,GuestError,type GuestSession,type GuestSnapshot} from '@/lib/
 import ActivityLedger from '@/pages/ActivityLedger';
 import Profile from '@/pages/Profile';
 import PublicProfile from '@/pages/PublicProfile';
+import {RequireDJ,RequireAdmin} from '@/components/guards/RouteGuards';
 
 const m=vi.hoisted(()=>({snapshot:vi.fn(),ledger:vi.fn(),invoke:vi.fn(),claim:vi.fn(),auth:{user:null as null|{id:string},profile:null,loading:false,isDJ:false,refreshProfile:vi.fn()}}));
 vi.mock('./auth-state',()=>({useAuth:()=>m.auth}));
@@ -24,6 +25,7 @@ it('reload directly to /activity restores profile and ledger without Auth routin
  mount(<ActivityLedger/>);await screen.findByText('Joined event');expect(screen.getByText('18')).toBeTruthy();expect(screen.queryByText('Auth only')).toBeNull();expect(m.snapshot).toHaveBeenCalledTimes(1);expect(m.ledger).toHaveBeenCalledTimes(1);
 });
 it('restored guest profile is accessible without an Auth-only guard',async()=>{mount(<Profile/>,'/profile');await screen.findByRole('heading',{name:'Restored Guest'});expect(screen.queryByText('Auth only')).toBeNull();expect(m.snapshot).toHaveBeenCalledTimes(1);});
+it.each(['dj','admin'])('restored guest cannot enter %s guards',async(role)=>{mount(role==='dj'?<RequireDJ><span>Secret</span></RequireDJ>:<RequireAdmin><span>Secret</span></RequireAdmin>);await waitFor(()=>expect(screen.queryByText('Secret')).toBeNull());expect(m.auth.user).toBeNull();});
 it('503 on restoration shows retry and recovers without clearing bootstrap or event proof',async()=>{
  const store=new GuestStore(localStorage,'test'),proof=store.bootstrap();m.snapshot.mockRejectedValueOnce(new GuestError(503,'temporary'));
  mount(<ActivityLedger/>);await screen.findByRole('alert');expect(screen.getByText(/temporarily unavailable/)).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Retry'}));await screen.findByText('Joined event');expect(store.bootstrap()).toBe(proof);expect(store.current()?.token).toBe(session().token);expect(m.snapshot).toHaveBeenCalledTimes(2);
@@ -35,6 +37,10 @@ it('ledger failure recovers by retry; expired proof offers rejoin rather than in
 it('temporary public-profile failure is not falsely reported missing and can recover',async()=>{
  m.invoke.mockRejectedValueOnce(new GuestError(503,'temporary')).mockResolvedValue({profile:{found:true,is_public:false,nickname:'Other Guest'}});
  mount(<PublicProfile/>,'/users/other');await screen.findByRole('alert');expect(screen.queryByText('User not found')).toBeNull();fireEvent.click(screen.getByRole('button',{name:'Retry'}));await screen.findByRole('heading',{name:'Other Guest'});
+});
+it('ledger filter race discards the old response',async()=>{
+ let resolveOld=(rows:GuestSnapshot['ledger'])=>{};m.ledger.mockImplementationOnce(()=>new Promise<GuestSnapshot['ledger']>(r=>{resolveOld=r;})).mockResolvedValue([{id:'new',amount:-1,type:'spent',reason:'Current filter',created_at:'2026-11-03T01:00:00Z',event_id:null,song_request_id:null}]);
+ mount(<ActivityLedger/>);await screen.findByRole('tab',{name:'Spent'});fireEvent.click(screen.getByRole('tab',{name:'Spent'}));await screen.findByText('Current filter');await act(async()=>resolveOld([{id:'old',amount:3,type:'earned',reason:'Stale response',created_at:'2026-11-03T01:00:00Z',event_id:null,song_request_id:null}]));expect(screen.queryByText('Stale response')).toBeNull();
 });
 function Selected(){const guest=useGuest();return <><span>{guest?.snapshot?.event.id??'empty'}</span><button onClick={()=>guest?.select(session('second'))}>Select second</button></>;}
 it('selection and Auth changes cancel stale snapshot application and never reuse previous event profile',async()=>{

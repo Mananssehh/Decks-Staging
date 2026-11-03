@@ -23,6 +23,11 @@ it.each([503,401])('catches rejected snapshot refresh status %s without replacin
  expect(terminal).toHaveBeenCalledTimes(status===401?1:0);expect(session.token).toBe('original-proof');
  await vi.advanceTimersByTimeAsync(31000);expect(refresh.mock.calls.length).toBe(status===401?1:2);stop();expect(vi.getTimerCount()).toBe(0);
 });
+it('coalesces invalidations during a pending refresh and fetches the trailing revision',async()=>{
+ vi.useFakeTimers();let release=()=>{};const pending=new Promise<void>(r=>{release=r;});const refresh=vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined),socket={readyState:1,onmessage:null,close:vi.fn()} as unknown as WebSocket;
+ const stop=connectGuestStream({event_id:'event',token:'proof'} as GuestSession,refresh,vi.fn(),'wss://example',()=>socket);
+ const invalidate=()=>socket.onmessage?.call(socket,new MessageEvent('message',{data:'{"type":"invalidate"}'}));invalidate();await vi.advanceTimersByTimeAsync(0);invalidate();invalidate();expect(refresh).toHaveBeenCalledOnce();release();await vi.advanceTimersByTimeAsync(0);expect(refresh).toHaveBeenCalledTimes(2);stop();expect(vi.getTimerCount()).toBe(0);
+});
 it('terminal banned close stops reconnect and fallback without clearing credentials',()=>{
  vi.useFakeTimers();const refresh=vi.fn(),terminal=vi.fn();const s={onclose:null,close:vi.fn()} as unknown as WebSocket;const factory=vi.fn(()=>s);
  const stop=connectGuestStream({event_id:'event',token:'proof'} as GuestSession,refresh,terminal,'wss://example',factory);
