@@ -1,7 +1,7 @@
 // Source-only staging endpoint. Tokens never reach URLs, logs or analytics.
 export const CONTRACT = 'guest-integration-v1';
 const HOST = 'ldxgejbzmpvsvozqmpfe.supabase.co';
-const actions = ['contract','join','resume','snapshot','request','vote','remove','profile','ledger','report','funnel'] as const;
+const actions = ['contract','join','resume','snapshot','request','vote','remove','profile','ledger','report','funnel','consent','public_profile','tip_summary'] as const;
 export type Action = typeof actions[number];
 export type Rpc = (action: Action, payload: Record<string, unknown>) => Promise<{data: unknown; error: unknown}>;
 export interface Dependencies { url?: string; rpc?: Rpc }
@@ -33,6 +33,8 @@ export function validate(action: Action,p: Record<string,unknown>): Record<strin
  }
  if(action==='vote'||action==='remove'){if(!text('request_id',36,true,uuid))return null;if(action==='vote'){if(p.value!==-1&&p.value!==0&&p.value!==1)return null;out.value=p.value;}}
  if(action==='profile'&&!text('nickname',24))return null;
+ if(action==='profile'&&p.is_public!==undefined){if(typeof p.is_public!=='boolean')return null;out.is_public=p.is_public;}
+ if(action==='public_profile'&&!text('target_id',36,true,uuid))return null;
  if(action==='report'&&(!text('target_id',36,true,uuid)||!text('target_type',16,true)||!text('reason',32,true)||!text('details',500)))return null;
  if(action==='funnel'&&!text('event_type',40,true))return null;
  return out;
