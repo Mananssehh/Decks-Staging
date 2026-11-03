@@ -3,18 +3,28 @@ SET LOCAL lock_timeout='5s';
 CREATE SCHEMA guest_runtime;
 REVOKE ALL ON SCHEMA guest_runtime FROM PUBLIC,anon,authenticated,service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA guest_runtime REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+-- Protected identity root: only the allowed public profile table links to Auth.
+-- Never invent the missing staging profile: root must resolve the 118/117 discrepancy.
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM auth.users a LEFT JOIN public.profiles p ON p.id=a.id WHERE p.id IS NULL)
+ THEN RAISE EXCEPTION 'Auth without profile: inspect preflight orphan inventory; no automatic profile fabrication'; END IF;
+END $$;
+ALTER TABLE public.profiles ADD COLUMN auth_user_id uuid;
+UPDATE public.profiles SET auth_user_id=id;
+ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_auth_fkey FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_registered_id CHECK(auth_user_id IS NULL OR auth_user_id=id);
+ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_identity UNIQUE(id,auth_user_id);
+ALTER TABLE public.profiles DROP CONSTRAINT profiles_id_fkey;
 CREATE TABLE guest_runtime.app_principals(
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(), auth_user_id uuid UNIQUE,
+ id uuid PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE, auth_user_id uuid UNIQUE,
+ FOREIGN KEY(id,auth_user_id) REFERENCES public.profiles(id,auth_user_id) ON DELETE CASCADE,
  kind text NOT NULL CHECK(kind IN ('auth','guest')), merged_into uuid REFERENCES guest_runtime.app_principals(id),
  created_at timestamptz NOT NULL DEFAULT now(), CHECK((kind='guest' AND auth_user_id IS NULL) OR (kind='auth' AND auth_user_id=id)),
  CHECK(merged_into IS NULL OR (kind='guest' AND merged_into<>id))
 );
 REVOKE ALL ON guest_runtime.app_principals FROM PUBLIC,anon,authenticated,service_role;
 ALTER TABLE guest_runtime.app_principals ENABLE ROW LEVEL SECURITY;
--- Platform constraint: private -> auth.users FK is not permitted by current managed schema rules.
--- Auth UID integrity is backfilled and lifecycle-maintained, NOT advertised as FK equivalent.
--- Root must resolve this explicit review gate before installation (see README).
-INSERT INTO guest_runtime.app_principals(id,auth_user_id,kind) SELECT id,id,'auth' FROM auth.users;
+INSERT INTO guest_runtime.app_principals(id,auth_user_id,kind) SELECT id,auth_user_id,'auth' FROM public.profiles;
 CREATE TABLE guest_runtime.installation(id boolean PRIMARY KEY DEFAULT true CHECK(id),contract text NOT NULL,enabled boolean NOT NULL DEFAULT false, secret bytea NOT NULL);
 REVOKE ALL ON guest_runtime.installation FROM PUBLIC,anon,authenticated,service_role;
 ALTER TABLE guest_runtime.installation ENABLE ROW LEVEL SECURITY;
@@ -28,10 +38,12 @@ ALTER TABLE guest_runtime.before_functions ENABLE ROW LEVEL SECURITY;
 -- Capture ACTUAL installed definitions; before/ source is advisory baseline only.
 INSERT INTO guest_runtime.before_functions
  SELECT oid::regprocedure::text,pg_get_functiondef(oid) FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname IN
- ('join_event_by_code','request_song','set_song_vote','remove_my_song_request','handle_new_user','award_points','is_event_member','recent_request_count','get_guest_event_count','update_my_profile','followup_reserve_tip','followup_attach_tip_session','followup_apply_financial_event','followup_sync_account','check_tip_cap');
+ ('join_event_by_code','request_song','set_song_vote','remove_my_song_request','handle_new_user','award_points','is_event_member','recent_request_count','get_guest_event_count','update_my_profile','followup_reserve_tip','followup_attach_tip_session','followup_apply_financial_event','followup_sync_account','check_tip_cap','dj_transition_request','dj_set_queue_position','repair_write_broadcast');
+INSERT INTO guest_runtime.before_constraints
+ SELECT 'profiles','profiles_id_fkey','FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE';
 -- Replace only discovered exact named guest ownership constraints. Preserve original delete action.
 DO $$ DECLARE r record; c record; n integer; action text; BEGIN
- FOR r IN SELECT * FROM (VALUES('profiles','id'),('song_requests','requested_by'),('votes','user_id'),('dj_tips','user_id'),('guest_funnel_events','user_id')) t(rel,col) LOOP
+ FOR r IN SELECT * FROM (VALUES('song_requests','requested_by'),('votes','user_id'),('dj_tips','user_id'),('guest_funnel_events','user_id')) t(rel,col) LOOP
   SELECT count(*) INTO n FROM pg_constraint con JOIN pg_attribute a ON a.attrelid=con.conrelid AND a.attnum=con.conkey[1]
    WHERE con.conrelid=('public.'||r.rel)::regclass AND con.contype='f' AND con.confrelid='auth.users'::regclass AND array_length(con.conkey,1)=1 AND a.attname=r.col;
   IF n<>1 THEN RAISE EXCEPTION 'Expected exactly one Auth ownership FK for %.%; got %',r.rel,r.col,n; END IF;
@@ -71,8 +83,8 @@ CREATE FUNCTION guest_runtime.valid_nickname(_nick text) RETURNS boolean LANGUAG
 $$;
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
+ INSERT INTO public.profiles(id,auth_user_id,nickname,points) VALUES(new.id,new.id,coalesce(new.raw_user_meta_data->>'nickname','Guest'),15) ON CONFLICT(id) DO NOTHING;
  INSERT INTO guest_runtime.app_principals(id,auth_user_id,kind) VALUES(new.id,new.id,'auth') ON CONFLICT(id) DO NOTHING;
- INSERT INTO public.profiles(id,nickname,points) VALUES(new.id,coalesce(new.raw_user_meta_data->>'nickname','Guest'),15) ON CONFLICT(id) DO NOTHING;
  INSERT INTO public.user_roles(user_id,role) VALUES(new.id,'guest') ON CONFLICT DO NOTHING;
  INSERT INTO public.points_transactions(user_id,amount,type,reason) VALUES(new.id,15,'earned','Starter points') ON CONFLICT(user_id) WHERE reason='Starter points' DO NOTHING;
  RETURN new;

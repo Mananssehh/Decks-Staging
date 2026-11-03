@@ -1,7 +1,7 @@
-CREATE TABLE guest_runtime.bootstraps(hash bytea PRIMARY KEY, principal_id uuid NOT NULL UNIQUE REFERENCES guest_runtime.app_principals(id),revoked_at timestamptz);
+CREATE TABLE guest_runtime.bootstraps(hash bytea PRIMARY KEY, principal_id uuid NOT NULL UNIQUE REFERENCES guest_runtime.app_principals(id) ON DELETE CASCADE,revoked_at timestamptz);
 REVOKE ALL ON guest_runtime.bootstraps FROM PUBLIC,anon,authenticated,service_role;
 ALTER TABLE guest_runtime.bootstraps ENABLE ROW LEVEL SECURITY;
-CREATE TABLE guest_runtime.sessions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),principal_id uuid NOT NULL REFERENCES guest_runtime.app_principals(id),event_id uuid NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,token_hash bytea NOT NULL UNIQUE,expires_at timestamptz NOT NULL DEFAULT now()+interval '12 hours',revoked_at timestamptz,UNIQUE(principal_id,event_id));
+CREATE TABLE guest_runtime.sessions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),principal_id uuid NOT NULL REFERENCES guest_runtime.app_principals(id) ON DELETE CASCADE,event_id uuid NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,token_hash bytea NOT NULL UNIQUE,expires_at timestamptz NOT NULL DEFAULT now()+interval '12 hours',revoked_at timestamptz,UNIQUE(principal_id,event_id));
 REVOKE ALL ON guest_runtime.sessions FROM PUBLIC,anon,authenticated,service_role;
 ALTER TABLE guest_runtime.sessions ENABLE ROW LEVEL SECURITY;
 CREATE TABLE guest_runtime.operations(principal_id uuid NOT NULL,category text NOT NULL CHECK(category IN ('read','mutation')),at timestamptz NOT NULL DEFAULT clock_timestamp());
@@ -84,9 +84,9 @@ DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r js
    IF u IS NULL THEN
     u:=gen_random_uuid();
     PERFORM guest_runtime.actor_lock(u);
+    INSERT INTO public.profiles(id,nickname,points,is_public) VALUES(u,nick,15,false);
     INSERT INTO guest_runtime.app_principals(id,kind) VALUES(u,'guest');
     INSERT INTO guest_runtime.bootstraps VALUES(guest_runtime.digest(bs),u,NULL);
-    INSERT INTO public.profiles(id,nickname,points,is_public) VALUES(u,nick,15,false);
     INSERT INTO public.points_transactions(user_id,amount,type,reason) VALUES(u,15,'earned','Starter points');
    END IF;
    j:=guest_runtime.join_kernel(u,code,nick);

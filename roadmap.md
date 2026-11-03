@@ -5,9 +5,9 @@
 - [x] Stage bounded guest-event API and 8 no-network endpoint tests; retain probe and existing UI unchanged.
 - [x] Local database suite: 49 assertions plus containment/refusal/empty restore; preflight and canonical backups.
 - [x] Document capability Broadcast constraints and independent hosted review gates.
-- [ ] Requested Auth-principal FK/deletion lifecycle blocked by managed schema rules; requires approved compatible architecture.
-- [ ] Anonymous capability Broadcast/coalescing blocked by supported Realtime policy restrictions; no policy/cron authored.
-- [ ] Complete compatibility/concurrent award/claim review after platform gates; no hosted installation or deployment authorized.
+- [ ] Complete protected profiles-to-Auth lifecycle, explicit orphan preflight and local deletion/rollback regressions in this source-only pass.
+- [ ] Complete legacy writer/claim lock review and concurrent DJ/ban/profile/financial regressions in this source-only pass.
+- [ ] Next bounded phase: source review and platform testing of receive-only Edge WebSocket invalidations; no anonymous channel policy.
 
 ## Core staging audit repair
 - [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.
