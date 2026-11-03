@@ -14,9 +14,11 @@ import { nicknameSchema, roomCodeSchema } from "@/lib/validation";
 import { containsProfanity, looksSpammy } from "@/lib/profanity";
 import { GuestLimitReachedDialog } from "@/components/GuestLimitReachedDialog";
 import { fetchGuestEventCount, fetchGuestJoinLimits } from "@/hooks/useGuestJoinLimits";
+import { useGuest } from "@/contexts/guest-state";
 
 const Join = () => {
   const navigate = useNavigate();
+  const guest = useGuest();
   const [params] = useSearchParams();
   const { user, profile, isAnonymous, loading: authLoading, refreshProfile } = useAuth();
   const [blockOpen, setBlockOpen] = useState(false);
@@ -83,6 +85,11 @@ const Join = () => {
       }
 
       // Sign in first (anonymous if needed) so inserts work under RLS.
+      if (!user && guest?.enabled) {
+        await guest.join(codeParse.data,nickParse.data);
+        navigate(`/event/${codeParse.data}`,{state:{nickname:nickParse.data}});
+        return;
+      }
       if (!user) {
         const { error: anonError } = await supabase.auth.signInAnonymously({
           options: { data: { nickname: nickParse.data } },
