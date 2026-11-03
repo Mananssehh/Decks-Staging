@@ -14,6 +14,8 @@ export function GuestProvider({children}:{children:ReactNode}){
  const key=!auth.user&&session?session.event_id+':'+session.session_id+':'+session.token:null;
  const selected=useRef(key);selected.current=key;
  const inflight=useRef(new Map<string,Promise<GuestSnapshot>>());
+ const mounted=useRef(true);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
  const snapshot=result?.key===key?result.data:null;
  const authUser=auth.user;const refreshProfile=auth.refreshProfile;
  useEffect(()=>{if(!authUser||authUser.is_anonymous||!authUser.email_confirmed_at)return;void claimPendingGuest().then(claimed=>{if(claimed)void refreshProfile();}).catch(()=>{/* preserve proof; callback/dialog can retry explicitly */});},[authUser,refreshProfile]);
@@ -24,8 +26,8 @@ export function GuestProvider({children}:{children:ReactNode}){
   const requestKey=s.event_id+':'+s.session_id+':'+s.token;
   let pending=inflight.current.get(requestKey);
   if(!pending){pending=guestSnapshot(s);inflight.current.set(requestKey,pending);}
-  try{const data=await pending;if(selected.current===requestKey){setResult({key:requestKey,data});setError(null);}return data;}
-  catch(e){if(selected.current===requestKey)setError(e instanceof Error?e:Error('Could not load guest profile.'));throw e;}
+  try{const data=await pending;if(mounted.current&&selected.current===requestKey){setResult({key:requestKey,data});setError(null);}return data;}
+  catch(e){if(mounted.current&&selected.current===requestKey)setError(e instanceof Error?e:Error('Could not load guest profile.'));throw e;}
   finally{if(inflight.current.get(requestKey)===pending)inflight.current.delete(requestKey);}
  },[]);
  useEffect(()=>{

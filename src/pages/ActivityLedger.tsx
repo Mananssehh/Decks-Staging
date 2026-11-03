@@ -58,7 +58,8 @@ export default function ActivityLedger() {
     setPage(0);
     setHasMore(true);
     void loadPage(0, true);
-    return()=>{generation.current++;};
+    const ticket=generation.current;
+    return()=>{generation.current=ticket+1;};
     // Pagination is driven by identity/filter; loadPage captures that render's scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actor.id, actor.guest?.session?.session_id, filter,attempt]);
