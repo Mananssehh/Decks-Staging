@@ -81,16 +81,50 @@ export function validate(action: Action, b: Record<string, unknown>): Record<str
   return out;
 }
 
+/** Streams at most `limit` bytes (Content-Length is not trusted); cancels the stream on overflow. */
+export async function readBounded(req: Request, limit: number): Promise<string | "too_large" | null> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        return "too_large";
+      }
+      chunks.push(value);
+    }
+    const buf = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    await reader.cancel().catch(() => {});
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export function createHandler(deps: ProbeDeps) {
   return async (req: Request): Promise<Response> => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
     if (!isStagingBackend(deps.supabaseUrl) || !deps.rpc) return fail(503, "probe_unavailable");
     if (req.method !== "POST") return fail(405, "method_not_allowed");
-    let raw: string;
-    try { raw = await req.text(); } catch { return fail(400, "invalid_json"); }
-    if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) return fail(413, "payload_too_large");
+    const declared = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      await req.body?.cancel().catch(() => {});
+      return fail(413, "payload_too_large");
+    }
+    const read = await readBounded(req, MAX_BODY_BYTES);
+    if (read === "too_large") return fail(413, "payload_too_large");
+    if (read === null) return fail(400, "invalid_json");
     let body: unknown;
-    try { body = JSON.parse(raw); } catch { return fail(400, "invalid_json"); }
+    try { body = JSON.parse(read); } catch { return fail(400, "invalid_json"); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return fail(400, "invalid_json");
     const b = body as Record<string, unknown>;
     const action = b.action;

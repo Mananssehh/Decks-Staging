@@ -109,3 +109,38 @@ Deno.test("handler makes zero network calls (no Auth/signup) across a full flow"
     globalThis.fetch = orig;
   }
 });
+
+Deno.test("streamed oversized body without Content-Length is cut off and cancelled", async () => {
+  const { calls, h } = setup();
+  let pulled = 0, cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(c) { pulled++; c.enqueue(new Uint8Array(1024).fill(32)); }, // endless
+    cancel() { cancelled = true; },
+  });
+  const req = new Request("http://x/", { method: "POST", body: stream });
+  assertEquals(req.headers.get("content-length"), null);
+  const r = await h(req);
+  assertEquals(r.status, 413); await r.body?.cancel();
+  assert(cancelled, "stream cancelled");
+  assert(pulled <= 10, `read ${pulled} chunks`);
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("oversized declared Content-Length rejected fast; invalid UTF-8 -> 400", async () => {
+  const { calls, h } = setup();
+  let r = await h(new Request("http://x/", { method: "POST", body: "{}", headers: { "content-length": "999999" } }));
+  assertEquals(r.status, 413); await r.body?.cancel();
+  r = await h(new Request("http://x/", { method: "POST", body: new Uint8Array([0x7b, 0xff, 0x7d]) }));
+  assertEquals(r.status, 400); await r.body?.cancel();
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("8KB total allowed but inner body over 4KB bytes rejected", async () => {
+  const { calls, h } = setup();
+  const p = { event_id: EV, token: TOK, idempotency_key: EV, title: "t" };
+  let r = await h(post({ action: "request", payload: { ...p, body: "é".repeat(2049) } })); // 4098 bytes
+  assertEquals(r.status, 400); assertEquals((await r.json()).error, "invalid_body");
+  r = await h(post({ action: "request", payload: { ...p, body: "b".repeat(4096) } }));
+  assertEquals(r.status, 200); await r.body?.cancel();
+  assertEquals(calls.length, 1);
+});
