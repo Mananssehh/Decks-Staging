@@ -32,6 +32,7 @@ export interface SongRequestRow {
   queue_position?: number | null;
   played_at?: string | null;
   played_by_source?: string | null;
+  profile_linkable?:boolean;
 }
 
 const statusStyles: Record<SongRequestRow["status"], string> = {
@@ -235,7 +236,7 @@ export function SongRequestCard({ rank, song, eventId, myVote = 0, onVote, onTip
             sourcePlatform={song.source_platform}
           />
           <p className="text-[11px] text-muted-foreground/60 truncate flex items-center gap-2">
-            {song.requested_by ? (
+            {song.requested_by && song.profile_linkable!==false ? (
               <Link
                 to={`/users/${song.requested_by}`}
                 state={{ from: location.pathname + location.search, scrollY: typeof window !== "undefined" ? window.scrollY : 0, eventId: eventId ?? null }}

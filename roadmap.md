@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Guest backend integration (source-only)
+- [x] Application source phase: OFF staging actor/provider, persistent proof/explicit account-bound claim, event/profile/ledger/socket paths; verified catalog/tip/consent adapters; 011 manual/URL/lifecycle/helpers. Local 16 application +100 guest +15 bootstrap +39 stream SQL assertions/rollback, 57 financial checks, 25 Edge tests; lint/typecheck pass. Hosted acceptance pending.
 - [x] Stage candidate principals/FK replacement, actor kernels, sessions, snapshots, claim and alias-aware financial boundaries; not install-ready.
 - [x] Stage bounded guest-event API and 8 no-network endpoint tests; retain probe and existing UI unchanged.
 - [x] Local database suite: 49 assertions plus containment/refusal/empty restore; preflight and canonical backups.
@@ -10,7 +11,7 @@
 - [x] Readiness source: targeted legacy-DJ repair, shared reads, safe DTO/authenticated alias snapshot, overlap compensation; 100 guest +15 repair +57 financial +8 endpoint assertions, rollback/lint.
 - [ ] Independent install review: reviewed bootstrap plus 001..008 in one transaction and actual catalog checks; hosted operations unauthorized.
 - [x] Stream source: 010 revision overlay, private token/batch RPCs, native receive-only socket/shared hubs; 39 SQL +13 transport +8 endpoint tests, 100 guest +15 repair +57 financial regressions and rollback/lint; 001..008 byte-identical.
-- [ ] Independent platform review/deployment and 100-socket acceptance; UI, music-search and tip/consent adapters next, no anonymous channel policy or cron.
+- [ ] Independent core/010/011 installation, endpoint deployment and flagged browser/100-socket acceptance; awaiting root review/authorization, no anonymous channel policy or cron.
 
 ## Core staging audit repair
 - [x] Stage ordered SQL for ACLs, admission, counters/bootstrap, atomic playback and bridge claims; retain preflight evidence and rollback.

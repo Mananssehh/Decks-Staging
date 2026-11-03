@@ -1,8 +1,9 @@
 /** A logical checkout is the user/event/song/amount, not a click or an HTTP attempt. */
-export function tipRequestKey(userId:string,eventId:string,songId:string|null,amount:number,storage:Storage=localStorage) {
+export function tipRequestKey(userId:string,eventId:string,songId:string|null,amount:number,storage:Storage=localStorage,aliases:string[]=[] ) {
  const key=`decks:tip-request:${userId}:${eventId}:${songId??''}:${amount}`;
  const current=storage.getItem(key);
  if(current&&/^[a-f0-9-]{36}$/i.test(current))return current;
+ for(const alias of aliases){const saved=storage.getItem(`decks:tip-request:${alias}:${eventId}:${songId??''}:${amount}`);if(saved&&/^[a-f0-9-]{36}$/i.test(saved)){storage.setItem(key,saved);return saved;}}
  const next=crypto.randomUUID();storage.setItem(key,next);return next;
 }
 /** Rotate only after authoritative terminal outcome, never timeout/cancel/navigation/error. */

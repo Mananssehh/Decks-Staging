@@ -33,6 +33,10 @@ import { resolveEventEntry } from "@/lib/eventEntry";
 import { setSongVote } from "@/lib/stagedRepairs";
 import { createEventRefresh, listenEventRefresh, notifyEventChange } from "@/lib/eventRefresh";
 import { loadEventSongs } from "@/lib/eventSongSnapshot";
+import {useGuest} from '@/contexts/guest-state';
+import {guestStore,guestInvoke,guestScope,ownEventSnapshot,guestApplicationEnabled,ownAliases} from '@/lib/guestClient';
+import {GuestError,type GuestSnapshot} from '@/lib/guestApplication';
+import {connectGuestStream} from '@/lib/guestStream';
 
 
 type SortMode = "top" | "trending" | "played";
@@ -49,6 +53,13 @@ const EventPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, profile, loading: authLoading } = useAuth();
+  const guest=useGuest();
+  const isGuest=!user&&!!guest?.enabled;
+  const guestRef=useRef(guest);guestRef.current=guest;
+  const [guestData,setGuestData]=useState<GuestSnapshot|null>(null);
+  const [guestTipTotals,setGuestTipTotals]=useState<Record<string,{amount:number;count:number}>>({});
+  const [guestFailure,setGuestFailure]=useState<string|null>(null);
+  const [aliases,setAliases]=useState<string[]>([]);
   // Nickname carried over from /join — used as a fallback so we never write
   // "Guest" into event_participants/song_requests while AuthContext is still
   // loading the profile on first render.
@@ -71,20 +82,20 @@ const EventPage = () => {
   const [lastRequestAt, setLastRequestAt] = useState(0);
   const voteLocks = useRef(new Set<string>());
   const refreshRef = useRef<{ refresh: () => Promise<void>; invalidate: () => void } | null>(null);
-  const userId = user?.id;
+  const userId = user?.id ?? (isGuest?guest?.session?.principal_id:undefined);
   const nicknameRef = useRef(profile?.nickname);
   nicknameRef.current = profile?.nickname;
 
   // Redirect if not signed in
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !isGuest) {
       navigate(`/join?code=${code ?? ""}`, { replace: true });
     }
-  }, [user, authLoading, code, navigate]);
+  }, [user, authLoading, code, navigate,isGuest]);
 
   // Load event + songs + my votes
   useEffect(() => {
-    if (!code || !userId) return;
+    if (isGuest || !code || !userId) return;
     let cancelled = false;
 
     (async () => {
@@ -129,7 +140,8 @@ const EventPage = () => {
 
       let snapshot: Awaited<ReturnType<typeof loadEventSongs>>;
       try {
-        snapshot = await loadEventSongs(ev.id,userId);
+        if(guestApplicationEnabled){const s=await ownEventSnapshot(ev.id);snapshot={songs:s.songs,votes:Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>};setAliases(await ownAliases());}
+        else snapshot = await loadEventSongs(ev.id,userId);
       } catch {
         if (!cancelled) {
           toast.error("The queue couldn't refresh. Please try again.");
@@ -146,7 +158,27 @@ const EventPage = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [code, userId, navigate, navNickname]);
+  }, [code, userId, navigate, navNickname,isGuest]);
+
+  useEffect(()=>{
+    if(!isGuest||!code||authLoading)return;
+    let cancelled=false,disposeStream:(()=>void)|undefined,unlisten:(()=>void)|undefined;
+    const activeLocks=voteLocks.current;
+    const sync=createEventRefresh(async()=>{
+      const state=guestRef.current,s=guestStore().byCode(code);if(!state||!s)throw Error('Guest session missing');
+      try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return data;}catch(e){if(e instanceof GuestError){setLoading(false);setGuestFailure(e.message);}throw e;}
+    },s=>{setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
+    refreshRef.current=sync;
+    void(async()=>{try{
+      let s=guestStore().byCode(code);
+      if(!s){const state=guestRef.current;if(!state)throw Error('Guest session missing');s=await state.join(code,navNickname??guestStore().current()?.nickname??'Guest');}
+      if(cancelled)return;guestRef.current?.select(s);
+      await sync.refresh();if(cancelled)return;
+      disposeStream=connectGuestStream(s,()=>void sync.refresh(),()=>{setGuestFailure('This event session is unavailable.');},`${import.meta.env.VITE_SUPABASE_URL.replace('https:','wss:')}/functions/v1/guest-event-stream`);
+      unlisten=listenEventRefresh(s.event_id,s.principal_id,()=>void sync.refresh());
+    }catch(e){if(!cancelled){setLoading(false);setGuestFailure(e instanceof GuestError?e.message:'This event could not load. Please retry later.');}}})();
+    return()=>{cancelled=true;sync.dispose();disposeStream?.();unlisten?.();activeLocks.clear();if(refreshRef.current===sync)refreshRef.current=null;};
+  },[isGuest,code,authLoading,navNickname]);
 
   // Restore scroll position when returning from a user profile page (Back button).
   // Source of truth in priority order: location.state.scrollY, then sessionStorage.
@@ -194,7 +226,7 @@ const EventPage = () => {
 
     const sync = createEventRefresh(async () => {
       const [snapshot, event] = await Promise.all([
-        loadEventSongs(eventId,userId),
+        guestApplicationEnabled?ownEventSnapshot(eventId).then(s=>({songs:s.songs,votes:Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>})):loadEventSongs(eventId,userId),
         supabase.from("events").select("*").eq("id", eventId).single(),
       ]);
       if (event.error) throw Error("Event refresh failed");
@@ -257,7 +289,8 @@ const EventPage = () => {
   const nowPlaying = useMemo(() => songs.find((s) => s.status === "playing"), [songs]);
 
   // Live broadcast (DJ/Bridge) — used to auto-merge with a matching queue request.
-  const { nowPlaying: broadcastNowPlaying } = useNowPlaying(eventInfo?.id);
+  const { nowPlaying: authNowPlaying } = useNowPlaying(isGuest?undefined:eventInfo?.id);
+  const broadcastNowPlaying=isGuest?guestData?.now_playing:authNowPlaying;
   const matchedPlayingRequest = useMemo(() => {
     if (nowPlaying) return nowPlaying;
     if (!broadcastNowPlaying) return null;
@@ -342,7 +375,7 @@ const EventPage = () => {
   }, [visibleSongs, sort]);
 
   const handleVote = async (songId: string, value: 1 | -1) => {
-    if (!user) return;
+    if (!userId) return;
     if (eventInfo?.requests_status === "ended") {
       toast.error("Voting closed — this event has ended");
       return;
@@ -381,8 +414,8 @@ const EventPage = () => {
     );
 
     try {
-      await setSongVote(songId, isToggleOff ? null : value);
-      if (eventInfo) notifyEventChange(eventInfo.id, user.id);
+      if(isGuest&&guest?.session)await guestInvoke('vote',{...guestScope(guest.session),request_id:songId,value:isToggleOff?0:value});else await setSongVote(songId, isToggleOff ? null : value);
+      if (eventInfo) notifyEventChange(eventInfo.id, userId);
     } catch (err) {
       if (voteScope !== refreshRef.current) return;
       // Rollback optimistic state on failure
@@ -419,8 +452,8 @@ const EventPage = () => {
     setRemoving(true);
     const target = removeTarget;
     try {
-      const { error } = await supabase.rpc("remove_my_song_request", { _song_request_id: target.id });
-      if (error) throw error;
+      if(isGuest&&guest?.session)await guestInvoke('remove',{...guestScope(guest.session),request_id:target.id});else{const { error } = await supabase.rpc("remove_my_song_request", { _song_request_id: target.id });if (error) throw error;}
+      void refreshRef.current?.refresh();
       // Soft-delete: mark as removed locally so it disappears from visible lists (filters drop status === "removed")
       setSongs((prev) => prev.map((s) => (s.id === target.id ? { ...s, status: "removed" as const } : s)));
       toast.success("Request removed. Cooldown still applies.");
@@ -440,7 +473,7 @@ const EventPage = () => {
 
 
   const handleRequestSong = async (song: MusicSearchResult) => {
-    if (!user || !eventInfo) return;
+    if (!userId || !eventInfo) return;
     if (eventInfo.requests_status !== "live") {
       toast.error(eventInfo.requests_status === "paused" ? "Requests are paused" : "Event has ended");
       return;
@@ -474,14 +507,19 @@ const EventPage = () => {
 
     // Keep the caller's profile nickname healthy: the server derives
     // requester_name from it (falling back to "Guest").
-    const prof = await fetchMyProfile("EventPage.request");
+    const prof = isGuest?guestData?.profile:await fetchMyProfile("EventPage.request");
     const fallbackNick =
       (profile?.nickname && profile.nickname !== "Guest" ? profile.nickname : null) || navNickname;
-    if ((!prof || !prof.nickname || prof.nickname === "Guest") && fallbackNick) {
+    if (!isGuest&&(!prof || !prof.nickname || prof.nickname === "Guest") && fallbackNick) {
       await supabase.rpc("ensure_profile", { p_nickname: fallbackNick }).then(() => null, () => null);
     }
 
-    const { outcome, requestId } = await submitSongRequest(eventInfo.id, song);
+    const requestKeyName=`decks:guest-request:${userId}:${eventInfo.id}:${song.source_platform}:${song.source_song_id??normalizeKey(song.title,song.artist)}`;
+    let requestKey=localStorage.getItem(requestKeyName);if(!requestKey){requestKey=crypto.randomUUID();localStorage.setItem(requestKeyName,requestKey);}
+    const result=isGuest&&guest?.session?await guestInvoke('request',{...guestScope(guest.session),...Object.fromEntries(Object.entries(song).filter(([,v])=>v!==null)),source_song_id:song.source_song_id??'',idempotency_key:requestKey}):null;
+    if(result?.ok===true)localStorage.removeItem(requestKeyName);
+    const { outcome, requestId } = result?{outcome:result.outcome as Awaited<ReturnType<typeof submitSongRequest>>['outcome'],requestId:result.request_id as string}:await submitSongRequest(eventInfo.id, song);
+    void refreshRef.current?.refresh();
     const feedback = requestFeedback(outcome, eventInfo.cooldown_seconds ?? 30);
 
     if (feedback.kind === "error") {
@@ -500,6 +538,7 @@ const EventPage = () => {
     if (feedback.closeSheet) setRequestOpen(false);
   };
 
+  if(guestFailure)return <div><AppHeader/><main className="container py-12"><p>{guestFailure}</p><Button onClick={()=>window.location.reload()}>Retry</Button></main></div>;
   if (authLoading || loading || !eventInfo) {
     return (
       <div className="min-h-screen">
@@ -530,7 +569,7 @@ const EventPage = () => {
               <StatusBadge status={status} />
               <div className="flex items-center gap-1.5">
                 <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 rounded-full gap-1">
-                  <Sparkles className="h-3 w-3" />{profile?.points ?? 0} pts
+                  <Sparkles className="h-3 w-3" />{(isGuest?guestData?.profile:profile)?.points ?? 0} pts
                 </Badge>
               </div>
             </div>
@@ -602,6 +641,7 @@ const EventPage = () => {
             eventId={eventInfo.id}
             matchedRequest={matchedPlayingRequest}
             fallbackRequest={nowPlaying ?? null}
+            snapshotNowPlaying={isGuest?guestData?.now_playing:undefined}
           />
         )}
 
@@ -631,7 +671,7 @@ const EventPage = () => {
               <DialogHeader className="px-4 pt-4 pb-2 shrink-0 text-left">
                 <DialogTitle className="pr-8">Request a song</DialogTitle>
               </DialogHeader>
-              <RequestPicker onPick={handleRequestSong} existing={songs} allowExplicit={eventInfo.allow_explicit} />
+              <RequestPicker onPick={song=>void handleRequestSong(song).catch(e=>toast.error(e instanceof Error?e.message:'Request failed'))} existing={songs} allowExplicit={eventInfo.allow_explicit} guestScope={isGuest&&guest?.session?guestScope(guest.session):undefined} />
             </DialogContent>
           </Dialog>
         </div>
@@ -694,11 +734,13 @@ const EventPage = () => {
 
                 onVote={(v) => handleVote(s.id, v)}
                 onTip={isLive ? () => setBoostTarget(s) : undefined}
-                onRemove={s.requested_by === user?.id && s.status === "pending" ? () => setRemoveTarget(s) : undefined}
-                onReport={user && s.requested_by !== user.id ? () => setReportTarget(s) : undefined}
+                onRemove={(s.requested_by === userId||aliases.includes(s.requested_by??'')||(s as SongRequestRow&{is_mine?:boolean}).is_mine) && s.status === "pending" ? () => setRemoveTarget(s) : undefined}
+                onReport={userId && s.requested_by !== userId ? () => setReportTarget(s) : undefined}
                 disabled={!!pendingVotes[s.id]}
                 battle={battleIds.has(s.id)}
                 trending={sort === "trending" && trending.hotIds.has(s.id)}
+                tipTotalCents={guestTipTotals[s.id]?.amount}
+                tipCount={guestTipTotals[s.id]?.count}
                 movement={sort === "trending" ? movementMap.get(s.id) : undefined}
               />
             ))}
@@ -795,7 +837,7 @@ function StatusBadge({ status }: { status: "live" | "paused" | "ended" }) {
   );
 }
 
-function RequestPicker({ onPick, existing, allowExplicit = true }: { onPick: (song: MusicSearchResult) => void; existing: SongRequestRow[]; allowExplicit?: boolean }) {
+function RequestPicker({ onPick, existing, allowExplicit = true,guestScope }: { onPick: (song: MusicSearchResult) => void; existing: SongRequestRow[]; allowExplicit?: boolean;guestScope?:{event_id:string;token:string} }) {
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [results, setResults] = useState<MusicSearchResult[]>([]);
@@ -824,7 +866,7 @@ function RequestPicker({ onPick, existing, allowExplicit = true }: { onPick: (so
     setRateLimited(false);
     (async () => {
       try {
-        const res = await searchMusic(debounced);
+        const res = await searchMusic(debounced,guestScope);
         if (cancelled) return;
         setResults(res.results);
         setProvider(res.provider);
@@ -841,7 +883,7 @@ function RequestPicker({ onPick, existing, allowExplicit = true }: { onPick: (so
       }
     })();
     return () => { cancelled = true; };
-  }, [debounced]);
+  }, [debounced,guestScope]);
 
   // Only an active request for the exact same provider track counts as a
   // duplicate — tapping it supports the existing request instead.
@@ -1029,11 +1071,9 @@ function ManualFallback({
       return;
     }
     const ext = link.trim();
-    const isSpotify = /open\.spotify\.com\/track\//.test(ext);
-    const isApple = /music\.apple\.com\//.test(ext);
     onPick({
       source_song_id: null,
-      source_platform: isSpotify ? "spotify" : isApple ? "itunes" : "manual",
+      source_platform: "manual",
       title: t,
       artist: a,
       album: "",
@@ -1042,7 +1082,7 @@ function ManualFallback({
       preview_url: null,
       external_url: ext || `https://music.apple.com/us/search?term=${encodeURIComponent(`${t} ${a}`)}`,
       explicit: false,
-    } as unknown as MusicSearchResult);
+    });
   };
 
   const sp = `https://open.spotify.com/search/${encodeURIComponent(query)}`;

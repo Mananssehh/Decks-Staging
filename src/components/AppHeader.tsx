@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-state";
 import { Badge } from "@/components/ui/badge";
 import { UpgradeAccountDialog } from "@/components/UpgradeAccountDialog";
+import {useActor} from '@/hooks/useActor';
 
 export function AppHeader() {
-  const { user, profile, isDJ, isAnonymous, signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const actor=useActor();const {profile,isDJ,isAnonymous}=actor;
   const navigate = useNavigate();
   const location = useLocation();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -38,7 +40,7 @@ export function AppHeader() {
         </Link>
 
         <nav className="flex items-center gap-1">
-          {user ? (
+          {user||actor.kind==='guest' ? (
             <>
               {isDJ && (
                 <Button asChild variant="ghost" size="sm">
@@ -82,9 +84,9 @@ export function AppHeader() {
               <Button asChild variant="ghost" size="icon" className="sm:hidden" aria-label="Profile">
                 <Link to={profileHref}><UserIcon className="h-4 w-4" /></Link>
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out">
+              {user&&<Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out">
                 <LogOut className="h-4 w-4" />
-              </Button>
+              </Button>}
             </>
           ) : (
             <Button asChild variant="ghost" size="sm">

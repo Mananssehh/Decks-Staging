@@ -9,6 +9,8 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {useActor} from '@/hooks/useActor';
+import {actorLedger,guestApplicationEnabled,guestStore} from '@/lib/guestClient';
 
 type Filter = "all" | "earned" | "spent" | "refunded";
 
@@ -28,7 +30,8 @@ interface LedgerRow {
 const PAGE_SIZE = 50;
 
 export default function ActivityLedger() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const actor=useActor();const profile=actor.profile;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo");
@@ -42,19 +45,22 @@ export default function ActivityLedger() {
   const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth", { replace: true });
-  }, [user, authLoading, navigate]);
+    if (!authLoading && !actor.id) navigate("/auth", { replace: true });
+  }, [actor.id, authLoading, navigate]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!actor.id) return;
     setRows([]);
     setPage(0);
     setHasMore(true);
     void loadPage(0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, filter]);
+  }, [actor.id, filter]);
 
   const loadPage = async (p: number, replace = false) => {
+    const session=actor.guest?.session;
+    const event=session?.event_id??guestStore().contextEvent();
+    if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);setRows(prev=>replace?entries.slice(0,PAGE_SIZE):[...prev,...entries.slice(0,PAGE_SIZE)]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}finally{setLoading(false);}return;}
     if (!user) return;
     setLoading(true);
     let q = supabase
@@ -112,7 +118,7 @@ export default function ActivityLedger() {
     return { earned, spent };
   }, [rows]);
 
-  if (authLoading || !user || !profile) {
+  if (authLoading || !actor.id || !profile) {
     return (
       <div className="min-h-screen">
         <AppHeader />

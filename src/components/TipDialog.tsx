@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef,useContext } from "react";
 import { CircleDollarSign, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,9 @@ import { ENABLE_LIVE_STRIPE } from "@/lib/featureFlags";
 import { supabase } from "@/integrations/supabase/client";
 import { tipRequestKey, clearTerminalTipKey } from "@/lib/tipRequestKey";
 import { functionContext, type FunctionPayload } from "@/lib/functionPayload";
+import {useGuest} from '@/contexts/guest-state';
+import {AuthContext} from '@/contexts/auth-state';
+import {guestInvoke,guestScope,ownAliases} from '@/lib/guestClient';
 
 interface Props {
   open: boolean;
@@ -39,6 +42,7 @@ export const TIP_DISCLAIMER =
   "Tips support the DJ. Tips do not affect song placement and do not guarantee playback, prioritization, or any specific action by the DJ.";
 
 export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, songRequestId, songTitleMeta, artistMeta }: Props) {
+  const guestContext=useGuest(),authContext=useContext(AuthContext);const guest=!authContext?.user&&guestContext?.enabled?guestContext.session:null;
   const submitLock = useRef(false);
   const [selected, setSelected] = useState<number>(5);
   const [custom, setCustom] = useState<string>("");
@@ -58,7 +62,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase.functions.invoke("tip-create-checkout", {
-        body: { event_id: eventId, check_only: true },
+        body: { event_id: eventId, check_only: true,...(guest?{guest:guestScope(guest)}:{}) },
       });
       if (cancelled) return;
       let payload: FunctionPayload | null = data;
@@ -76,13 +80,14 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         setPayoutMessage(payload.message ?? "Tips aren't available right now.");
       } else {
         // Unknown — allow attempt; server will re-validate.
-        setPayoutReady(true);
+        setPayoutReady(guest?false:true);
+        if(guest)setPayoutMessage('Tips are temporarily unavailable.');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, eventId]);
+  }, [open, eventId,guest]);
 
   const customAmount = Math.max(0, parseInt(custom || "0", 10) || 0);
   const amountDollars = custom ? customAmount : selected;
@@ -112,7 +117,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
     setSubmitting(true);
     try {
       // Record consent (server-side checkout re-verifies both consent and caps).
-      await recordConsent(CURRENT_CONSENT_VERSION);
+      if(guest)await guestInvoke('consent',guestScope(guest));else await recordConsent(CURRENT_CONSENT_VERSION);
 
       if (!ENABLE_LIVE_STRIPE) {
         toast.success(
@@ -123,15 +128,17 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
         return;
       }
 
-      const { data: currentUser, error: userError } = await supabase.auth.getUser();
-      if (userError || !currentUser.user || !eventId) throw Error("Sign in to tip");
-      const requestKey = tipRequestKey(currentUser.user.id, eventId, songRequestId ?? null, amountCents);
+      const current=guest?{id:guest.principal_id}:(await supabase.auth.getUser()).data.user;
+      if (!current || !eventId) throw Error("Sign in to tip");
+      const aliasIds=guest?[]:await ownAliases();
+      const requestKey = tipRequestKey(current.id, eventId, songRequestId ?? null, amountCents,localStorage,aliasIds);
       const { data, error } = await supabase.functions.invoke("tip-create-checkout", {
         body: {
           request_key: requestKey,
           event_id: eventId,
           amount_cents: amountCents,
           song_request_id: songRequestId ?? null,
+          ...(guest?{guest:guestScope(guest)}:{}),
         },
       });
 
@@ -146,7 +153,7 @@ export function TipDialog({ open, onOpenChange, eventId, djName, songTitle, song
       }
 
       if (payload?.error_code) {
-        if (payload.terminal === true) clearTerminalTipKey(currentUser.user.id,eventId,songRequestId ?? null,amountCents,requestKey);
+        if (payload.terminal === true) clearTerminalTipKey(current.id,eventId,songRequestId ?? null,amountCents,requestKey);
         const se = payload.stripe_error;
         const stripeDetail = se
           ? `Stripe ${se.http_status ?? "?"} ${se.stripe_type ?? ""} ${se.stripe_code ?? ""}: ${se.message ?? ""} (req ${se.request_id ?? "n/a"})`

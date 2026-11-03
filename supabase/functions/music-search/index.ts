@@ -2,6 +2,7 @@
 // and a Spotify 429 circuit breaker.
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import {resolveApplicationActor,boundedBody,ActorError} from '../_shared/application-actor.ts';
 
 // ============================================================================
 // Types
@@ -356,39 +357,24 @@ async function fetchAllProviders(q: string): Promise<SearchResult[]> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   let userId: string | null = null;
   let admin: SupabaseClient;
+  let body:Record<string,unknown>={};let guestActor=false;
   try {
+    if(req.method!=='GET'&&req.method!=='POST')return new Response('Method not allowed',{status:405,headers:corsHeaders});
+    if(req.method==='POST')body=await boundedBody(req);
+    const backendUrl=Deno.env.get('SUPABASE_URL'),anonKey=Deno.env.get('SUPABASE_ANON_KEY'),serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if(!backendUrl||!anonKey||!serviceKey)throw new ActorError(503);
     const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
+      backendUrl,anonKey,
     );
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error } = await userClient.auth.getUser(token);
-    if (error || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    userId = user.id;
-    admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    admin = createClient(backendUrl,serviceKey);
+    const actor=await resolveApplicationActor(req.headers,body,'catalog',{backendUrl,auth:async token=>{const {data,error}=await userClient.auth.getUser(token);return error?null:data.user?.id??null;},guest:async(event,token,operation)=>{const {data,error}=await admin.rpc('guest_application_actor',{_event_id:event,_token:token,_operation:operation});return error?{ok:false,status:503}:data;}});
+    userId=actor.id;guestActor=actor.guest;
   } catch (e) {
-    console.error("Auth check failed", e);
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
+    return new Response(JSON.stringify({ error: e instanceof ActorError&&e.status===401?'Unauthorized':'Service unavailable' }), {
+      status: e instanceof ActorError?e.status:503,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -398,9 +384,9 @@ Deno.serve(async (req) => {
   if (req.method === "GET") {
     q = (new URL(req.url).searchParams.get("q") ?? "").trim();
   } else {
-    const body = await req.json().catch(() => ({}));
     q = String(body?.q ?? "").trim();
   }
+  if(q.length>200)return new Response(JSON.stringify({error:'invalid_query'}),{status:400,headers:{...corsHeaders,'Content-Type':'application/json'}});
   if (!q || q.length < 2) {
     return new Response(JSON.stringify({ provider: "none", results: [] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -408,7 +394,7 @@ Deno.serve(async (req) => {
   }
 
   // Rate limit
-  const rl = await checkAndLogRate(admin, userId, ip, "music-search");
+  const rl = guestActor?{limited:false,retryAfter:0}:await checkAndLogRate(admin, userId, ip, "music-search");
   if (rl.limited) {
     console.warn("[music-search] rate limited", { userId, ip });
     return new Response(

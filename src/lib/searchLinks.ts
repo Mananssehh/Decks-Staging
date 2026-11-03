@@ -41,7 +41,7 @@ export function resolveExternalUrl(song: {
   artist: string;
 }): string | null {
   const url = (song.external_url ?? "").trim();
-  if (url) return url;
+  if (url) {try{const parsed=new URL(url);if(parsed.protocol==='https:'&&!parsed.username&&!parsed.password)return parsed.href;}catch{/* unsafe stored links ignored */}}
   if (!isCatalogSong(song.source_platform)) return null;
   return searchLinks.appleMusic({ title: song.title, artist: song.artist });
 }
@@ -54,6 +54,7 @@ export const platformLabel = (p?: string | null): string => {
     apple_music: "Apple Music",
     youtube: "YouTube",
     soundcloud: "SoundCloud",
+    manual: "Manual request",
   };
   return map[p] ?? p;
 };
