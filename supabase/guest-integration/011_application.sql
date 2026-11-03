@@ -265,7 +265,9 @@ DECLARE u uuid; eid uuid; bs text; tok text; code text; nick text; j jsonb; r js
  IF NOT guest_runtime.budget(u,cat) THEN RETURN guest_runtime.fail(429,'guest_rate_limited'); END IF;
  IF _action='resume' THEN SELECT * INTO s FROM guest_runtime.sessions WHERE principal_id=u AND event_id=eid; RETURN jsonb_build_object('ok',true,'principal_id',u,'session_id',s.id,'event_id',eid,'expires_at',s.expires_at); END IF;
  IF _action IN ('snapshot','ledger') THEN RETURN jsonb_build_object('ok',true,'snapshot',guest_runtime.snapshot(u,eid)); END IF;
- IF _action='profile' THEN RETURN jsonb_build_object('ok',true,'profile',guest_runtime.profile_kernel(u,_payload->>'nickname')); END IF;
+ IF _action='profile' THEN
+  IF _payload ? 'is_public' THEN IF jsonb_typeof(_payload->'is_public')<>'boolean' THEN RETURN guest_runtime.fail(400,'invalid_input'); END IF; UPDATE public.profiles SET is_public=(_payload->>'is_public')::boolean WHERE id=u; END IF;
+  RETURN jsonb_build_object('ok',true,'profile',guest_runtime.profile_kernel(u,_payload->>'nickname')); END IF;
  IF _action='request' THEN
   logical_key:=(_payload->>'idempotency_key')::uuid; IF logical_key IS NULL THEN RETURN guest_runtime.fail(400,'invalid_key'); END IF;
   op:=_payload-'token';
@@ -306,3 +308,6 @@ EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range OR chec
  WHEN insufficient_privilege THEN RETURN guest_runtime.fail(403,'unavailable');
  WHEN SQLSTATE '22023' THEN RETURN guest_runtime.fail(400,'invalid_input');
 END $$;
+CREATE FUNCTION public.application_actor_aliases(_actor uuid) RETURNS uuid[] LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$ SELECT CASE WHEN auth.role()='service_role' THEN guest_runtime.aliases(_actor) ELSE ARRAY[]::uuid[] END $$;
+REVOKE ALL ON FUNCTION public.application_actor_aliases(uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.application_actor_aliases(uuid) TO service_role;
