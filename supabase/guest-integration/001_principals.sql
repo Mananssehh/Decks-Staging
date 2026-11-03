@@ -11,7 +11,7 @@ DO $$ BEGIN
 END $$;
 ALTER TABLE public.profiles ADD COLUMN auth_user_id uuid;
 UPDATE public.profiles SET auth_user_id=id;
-ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_auth_fkey FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_auth_fkey FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE RESTRICT;
 ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_registered_id CHECK(auth_user_id IS NULL OR auth_user_id=id);
 ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_identity UNIQUE(id,auth_user_id);
 CREATE TABLE guest_runtime.app_principals(

@@ -106,9 +106,12 @@ try{
  eq(rejected,true,'registered profile deletion cannot orphan existing Auth');
  eq((await authenticated(disposable,q=>q`select public.ensure_profile('Registered') r`))[0].r.id,disposable,'legacy ensure profile remains usable with protected link');
  eq((await authenticated(disposable,q=>q`select public.upgrade_anonymous_profile('Registered') r`))[0].r.id,disposable,'legacy upgrade preserves real provider identity');
+ rejected=false;try{await db`delete from auth.users where id=${disposable}`;}catch{rejected=true;}
+ eq(rejected,true,'raw Auth deletion safely restricted without managed deletion trigger');
+ await service(q=>q`select public.prepare_registered_profile_deletion(${disposable})`);
  await db`delete from auth.users where id=${disposable}`;
- eq((await db`select count(*)::int n from public.profiles where id=${disposable}`)[0].n,0,'Auth deletion cascades profile');
- eq((await db`select count(*)::int n from guest_runtime.app_principals where id=${disposable}`)[0].n,0,'Auth deletion cascades principal');
+ eq((await db`select count(*)::int n from public.profiles where id=${disposable}`)[0].n,0,'protected retirement then Auth deletion removes profile');
+ eq((await db`select count(*)::int n from guest_runtime.app_principals where id=${disposable}`)[0].n,0,'protected retirement removes principal');
  await db`delete from public.profiles where id=${joins[90].principal_id}`;
  eq((await db`select count(*)::int n from guest_runtime.sessions where principal_id=${joins[90].principal_id}`)[0].n,0,'unclaimed guest profile deletion removes credentials');
  eq((await db`select count(*)::int n from guest_runtime.app_principals where id=${joins[90].principal_id}`)[0].n,0,'guest profile deletion cascades principal');

@@ -9,7 +9,7 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.guest_writer_guard() FROM PUBLIC,anon,authenticated,service_role;
 DO $$ DECLARE rel text; BEGIN
- FOREACH rel IN ARRAY ARRAY['events','song_requests','votes','event_participants','event_banned_guests','profiles','points_transactions','dj_tips','now_playing','purchase_consents','dj_payout_accounts'] LOOP
+ FOREACH rel IN ARRAY ARRAY['events','song_requests','votes','event_participants','event_banned_guests','profiles','points_transactions','dj_tips','now_playing','purchase_consents','dj_payout_accounts','followup_tip_reservations','followup_payment_events','followup_tip_financial_state','followup_account_evidence'] LOOP
   EXECUTE format('CREATE TRIGGER guest_writer_gate BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.guest_writer_guard()',rel);
  END LOOP;
 END $$;
@@ -33,6 +33,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
  IF TG_OP='DELETE' THEN
   IF old.auth_user_id IS NOT NULL AND EXISTS(SELECT 1 FROM auth.users WHERE id=old.auth_user_id)
+   AND NOT EXISTS(SELECT 1 FROM guest_runtime.retirement_authorizations WHERE profile_id=old.id AND transaction_id=txid_current())
   THEN RAISE EXCEPTION 'Delete registered identity through Auth, not profile' USING ERRCODE='23503'; END IF;
   RETURN old;
  END IF;
@@ -44,6 +45,26 @@ END $$;
 REVOKE ALL ON FUNCTION public.guest_profile_lifecycle() FROM PUBLIC,anon,authenticated,service_role;
 CREATE TRIGGER guest_registered_profile_delete BEFORE DELETE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.guest_profile_lifecycle();
 CREATE TRIGGER guest_registered_profile_insert AFTER INSERT ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.guest_profile_lifecycle();
+-- No Auth deletion trigger: managed schemas stay untouched. RESTRICT makes raw
+-- provider deletion fail closed, without an Auth tuple -> cascade gate inversion.
+CREATE TABLE guest_runtime.retirement_authorizations(profile_id uuid PRIMARY KEY,transaction_id bigint NOT NULL);
+REVOKE ALL ON guest_runtime.retirement_authorizations FROM PUBLIC,anon,authenticated,service_role;
+ALTER TABLE guest_runtime.retirement_authorizations ENABLE ROW LEVEL SECURITY;
+CREATE FUNCTION public.prepare_registered_profile_deletion(_id uuid) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Forbidden' USING ERRCODE='42501'; END IF;
+ PERFORM pg_advisory_xact_lock(8713201,1);
+ PERFORM 1 FROM auth.users WHERE id=_id FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Auth identity required'; END IF;
+ INSERT INTO guest_runtime.retirement_authorizations VALUES(_id,txid_current());
+ DELETE FROM public.profiles WHERE id=_id AND auth_user_id=_id;
+ DELETE FROM guest_runtime.retirement_authorizations WHERE profile_id=_id;
+ -- Claim/source references, financial evidence and other genuine FKs may refuse
+ -- this atomically. Never remove their protection to force a deletion.
+END $$;
+REVOKE ALL ON FUNCTION public.prepare_registered_profile_deletion(uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.prepare_registered_profile_deletion(uuid) TO service_role;
 -- Outer entry wrappers acquire gate before event/reservation/tuple locks.
 -- Preserve actual installed bodies and signatures, not historical copies.
 DO $$ DECLARE r record; definition text; BEGIN
