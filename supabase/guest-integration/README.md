@@ -334,6 +334,7 @@ types and MCP ownership/exact lint exclusion are unchanged.
 Remaining acceptance gates: root SQL/ACL/lifecycle review and install, disabled
 marker/endpoint readiness checks, authorized endpoint deployment, actual browser
 join/claim/multi-tab/provider-link testing and 100 guest API+socket/reconnect load.
-These are not established by mocks or the earlier isolated probe. Full account-wide
-ledger pagination and shared-browser explicit existing-account claim UX require
-additional acceptance review before turning the flag on.
+These are not established by mocks or the earlier isolated probe. Own ledger
+pagination uses validated guest/derived Auth and canonical aliases; claim intent is
+bound to the explicitly submitted account email to avoid unrelated shared-browser
+login merging. Those flows require hosted acceptance before turning the flag on.
