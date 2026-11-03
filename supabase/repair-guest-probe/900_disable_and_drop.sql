@@ -15,9 +15,15 @@ COMMIT;
 -- Step 2 (drop). Guard: the public function must be the probe's (by comment) before dropping.
 BEGIN;
 DO $g$
+DECLARE
+  -- to_regprocedure() yields NULL when the function is already gone, so a
+  -- repeat teardown is a no-op. A literal '<sig>'::regprocedure cast here would
+  -- be resolved while planning the IF expression and error out before the
+  -- IS NOT NULL guard could short-circuit.
+  _rpc oid := to_regprocedure('public.repair_guest_probe_rpc(text,jsonb)');
 BEGIN
-  IF to_regprocedure('public.repair_guest_probe_rpc(text,jsonb)') IS NOT NULL
-     AND coalesce(obj_description('public.repair_guest_probe_rpc(text,jsonb)'::regprocedure, 'pg_proc'), '')
+  IF _rpc IS NOT NULL
+     AND coalesce(obj_description(_rpc, 'pg_proc'), '')
          NOT LIKE 'STAGING PROBE guest-token-probe-v1%' THEN
     RAISE EXCEPTION 'refusing to drop: public.repair_guest_probe_rpc is not the probe function';
   END IF;

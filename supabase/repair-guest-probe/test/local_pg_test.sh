@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Isolated throwaway PostgreSQL test of 001/900. No network, no hosted DB.
 set -euo pipefail
-if [ "$(id -u)" = 0 ]; then exec setpriv --reuid=65534 --regid=65534 --clear-groups env HOME=/tmp bash "$0" "$@"; fi
+if [ "$(id -u)" = 0 ]; then
+  # initdb refuses to run as root; pick an unprivileged account that exists here.
+  U="$(id -u nobody 2>/dev/null || id -u lovable 2>/dev/null || echo 1000)"
+  D0="$(mktemp -d /tmp/gtp-pg.XXXXXX)"; chmod 777 "$D0"
+  exec setpriv --reuid="$U" --regid="$(id -g "$U")" --clear-groups env HOME="$D0" bash "$0" "$@"
+fi
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 D="$(mktemp -d /tmp/gtp-pg.XXXXXX)"; PORT=55439
 initdb -D "$D/data" -U postgres -A trust >/dev/null
