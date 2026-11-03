@@ -31,6 +31,9 @@ echo 'PASS containment and destructive refusal'
 psql -Xq -v ON_ERROR_STOP=1 -c "CREATE DATABASE empty_restore TEMPLATE decks_repair"
 # Explicitly discard local guest fixtures only in cloned THROWAWAY DB, then reconstruct pre-install state.
 PGDATABASE=empty_restore psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
+DELETE FROM public.followup_payment_events WHERE tip_id IN(SELECT id FROM public.dj_tips WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest'));
+DELETE FROM public.followup_tip_financial_state WHERE tip_id IN(SELECT id FROM public.dj_tips WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest'));
+DELETE FROM public.followup_tip_reservations WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
 DELETE FROM public.dj_tips WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
 DELETE FROM public.guest_funnel_events WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
 DELETE FROM public.votes WHERE user_id IN(SELECT id FROM guest_runtime.app_principals WHERE kind='guest');
