@@ -59,7 +59,7 @@ env = dict(os.environ, PROBE_URL=f"http://127.0.0.1:{srv.server_port}/functions/
            PROBE_EVENT_A=EV_A, PROBE_CODE_A=CODE, PROBE_EVENT_B=EV_B)
 RUN = [sys.executable, os.path.join(os.path.dirname(__file__), "fresh_clients.py"), "--stages", "25,50,100", "--workers", "100"]
 p = subprocess.run(RUN, env=env, capture_output=True, text=True)
-assert p.returncode == 0, p.stdout[-2000:] + p.stderr[-2000:]
+assert p.returncode == 0, json.dumps({k: v for k, v in json.loads(p.stdout).items() if k != "stages"}) + str([(s["stage_pass"], s["unexpected_http"], s["http"]) for s in json.loads(p.stdout)["stages"]])
 out = p.stdout
 rep = json.loads(out)
 assert rep["pass"] is True and rep["contract_ok"] is True
