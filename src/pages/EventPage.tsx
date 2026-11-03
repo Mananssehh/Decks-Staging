@@ -57,6 +57,7 @@ const EventPage = () => {
   const isGuest=!user&&!!guest?.enabled;
   const guestRef=useRef(guest);guestRef.current=guest;
   const [guestData,setGuestData]=useState<GuestSnapshot|null>(null);
+  const [guestTipTotals,setGuestTipTotals]=useState<Record<string,{amount:number;count:number}>>({});
   const [guestFailure,setGuestFailure]=useState<string|null>(null);
   const [aliases,setAliases]=useState<string[]>([]);
   // Nickname carried over from /join — used as a fallback so we never write
@@ -165,7 +166,7 @@ const EventPage = () => {
     const activeLocks=voteLocks.current;
     const sync=createEventRefresh(async()=>{
       const state=guestRef.current,s=guestStore().byCode(code);if(!state||!s)throw Error('Guest session missing');
-      try{return await state.load(s);}catch(e){if(e instanceof GuestError){setLoading(false);setGuestFailure(e.message);}throw e;}
+      try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return data;}catch(e){if(e instanceof GuestError){setLoading(false);setGuestFailure(e.message);}throw e;}
     },s=>{setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
     refreshRef.current=sync;
     void(async()=>{try{
@@ -738,6 +739,8 @@ const EventPage = () => {
                 disabled={!!pendingVotes[s.id]}
                 battle={battleIds.has(s.id)}
                 trending={sort === "trending" && trending.hotIds.has(s.id)}
+                tipTotalCents={guestTipTotals[s.id]?.amount}
+                tipCount={guestTipTotals[s.id]?.count}
                 movement={sort === "trending" ? movementMap.get(s.id) : undefined}
               />
             ))}

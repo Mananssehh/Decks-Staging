@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {useActor} from '@/hooks/useActor';
+import {actorLedger,guestApplicationEnabled,guestStore} from '@/lib/guestClient';
 
 type Filter = "all" | "earned" | "spent" | "refunded";
 
@@ -57,7 +58,9 @@ export default function ActivityLedger() {
   }, [actor.id, filter]);
 
   const loadPage = async (p: number, replace = false) => {
-    if(actor.guest?.session){setLoading(true);try{const s=await actor.guest.load(actor.guest.session);const entries=s.ledger.filter(t=>filter==='all'||filter==='earned'&&t.amount>0&&t.type!=='refunded'||filter==='spent'&&t.amount<0||filter==='refunded'&&t.type==='refunded');setRows(entries.slice(0,(p+1)*PAGE_SIZE));setHasMore(entries.length>(p+1)*PAGE_SIZE);setPage(p);}finally{setLoading(false);}return;}
+    const session=actor.guest?.session;
+    const event=session?.event_id??guestStore().current()?.event_id;
+    if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);setRows(prev=>replace?entries.slice(0,PAGE_SIZE):[...prev,...entries.slice(0,PAGE_SIZE)]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}finally{setLoading(false);}return;}
     if (!user) return;
     setLoading(true);
     let q = supabase
