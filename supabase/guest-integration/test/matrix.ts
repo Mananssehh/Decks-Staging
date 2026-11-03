@@ -148,5 +148,16 @@ try{
  eq((await db`select user_id from public.dj_tips where id=${pendingTip}`)[0].user_id,contender.principal_id,'claim settlement leaves immutable owner');
  eq((await db`select status from public.dj_tips where id=${pendingTip}`)[0].status,'succeeded','parallel financial settlement succeeds');
  eq((await authenticated(target,q=>q`select public.is_event_member(${event}) m`))[0].m,false,'concurrent source ban remains effective after claim');
+ // Raw Auth deletion cannot enter a cascade behind the exclusive claim guard.
+ const retirementId=uid(790);await db`insert into auth.users(id) values(${retirementId})`;
+ let unlockDelete:()=>void=()=>{};let deleteGateReady:()=>void=()=>{};
+ const deletionReady=new Promise<void>(r=>{deleteGateReady=r;});const deletionHold=new Promise<void>(r=>{unlockDelete=r;});
+ const deletionGate=db.begin(async q=>{await q`select pg_advisory_xact_lock(8713201,1)`;deleteGateReady();await deletionHold;});await deletionReady;
+ try{
+  let restricted=false;
+  try{await db.begin(async q=>{await q`set local statement_timeout='1500ms'`;await q`delete from auth.users where id=${retirementId}`;});}catch(e){restricted=(e as {code?:string}).code==='23503';}
+  eq(restricted,true,'Auth delete rejects immediately while claim gate held rather than cascade wait');
+ }finally{unlockDelete();await deletionGate;}
+ await service(q=>q`select public.prepare_registered_profile_deletion(${retirementId})`);await db`delete from auth.users where id=${retirementId}`;
  console.log(`RESULT ${checks} local database assertions passed`);
 }finally{await db.end();}
