@@ -10,7 +10,7 @@ fi
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 D="$(mktemp -d /tmp/gtp-pg.XXXXXX)"; PORT=55439
 initdb -D "$D/data" -U postgres -A trust >/dev/null
-pg_ctl -D "$D/data" -o "-p $PORT -k $D -c listen_addresses=''" -l "$D/log" start >/dev/null
+pg_ctl -D "$D/data" -o "-p $PORT -k $D -c listen_addresses='' -c max_connections=400" -l "$D/log" start >/dev/null
 trap 'pg_ctl -D "$D/data" stop -m fast >/dev/null; rm -rf "$D"' EXIT
 P="psql -h $D -p $PORT -U postgres -v ON_ERROR_STOP=1 -qAtX"
 $P -d postgres -c "CREATE DATABASE t"
