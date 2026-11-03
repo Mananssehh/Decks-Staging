@@ -14,7 +14,6 @@ UPDATE public.profiles SET auth_user_id=id;
 ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_auth_fkey FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_registered_id CHECK(auth_user_id IS NULL OR auth_user_id=id);
 ALTER TABLE public.profiles ADD CONSTRAINT guest_profile_identity UNIQUE(id,auth_user_id);
-ALTER TABLE public.profiles DROP CONSTRAINT profiles_id_fkey;
 CREATE TABLE guest_runtime.app_principals(
  id uuid PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE, auth_user_id uuid UNIQUE,
  FOREIGN KEY(id,auth_user_id) REFERENCES public.profiles(id,auth_user_id) ON DELETE CASCADE,
@@ -39,8 +38,12 @@ ALTER TABLE guest_runtime.before_functions ENABLE ROW LEVEL SECURITY;
 INSERT INTO guest_runtime.before_functions
  SELECT oid::regprocedure::text,pg_get_functiondef(oid) FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname IN
  ('join_event_by_code','request_song','set_song_vote','remove_my_song_request','handle_new_user','award_points','is_event_member','recent_request_count','get_guest_event_count','update_my_profile','followup_reserve_tip','followup_attach_tip_session','followup_apply_financial_event','followup_sync_account','check_tip_cap','dj_transition_request','dj_set_queue_position','repair_write_broadcast');
-INSERT INTO guest_runtime.before_constraints
- SELECT 'profiles','profiles_id_fkey','FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE';
+DO $$ DECLARE c record; BEGIN
+ SELECT * INTO c FROM pg_constraint WHERE conrelid='public.profiles'::regclass AND conname='profiles_id_fkey' AND confrelid='auth.users'::regclass;
+ IF c.oid IS NULL OR c.confdeltype<>'c' OR c.condeferrable THEN RAISE EXCEPTION 'Unexpected profiles Auth FK; inspect catalog'; END IF;
+ INSERT INTO guest_runtime.before_constraints VALUES('profiles',c.conname,pg_get_constraintdef(c.oid));
+ ALTER TABLE public.profiles DROP CONSTRAINT profiles_id_fkey;
+END $$;
 -- Replace only discovered exact named guest ownership constraints. Preserve original delete action.
 DO $$ DECLARE r record; c record; n integer; action text; BEGIN
  FOR r IN SELECT * FROM (VALUES('song_requests','requested_by'),('votes','user_id'),('dj_tips','user_id'),('guest_funnel_events','user_id')) t(rel,col) LOOP
