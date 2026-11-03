@@ -12,4 +12,7 @@
 - The MCP Vite plugin owns its generated function output; exclude that exact artifact from lint while keeping all authored MCP inputs linted.
 - Stripe key format validation lives in an SDK-free shared helper used by all Stripe constructors and mode inference; this keeps restricted-key compatibility consistent and testable without provider calls.
 - The guest-token probe is isolated in schema `repair_guest_probe` behind one service-role RPC and the `guest-token-probe` function; it must never read/write app tables or auth, so it can be dropped without touching the app.
-- Real guest backend candidates live under `supabase/guest-integration` with explicit actor kernels and a service-only API; they remain disabled/source-only until identity lifecycle and capability Broadcast platform gates are resolved, preserving deployed Auth behavior and probe isolation.
+- Real guest backend candidates live under `supabase/guest-integration` with explicit actor kernels and a service-only API; disabled/source-only independent installation preserves deployed Auth behavior and probe isolation.
+- Guest principals reference protected public profile keys; only profiles link to Auth, and registered profile retirement precedes restricted Auth deletion to avoid managed deletion triggers and cascade lock inversion.
+- Guest claim exclusion is acquired at outer writer entry or BEFORE STATEMENT before tuple locks; legacy late row-trigger exclusion must never be introduced because it can invert event locks.
+- Guest live invalidations will use a verified-token receive-only Edge WebSocket relay with server-only subscriptions; no anonymous realtime.messages policies are permitted.
