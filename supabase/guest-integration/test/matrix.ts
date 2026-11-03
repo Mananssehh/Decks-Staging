@@ -28,7 +28,7 @@ try{
  eq((await db`select points from public.profiles where id=${g.principal_id}`)[0].points,16,'15 starter plus existing join award');
  eq((await call('resume',p)).session_id,g.session_id,'resume retains session');eq((await call('resume',p)).token,undefined,'resume never issues new token');
  eq((await call('snapshot',{event_id:event,token:bs(9999)})).status,401,'forged token denied');
- const key=uid(200),song={...p,idempotency_key:key,source_platform:'itunes',source_song_id:'1234',title:'Local track',artist:'Artist'};
+ const key=uid(200),song={...p,idempotency_key:key,source_platform:'itunes',source_song_id:'1234',title:'Local track',artist:'Artist',album:'Local album',duration_ms:123000,preview_url:'https://fixture.invalid/preview',external_url:'https://fixture.invalid/song',explicit:false};
  const rr=await Promise.all(Array.from({length:10},()=>call('request',song)));
  eq(new Set(rr.map(r=>r.request_id)).size,1,'parallel request idempotency');
  const rid=rr[0].request_id;assert.ok(rid);
@@ -36,6 +36,15 @@ try{
  eq(votes.filter(v=>v.ok).length,100,'100 concurrent authorized votes');
  eq((await db`select upvotes from public.song_requests where id=${rid}`)[0].upvotes,100,'exact delta counter');
  const snap=(await call('snapshot',p)).snapshot;eq(snap.songs[0].my_vote,1,'snapshot own desired vote');eq(snap.songs[0].upvotes,100,'coherent snapshot counter');eq(snap.songs[0].is_mine,true,'own request visibility');
+ eq(Object.fromEntries(['requested_by','external_url','album','duration_ms','preview_url','source_platform','source_song_id','explicit','played_at','played_by_source'].map(k=>[k,snap.songs[0][k]])),{requested_by:g.principal_id,external_url:song.external_url,album:song.album,duration_ms:123000,preview_url:song.preview_url,source_platform:'itunes',source_song_id:'1234',explicit:false,played_at:null,played_by_source:null},'snapshot full safe request DTO concrete values');
+ await db`insert into public.now_playing(event_id,title,artist,source,status,source_track_id,now_playing_request_id) values(${event},'Local track','Artist','manual','playing','1234',${rid})`;
+ const np=(await call('snapshot',p)).snapshot.now_playing;
+ eq({id:typeof np.id,event_id:np.event_id,source:np.source,status:np.status,updated_at:typeof np.updated_at,source_track_id:np.source_track_id,now_playing_request_id:np.now_playing_request_id},{id:'string',event_id:event,source:'manual',status:'playing',updated_at:'string',source_track_id:'1234',now_playing_request_id:rid},'now-playing matches existing row contract');
+ // Hold 100 different read transactions at validation: all must get through the
+ // shared event lock before release (exclusive read locking would time out).
+ let releaseReads:()=>void=()=>{};const readHold=new Promise<void>(r=>{releaseReads=r;});let readers=0;
+ const readTransactions=joins.map(j=>service(async q=>{await q`select guest_runtime.validate_session(${event},${j.token},false)`;readers++;await readHold;}));
+ // Private helper is intentionally inaccessible to service; use API read within transaction.
  await db`update public.events set requests_status='paused' where id=${event}`;
  eq((await call('request',{...song,idempotency_key:uid(201),source_song_id:'5678'})).ok,false,'paused request blocked');eq((await call('vote',{...p,request_id:rid,value:-1})).ok,true,'paused voting preserved');
  await db`update public.events set requests_status='live' where id=${event}`;
