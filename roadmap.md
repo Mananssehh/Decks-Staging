@@ -1,5 +1,10 @@
 # Roadmap
 
+## Staging QR and email confirmation repair
+- [ ] Brand shared event QR with official logo, H correction, internal quiet zone and safe high-resolution download; destination/failure regressions.
+- [ ] Persistent confirmation/resend for signup and upgrades; safe same-origin callback/continuation and verified matching guest claim.
+- [ ] Read-only hosted auth audit, focused tests/typecheck/lint; actual delivery blocked on user-provided safe test inbox, no email sent here.
+
 ## Authorized staging integration deployment
 - [x] Harden bounded JSON/UTF-8 validation: 46 no-network Edge tests, four entrypoint checks, zero-warning lint; frontend 132 passed/nine unchanged missing-bundle failures.
 - [x] Regenerate actual hosted public types; deploy only guest-event, guest-event-stream, then music-search, tip-create-checkout with four explicit gateway overrides.
