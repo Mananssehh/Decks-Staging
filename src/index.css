@@ -6,6 +6,8 @@
 
 @layer base {
   :root {
+    --qr-background: #ffffff;
+    --qr-foreground: #000000;
     /* Soft graphite background, not pure black */
     --background: 240 10% 6%;
     --foreground: 0 0% 98%;
@@ -129,6 +131,7 @@
 }
 
 @layer components {
+  .event-qr-paper { background-color: var(--qr-background); }
   /* iOS-style frosted glass */
   .glass {
     @apply bg-card/70 backdrop-blur-xl border border-white/[0.06];
