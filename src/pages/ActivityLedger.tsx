@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {useActor} from '@/hooks/useActor';
 import {actorLedger,guestApplicationEnabled,guestStore} from '@/lib/guestClient';
 import {GuestRecovery} from '@/components/GuestRecovery';
+import {safeRoomCode} from '@/lib/roomCode';
 
 type Filter = "all" | "earned" | "spent" | "refunded";
 
@@ -26,7 +27,9 @@ interface LedgerRow {
   song_title?: string;
   song_artist?: string;
   event_name?: string;
+  room_code?: string;
 }
+
 
 const PAGE_SIZE = 50;
 
@@ -68,7 +71,7 @@ export default function ActivityLedger() {
     const ticket=++generation.current;setFailure(null);
     const session=actor.guest?.session;
     const event=session?.event_id??guestStore().contextEvent();
-    if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);if(ticket!==generation.current)return;setRows(prev=>replace?entries.slice(0,PAGE_SIZE):[...prev,...entries.slice(0,PAGE_SIZE)]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}catch(e){if(ticket===generation.current)setFailure(e instanceof Error?e:Error('Activity unavailable.'));}finally{if(ticket===generation.current)setLoading(false);}return;}
+    if(guestApplicationEnabled&&event){setLoading(true);try{const entries=await actorLedger(event,p*PAGE_SIZE,filter,session??undefined);if(ticket!==generation.current)return;const codes=new Map(guestStore().sessions().map(x=>[x.event_id,x.code]));if(session)codes.set(session.event_id,session.code);const mapped=(entries.slice(0,PAGE_SIZE) as unknown as LedgerRow[]).map(r=>({...r,room_code:r.event_id?safeRoomCode(codes.get(r.event_id)):undefined}));setRows(prev=>replace?mapped:[...prev,...mapped]);setHasMore(entries.length>PAGE_SIZE);setPage(p);}catch(e){if(ticket===generation.current)setFailure(e instanceof Error?e:Error('Activity unavailable.'));}finally{if(ticket===generation.current)setLoading(false);}return;}
     if (!user) return;
     setLoading(true);
     let q = supabase
@@ -98,8 +101,8 @@ export default function ActivityLedger() {
         ? supabase.from("song_requests").select("id, title, artist").in("id", songIds)
         : Promise.resolve({ data: [] as { id: string; title: string; artist: string }[] }),
       eventIds.length
-        ? supabase.from("events").select("id, name").in("id", eventIds)
-        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+        ? supabase.from("events").select("id, name, room_code").in("id", eventIds)
+        : Promise.resolve({ data: [] as { id: string; name: string; room_code: string }[] }),
     ]);
     const songMap = new Map((songsRes.data ?? []).map((s) => [s.id, s]));
     const eventMap = new Map((eventsRes.data ?? []).map((e) => [e.id, e]));
@@ -109,6 +112,7 @@ export default function ActivityLedger() {
       song_title: t.song_request_id ? songMap.get(t.song_request_id)?.title : undefined,
       song_artist: t.song_request_id ? songMap.get(t.song_request_id)?.artist : undefined,
       event_name: t.event_id ? eventMap.get(t.event_id)?.name : undefined,
+      room_code: t.event_id ? safeRoomCode(eventMap.get(t.event_id)?.room_code) : undefined,
     }));
 
     if(ticket!==generation.current)return;
@@ -229,8 +233,8 @@ export default function ActivityLedger() {
                     </span>
                   </div>
                 );
-                return r.event_id ? (
-                  <Link key={r.id} to={`/event/${r.event_id}`} className="block">{RowInner}</Link>
+                return r.room_code ? (
+                  <Link key={r.id} to={`/event/${encodeURIComponent(r.room_code)}`} className="block">{RowInner}</Link>
                 ) : (
                   <div key={r.id}>{RowInner}</div>
                 );
