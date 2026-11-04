@@ -1,10 +1,10 @@
 import { expect, it, vi } from 'vitest';
 import { brandedQRDataUrl, eventJoinUrl, eventQRSettings, EVENT_QR_DOWNLOAD_SIZE } from './eventQR';
-it.each(['GUESTQB','ROOM2'])('QR/copy/export use the current origin for %s',code=>{
+it.each(['GUESTQB','Z57YRB'])('QR/copy/export use the current origin for %s',code=>{
   expect(eventJoinUrl('https://staging.example.test',code)).toBe(`https://staging.example.test/join?code=${code}`);
 });
 it.each([160,260,EVENT_QR_DOWNLOAD_SIZE])('uses H, four internal modules and conservative excavated official logo at %s',size=>{
- const settings=eventQRSettings(size);expect(settings.level).toBe('H');expect(settings.marginSize).toBe(4);expect(settings.imageSettings.excavate).toBe(true);expect(settings.imageSettings.width).toBe(size*0.18);expect(settings.imageSettings.src).toBe('/brand/decks-logo-mark-transparent.png');
+ const settings=eventQRSettings(size);expect(settings.level).toBe('H');expect(settings.marginSize).toBe(4);expect(settings.imageSettings.excavate).toBe(true);expect(settings.imageSettings.width).toBe(size*0.18);expect(settings.imageSettings.src).toBe('/brand/decks-event-qr-logo.png');
 });
 it('fails closed for missing/unloaded logo instead of exporting an unbranded QR',async()=>{
  const wrap=document.createElement('div');wrap.innerHTML='<canvas></canvas><img />';

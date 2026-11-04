@@ -1,4 +1,4 @@
-export const EVENT_QR_LOGO = '/brand/decks-logo-mark-transparent.png';
+export const EVENT_QR_LOGO = '/brand/decks-event-qr-logo.png';
 export const EVENT_QR_DOWNLOAD_SIZE = 1024;
 export function eventJoinUrl(origin: string, roomCode: string) {
   return `${origin}/join?code=${encodeURIComponent(roomCode)}`;
