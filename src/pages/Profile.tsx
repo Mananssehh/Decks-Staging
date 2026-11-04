@@ -318,9 +318,15 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        <Button variant="outline" onClick={handleSignOut} className="w-full">
-          <LogOut className="h-4 w-4 mr-2" /> Sign out
-        </Button>
+        {user ? (
+          <Button variant="outline" onClick={handleSignOut} className="w-full">
+            <LogOut className="h-4 w-4 mr-2" /> Sign out
+          </Button>
+        ) : guestSession?.code ? (
+          <Button variant="outline" onClick={() => navigate(`/event/${encodeURIComponent(guestSession.code)}`)} className="w-full">
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back to event
+          </Button>
+        ) : null}
       </main>
       <SiteFooter />
     </div>
