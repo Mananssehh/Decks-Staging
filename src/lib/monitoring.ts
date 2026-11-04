@@ -40,7 +40,7 @@ export function initMonitoring(backend: unknown = import.meta.env.VITE_SUPABASE_
       ...(typeof import.meta.env.VITE_SENTRY_RELEASE === 'string' && /^[a-f0-9]{7,40}$/.test(import.meta.env.VITE_SENTRY_RELEASE) ? {release:`decks-staging@${import.meta.env.VITE_SENTRY_RELEASE}`} : {}),
       maxBreadcrumbs:0, beforeBreadcrumb:() => null, attachStacktrace:false,
       tracesSampleRate:0, tracePropagationTargets:[], sendClientReports:false,
-      beforeSend:event => sanitizeEvent(event), beforeSendTransaction:() => null,
+      beforeSend:event => sanitizeEvent(event),
       transport:options => {
         const transport = Sentry.makeFetchTransport({...options,bufferSize:10,fetchOptions:{credentials:'omit',referrerPolicy:'no-referrer'}});
         return {flush:transport.flush, send:envelope => {
