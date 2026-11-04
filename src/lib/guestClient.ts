@@ -2,6 +2,7 @@ import {supabase} from '@/integrations/supabase/client';
 import {GuestError,GuestStore,guestEnabled,type GuestSession,type GuestSnapshot} from './guestApplication';
 import {beginMonitoring,monitored} from './monitoring';
 import {classifyFailure,outcomeCategory,type MonitorAction} from './monitoringPolicy';
+import {recordSnapshotStart} from './snapshotEvidence';
 export const guestApplicationEnabled=guestEnabled(import.meta.env.VITE_SUPABASE_PROJECT_ID);
 export function guestStore(){return new GuestStore(localStorage,import.meta.env.VITE_SUPABASE_PROJECT_ID);}
 export async function guestInvoke(action:string,payload:Record<string,unknown>):Promise<Record<string,unknown>>{
@@ -15,11 +16,11 @@ export async function guestInvoke(action:string,payload:Record<string,unknown>):
  }catch(e){const c=classifyFailure(e);finish(c.category,c.status);throw e;}
 }
 export function guestScope(session:GuestSession){return {event_id:session.event_id,token:session.token};}
-export async function guestSnapshot(session:GuestSession){return (await guestInvoke('snapshot',guestScope(session))).snapshot as unknown as GuestSnapshot;}
+export async function guestSnapshot(session:GuestSession){const started=Date.now();const snapshot=(await guestInvoke('snapshot',guestScope(session))).snapshot as unknown as GuestSnapshot;return recordSnapshotStart(snapshot,started);}
 // Staged generated types remain actual hosted schema; reviewed RPC names are isolated here.
 type RpcResult={data:unknown;error:{message:string}|null};
 const applicationRpc=supabase.rpc as unknown as (name:string,args?:Record<string,unknown>)=>Promise<RpcResult>;
-export async function ownEventSnapshot(event:string){return monitored('snapshot',async()=>{const r=await applicationRpc('get_my_event_snapshot',{_event_id:event});if(r.error)throw r.error;const p=r.data as {ok:boolean;snapshot:GuestSnapshot;error:string};if(!p?.ok)throw new GuestError(400,p?.error??'unavailable');return p.snapshot;});}
+export async function ownEventSnapshot(event:string){return monitored('snapshot',async()=>{const r=await applicationRpc('get_my_event_snapshot',{_event_id:event});if(r.error)throw r.error;const p=r.data as {ok:boolean;snapshot:GuestSnapshot;error:string};if(!p?.ok)throw Error(p?.error??'Snapshot unavailable');return p.snapshot;});}
 export async function claimPendingGuest(){
  if(!guestApplicationEnabled)return false;
  const store=guestStore(),intent=store.pending();if(!intent)return false;

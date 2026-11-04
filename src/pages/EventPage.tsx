@@ -39,6 +39,7 @@ import {guestStore,guestInvoke,guestScope,ownEventSnapshot,guestApplicationEnabl
 import {GuestError,type GuestSnapshot} from '@/lib/guestApplication';
 import {connectGuestStream} from '@/lib/guestStream';
 import {createRequestVisibility} from '@/lib/requestVisibility';
+import {snapshotReadStarted} from '@/lib/snapshotEvidence';
 
 
 type SortMode = "top" | "trending" | "played";
@@ -59,7 +60,8 @@ const EventPage = () => {
   const isGuest=!user&&!!guest?.enabled;
   const guestRef=useRef(guest);guestRef.current=guest;
   const [guestData,setGuestData]=useState<GuestSnapshot|null>(null);
-  const requestVisibility=useMemo(()=>createRequestVisibility(),[code,user?.id]);
+  const requestVisibility=useMemo(()=>createRequestVisibility(),[]);
+  useEffect(()=>{requestVisibility.clear();return()=>requestVisibility.clear();},[code,user?.id,requestVisibility]);
   const [guestTipTotals,setGuestTipTotals]=useState<Record<string,{amount:number;count:number}>>({});
   const [guestFailure,setGuestFailure]=useState<string|null>(null);
   const [aliases,setAliases]=useState<string[]>([]);
@@ -171,7 +173,7 @@ const EventPage = () => {
       const readStarted=Date.now();
       const state=guestRef.current,s=guestStore().byCode(code);if(!state||!s)throw Error('Guest session missing');
       try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return {data,readStarted};}catch(e){if(!cancelled&&e instanceof GuestError){setLoading(false);setGuestFailure(e.message);if(e.status===401){disposeStream?.();unlisten?.();}}throw e;}
-    },({data:s,readStarted})=>{requestVisibility.observe(s.songs,readStarted,s.event.requests_status==='ended');setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
+    },({data:s})=>{requestVisibility.observe(s.songs,snapshotReadStarted(s),s.event.requests_status==='ended');setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
     refreshRef.current=sync;
     void(async()=>{try{
       let s=guestStore().byCode(code);

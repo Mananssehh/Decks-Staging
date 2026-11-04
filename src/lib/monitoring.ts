@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/react';
+type Envelope = Parameters<ReturnType<typeof Sentry.makeFetchTransport>['send']>[0];
 import { monitoringEnabled, sanitizeEvent, safeSignal, classifyFailure, outage, type MonitorAction, type MonitorCategory, type MonitorSignal } from './monitoringPolicy';
 
 /** Ten queued signals, ten accepted/minute, same action/category once/30s. No persistence/retry. */
@@ -21,8 +22,8 @@ export function createReporter(send: (signal: MonitorSignal) => void, enabled: b
 let reportSignal: (signal: MonitorSignal) => void = () => undefined;
 let initialized = false;
 /** Final wire gate drops ALL non-event items, including spans, sessions and attachments. */
-export function safeEnvelope(envelope: Sentry.Envelope): Sentry.Envelope {
-  const items: Sentry.Envelope[1] = [];
+export function safeEnvelope(envelope: Envelope): Envelope {
+  const items: Envelope[1] = [];
   for (const [header, payload] of envelope[1]) {
     if (header.type !== 'event' || !payload || typeof payload !== 'object') continue;
     const event = sanitizeEvent(payload as Sentry.Event);
@@ -35,11 +36,12 @@ export function initMonitoring(backend: unknown = import.meta.env.VITE_SUPABASE_
   try {
     Sentry.init({
       dsn, environment:'staging', defaultIntegrations:false, integrations:[], sendDefaultPii:false,
+      ...(typeof import.meta.env.VITE_SENTRY_RELEASE === 'string' && /^[a-f0-9]{7,40}$/.test(import.meta.env.VITE_SENTRY_RELEASE) ? {release:`decks-staging@${import.meta.env.VITE_SENTRY_RELEASE}`} : {}),
       maxBreadcrumbs:0, beforeBreadcrumb:() => null, attachStacktrace:false,
       tracesSampleRate:0, tracePropagationTargets:[], sendClientReports:false,
       beforeSend:event => sanitizeEvent(event), beforeSendTransaction:() => null,
       transport:options => {
-        const transport = Sentry.makeFetchTransport({...options,bufferSize:10});
+        const transport = Sentry.makeFetchTransport({...options,bufferSize:10,fetchOptions:{credentials:'omit',referrerPolicy:'no-referrer'}});
         return {flush:transport.flush, send:envelope => {
           const safe = safeEnvelope(envelope);
           return safe[1].length ? transport.send(safe) : Promise.resolve({});

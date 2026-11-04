@@ -18,6 +18,7 @@ export function classifyFailure(error: unknown): { category: MonitorCategory; st
   const status = typeof raw === 'number' && Number.isInteger(raw) && raw >= 100 && raw <= 599 ? raw : undefined;
   if (status && status >= 500) return { category: 'server', status };
   if (status && status >= 400) return { category: 'business_rejection', status };
+  if(e.name === 'RateLimitedError') return {category:'business_rejection',status:429};
   if (typeof e.code === 'string' && business.has(e.code)) return { category: 'business_rejection', status };
   if (e.code === 'invalid_response') return { category: 'invalid_response', status };
   if (e.code === '57014' || e.code === '55P03' || e.code === 'upstream_unavailable' || e.code === 'service_unavailable') return { category: 'server', status };
@@ -44,9 +45,11 @@ export function sanitizeEvent(input: { tags?: Record<string, unknown>; extra?: R
   const signal = safeSignal({action:input.tags?.action, category:input.tags?.category, status:input.extra?.status, duration:input.extra?.duration});
   if (!signal) return null;
   return {
+    type:undefined,
     ...(typeof input.event_id === 'string' && /^[a-f0-9]{32}$/.test(input.event_id) ? {event_id:input.event_id} : {}),
     ...(typeof input.timestamp === 'number' && Number.isFinite(input.timestamp) ? {timestamp:input.timestamp} : {}),
     environment:'staging', platform:'javascript', message:`decks.${signal.action}.${signal.category}`,
+    ...(typeof import.meta.env.VITE_SENTRY_RELEASE === 'string' && /^[a-f0-9]{7,40}$/.test(import.meta.env.VITE_SENTRY_RELEASE) ? {release:`decks-staging@${import.meta.env.VITE_SENTRY_RELEASE}`} : {}),
     level:outage(signal.category) ? 'error' as const : signal.category === 'delay' || signal.category === 'snapshot_missing' ? 'warning' as const : 'info' as const,
     fingerprint:['decks',signal.action,signal.category], tags:{action:signal.action,category:signal.category},
     extra:{...(signal.status ? {status:signal.status} : {}), ...(signal.duration !== undefined ? {duration:signal.duration} : {})},
