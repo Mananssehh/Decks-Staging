@@ -17,7 +17,10 @@ import {
 import { emailSchema, passwordSchema } from "@/lib/validation";
 import {useActor} from '@/hooks/useActor';
 import {guestStore,claimPendingGuest} from '@/lib/guestClient';
-import {useNavigate} from 'react-router-dom';
+import {useNavigate, useLocation} from 'react-router-dom';
+import { confirmationRedirect, confirmedAccount } from '@/lib/emailConfirmation';
+import { useEmailConfirmation } from '@/hooks/useEmailConfirmation';
+import { EmailConfirmationNotice } from '@/components/EmailConfirmationNotice';
 
 interface Props {
   open: boolean;
@@ -30,8 +33,10 @@ interface Props {
  * votes, tips and reports all carry over with zero data migration.
  */
 export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
-  const { profile, refreshProfile } = useAuth();
-  const actor=useActor(),navigate=useNavigate();
+  const { user, profile, refreshProfile } = useAuth();
+  const actor=useActor(),navigate=useNavigate(),location=useLocation();
+  const confirmation=useEmailConfirmation();
+  const next=location.pathname.startsWith('/event/')?location.pathname:'/profile';
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,28 +53,21 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
       // Anonymous upgrade — keeps the same auth.uid().
       if(actor.kind==='guest'){
         guestStore().intent(emailParse.data);
-        const {data,error}=await supabase.auth.signUp({email:emailParse.data,password:passParse.data,options:{data:{nickname:actor.profile?.nickname??'Guest'},emailRedirectTo:`${window.location.origin}/auth/callback`}});
+        const {data,error}=await supabase.auth.signUp({email:emailParse.data,password:passParse.data,options:{data:{nickname:actor.profile?.nickname??'Guest'},emailRedirectTo:confirmationRedirect(window.location.origin,next)}});
         if(error)throw error;
+        if(!data.session||!confirmedAccount(data.session.user,emailParse.data)){
+          confirmation.begin({email:emailParse.data,next,type:'signup'});setPassword('');return;
+        }
         const claimed=await claimPendingGuest();if(claimed)await refreshProfile();onOpenChange(false);
         toast.success(claimed?'Account created — your guest progress is linked.':data.session?.user.email_confirmed_at?'Account created. Your guest progress stays saved until linking completes.':'Check your email to confirm your account. Your guest progress stays saved until linking completes.');return;
       }
       const { error: upErr } = await supabase.auth.updateUser({
         email: emailParse.data,
         password: passParse.data,
-      });
+      }, {emailRedirectTo:confirmationRedirect(window.location.origin,next)});
       if (upErr) throw upErr;
 
-      // Re-stamp profile (no-op for nickname if unchanged).
-      await supabase.rpc("upgrade_anonymous_profile", {
-        p_nickname: profile?.nickname ?? null,
-      });
-      await refreshProfile();
-
-      toast.success(
-        "Account created — your nickname, points, and history are saved. Check your email to confirm.",
-      );
-      onOpenChange(false);
-      setEmail("");
+      confirmation.begin({email:emailParse.data,next,type:'email_change',legacyUserId:user?.id,nickname:profile?.nickname});
       setPassword("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create account");
@@ -91,7 +89,7 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
             points, and history across devices. Nothing is lost — same profile, same activity.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {confirmation.pending?<EmailConfirmationNotice confirmation={confirmation}/>:<form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="upgrade-email">Email</Label>
             <Input
@@ -123,7 +121,7 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
             </Button>
           </DialogFooter>
           {actor.kind==='guest'&&<Button type="button" variant="ghost" onClick={()=>{guestStore().intent();onOpenChange(false);navigate('/auth?next=/profile&claim=guest');}}>Link an existing account</Button>}
-        </form>
+        </form>}
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,6 @@
 # Architecture rules
+- Event QR display/export share one configuration and require a decoded same-origin embedded logo before PNG export; this prevents quiet-zone loss and unbranded downloads.
+- Email confirmation state is tab-scoped and separate from guest credentials; callbacks revalidate Auth and matching email before legacy profile completion or guest claim, never dispatching managed welcome mail.
 - Core audit repairs are reviewed as ordered source-only SQL under `supabase/repair-staged`, not mixed with historical draft migrations; this preserves independent execution and rollback review.
 - Event mutation RPCs acquire the event row before request/vote/profile writes; browser vote and playback table mutations are revoked to avoid tuple-lock inversion with request_song.
 - Staged RPC contracts live in a typed adapter separate from generated hosted types until reviewed SQL is applied; generated types must always describe the actual hosted schema.

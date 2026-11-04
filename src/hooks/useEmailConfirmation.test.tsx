@@ -1,0 +1,11 @@
+import {act,cleanup,renderHook} from '@testing-library/react';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {useEmailConfirmation} from './useEmailConfirmation';
+const m=vi.hoisted(()=>({resend:vi.fn()}));vi.mock('@/integrations/supabase/client',()=>({supabase:{auth:{resend:m.resend}}}));
+beforeEach(()=>{sessionStorage.clear();vi.clearAllMocks();vi.useFakeTimers();vi.setSystemTime(1000);});afterEach(()=>{cleanup();vi.useRealTimers();});
+it('persists cooldown across remount, resends explicitly once and handles failure with cooldown',async()=>{
+ const a=renderHook(useEmailConfirmation);act(()=>a.result.current.begin({email:'safe@example.test',next:'/event/GUESTQB',type:'signup'}));await act(()=>a.result.current.resend());expect(m.resend).not.toHaveBeenCalled();a.unmount();const b=renderHook(useEmailConfirmation);expect(b.result.current.remaining).toBe(60);
+ act(()=>vi.advanceTimersByTime(60000));m.resend.mockResolvedValueOnce({error:{message:'rate limited'}});await act(()=>b.result.current.resend());expect(m.resend).toHaveBeenCalledOnce();expect(b.result.current.error).toContain('could not be resent');expect(b.result.current.remaining).toBe(60);
+ await act(()=>b.result.current.resend());expect(m.resend).toHaveBeenCalledOnce();act(()=>vi.advanceTimersByTime(60000));m.resend.mockResolvedValueOnce({error:null});await act(()=>b.result.current.resend());expect(b.result.current.sent).toBe(true);expect(m.resend).toHaveBeenLastCalledWith({type:'signup',email:'safe@example.test',options:{emailRedirectTo:`${window.location.origin}/auth/callback?next=%2Fevent%2FGUESTQB`}});
+});
+it('legacy upgrade resends email_change, never signup',async()=>{const h=renderHook(useEmailConfirmation);act(()=>h.result.current.begin({email:'safe@example.test',next:'/profile',type:'email_change',legacyUserId:'legacy'}));act(()=>vi.advanceTimersByTime(60000));m.resend.mockResolvedValue({error:null});await act(()=>h.result.current.resend());expect(m.resend.mock.calls[0][0].type).toBe('email_change');});

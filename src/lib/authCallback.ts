@@ -10,12 +10,14 @@ export async function completeCallback(
   hasSession: () => Promise<boolean>,
 ): Promise<string> {
   const url = new URL(href);
-  const error = url.searchParams.get("error_description") || new URLSearchParams(url.hash.slice(1)).get("error_description");
-  if (error) throw new Error(error);
+  const hash = new URLSearchParams(url.hash.slice(1));
+  const error = url.searchParams.get("error") || hash.get('error') || url.searchParams.get("error_description") || hash.get("error_description");
+  if (error) throw new Error('Confirmation or sign-in link is invalid or expired. Request a new link.');
   const code = url.searchParams.get("code");
   if (code) {
     const result = await exchange(code);
     if (result.error) throw new Error(result.error.message);
   }
-  return await hasSession() ? localNext(url.searchParams.get("next")) : "/auth";
+  if (!await hasSession()) throw new Error('No verified account was found. Open a fresh confirmation link or sign in.');
+  return localNext(url.searchParams.get("next"));
 }
