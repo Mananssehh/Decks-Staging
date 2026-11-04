@@ -2,14 +2,14 @@
 export const MONITORING_BACKEND = 'ldxgejbzmpvsvozqmpfe';
 export const ACTIONS = ['join', 'music_search', 'song_request', 'vote', 'snapshot', 'stream_update', 'request_visibility', 'framework', 'synthetic'] as const;
 export type MonitorAction = typeof ACTIONS[number];
-export const CATEGORIES = ['success', 'business_rejection', 'transport', 'server', 'invalid_response', 'unknown', 'delay', 'snapshot_observed', 'snapshot_missing', 'framework'] as const;
+export const CATEGORIES = ['success', 'business_rejection', 'throttled', 'transport', 'server', 'invalid_response', 'unknown', 'delay', 'snapshot_observed', 'snapshot_missing', 'framework'] as const;
 export type MonitorCategory = typeof CATEGORIES[number];
 export interface MonitorSignal { action: MonitorAction; category: MonitorCategory; status?: number; duration?: number }
 export function monitoringEnabled(backend: unknown, dsn: unknown) {
   if (backend !== MONITORING_BACKEND || typeof dsn !== 'string' || !dsn.trim()) return false;
   try { const u = new URL(dsn); return u.protocol === 'https:' && !!u.username && !u.password && /^\/[0-9]+$/.test(u.pathname) && !u.search && !u.hash; } catch { return false; }
 }
-const business = new Set(['cooldown', 'explicit_not_allowed', 'blocked', 'invalid_track', 'unavailable', 'already_supported', 'duplicate', 'legacy_duplicate_conflict', 'ended', 'event_ended', 'invalid_input', 'rate_limited']);
+const business = new Set(['cooldown', 'explicit_not_allowed', 'blocked', 'invalid_track', 'unavailable', 'already_supported', 'duplicate', 'legacy_duplicate_conflict', 'ended', 'event_ended', 'invalid_input']);
 /** Only typed fields are examined. Error.message/details/hint/body are never read. */
 export function classifyFailure(error: unknown): { category: MonitorCategory; status?: number } {
   const e = error && typeof error === 'object' ? error as Record<string, unknown> : {};
@@ -17,8 +17,9 @@ export function classifyFailure(error: unknown): { category: MonitorCategory; st
   const raw = ctx?.status ?? e.status;
   const status = typeof raw === 'number' && Number.isInteger(raw) && raw >= 100 && raw <= 599 ? raw : undefined;
   if (status && status >= 500) return { category: 'server', status };
+  if (status === 429 && e.code === 'cooldown') return {category:'business_rejection',status};
+  if (status === 429 || e.name === 'RateLimitedError' || e.code === 'rate_limited') return {category:'throttled',status:status ?? 429};
   if (status && status >= 400) return { category: 'business_rejection', status };
-  if(e.name === 'RateLimitedError') return {category:'business_rejection',status:429};
   if (typeof e.code === 'string' && business.has(e.code)) return { category: 'business_rejection', status };
   if (e.code === 'invalid_response') return { category: 'invalid_response', status };
   if (e.code === '57014' || e.code === '55P03' || e.code === 'upstream_unavailable' || e.code === 'service_unavailable') return { category: 'server', status };
@@ -27,6 +28,7 @@ export function classifyFailure(error: unknown): { category: MonitorCategory; st
   return { category: 'unknown', status };
 }
 export function outcomeCategory(outcome: unknown): MonitorCategory {
+  if (outcome === 'rate_limited') return 'throttled';
   if (outcome === 'created' || outcome === 'supported_existing') return 'success';
   if (typeof outcome === 'string' && business.has(outcome)) return 'business_rejection';
   return 'invalid_response';
@@ -50,7 +52,7 @@ export function sanitizeEvent(input: { tags?: Record<string, unknown>; extra?: R
     ...(typeof input.timestamp === 'number' && Number.isFinite(input.timestamp) ? {timestamp:input.timestamp} : {}),
     environment:'staging', platform:'javascript', message:`decks.${signal.action}.${signal.category}`,
     ...(typeof import.meta.env.VITE_SENTRY_RELEASE === 'string' && /^[a-f0-9]{7,40}$/.test(import.meta.env.VITE_SENTRY_RELEASE) ? {release:`decks-staging@${import.meta.env.VITE_SENTRY_RELEASE}`} : {}),
-    level:outage(signal.category) ? 'error' as const : signal.category === 'delay' || signal.category === 'snapshot_missing' ? 'warning' as const : 'info' as const,
+    level:outage(signal.category) ? 'error' as const : signal.category === 'throttled' || signal.category === 'delay' || signal.category === 'snapshot_missing' ? 'warning' as const : 'info' as const,
     fingerprint:['decks',signal.action,signal.category], tags:{action:signal.action,category:signal.category},
     extra:{...(signal.status ? {status:signal.status} : {}), ...(signal.duration !== undefined ? {duration:signal.duration} : {})},
   };
