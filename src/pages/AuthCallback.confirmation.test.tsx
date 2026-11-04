@@ -1,0 +1,14 @@
+import {cleanup,render,screen,waitFor} from '@testing-library/react';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryRouter,Route,Routes} from 'react-router-dom';
+import AuthCallback from './AuthCallback';
+import {readConfirmation,saveConfirmation} from '@/lib/emailConfirmation';
+const m=vi.hoisted(()=>({getUser:vi.fn(),exchange:vi.fn(),claim:vi.fn(),rpc:vi.fn()}));
+vi.mock('@/integrations/supabase/client',()=>({supabase:{auth:{getUser:m.getUser,exchangeCodeForSession:m.exchange},rpc:m.rpc}}));
+vi.mock('@/lib/guestClient',()=>({claimPendingGuest:m.claim}));vi.mock('sonner',()=>({toast:{error:vi.fn()}}));
+beforeEach(()=>{sessionStorage.clear();vi.clearAllMocks();history.replaceState({},'', '/auth/callback?next=%2Fevent%2FGUESTQB');saveConfirmation({email:'safe@example.test',next:'/event/GUESTQB',type:'signup',resendAt:60000});m.claim.mockResolvedValue(true);m.rpc.mockResolvedValue({error:null});});afterEach(cleanup);
+function mount(){render(<MemoryRouter initialEntries={['/auth/callback']}><Routes><Route path="/auth/callback" element={<AuthCallback/>}/><Route path="/event/GUESTQB" element={<p>Event continued</p>}/></Routes></MemoryRouter>);}
+it.each([{email:'safe@example.test',is_anonymous:true,email_confirmed_at:'now'},{email:'safe@example.test'},{email:'unrelated@example.test',email_confirmed_at:'now'}])('does not claim or clear progress for an unverified/mismatched user',async(user)=>{m.getUser.mockResolvedValue({data:{user},error:null});mount();await screen.findByRole('alert');expect(m.claim).not.toHaveBeenCalled();expect(readConfirmation()).not.toBeNull();});
+it('verified matching callback claims then clears confirmation and continues to event',async()=>{m.getUser.mockResolvedValue({data:{user:{id:'registered',email:'safe@example.test',email_confirmed_at:'now'}},error:null});mount();await screen.findByText('Event continued');expect(m.claim).toHaveBeenCalledOnce();expect(readConfirmation()).toBeNull();});
+it('claim failure retains confirmation for explicit recovery',async()=>{m.getUser.mockResolvedValue({data:{user:{email:'safe@example.test',email_confirmed_at:'now'}},error:null});m.claim.mockRejectedValue(new Error('Guest progress could not be linked'));mount();await screen.findByRole('alert');expect(readConfirmation()).not.toBeNull();});
+it('legacy profile completion requires verified same Auth identity',async()=>{saveConfirmation({email:'safe@example.test',next:'/event/GUESTQB',type:'email_change',resendAt:60000,legacyUserId:'legacy',nickname:'Guest QA'});m.getUser.mockResolvedValue({data:{user:{id:'legacy',email:'safe@example.test',email_confirmed_at:'now'}},error:null});mount();await waitFor(()=>expect(m.rpc).toHaveBeenCalledWith('upgrade_anonymous_profile',{p_nickname:'Guest QA'}));await screen.findByText('Event continued');});
