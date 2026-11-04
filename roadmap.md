@@ -1,9 +1,10 @@
 # Roadmap
 
 ## Staging QR and email confirmation repair
-- [ ] Brand shared event QR with official logo, H correction, internal quiet zone and safe high-resolution download; destination/failure regressions.
-- [ ] Persistent confirmation/resend for signup and upgrades; safe same-origin callback/continuation and verified matching guest claim.
-- [ ] Read-only hosted auth audit, focused tests/typecheck/lint; actual delivery blocked on user-provided safe test inbox, no email sent here.
+- [x] Brand shared event QR with official logo, H correction, four internal quiet-zone modules and safe 1024px download; two-code 160/260 display + PNG independently decoded in browser.
+- [x] Persistent tab-scoped confirmation/resend for signup and upgrades; safe same-origin callback/continuation and verified matching guest claim; profile completion deferred until verification.
+- [x] Read-only hosted audit: confirmation ON, signup/email/legacy anonymous enabled, staging wildcard callback allowed, published Site URL observed; bounded error-log query empty (not delivery proof).
+- [ ] Actual confirmation delivery and clicked-link acceptance blocked on user-provided safe test inbox; no email/account created here. Root owns final full build/test.
 
 ## Authorized staging integration deployment
 - [x] Harden bounded JSON/UTF-8 validation: 46 no-network Edge tests, four entrypoint checks, zero-warning lint; frontend 132 passed/nine unchanged missing-bundle failures.

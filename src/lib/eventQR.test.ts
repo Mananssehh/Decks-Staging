@@ -18,3 +18,4 @@ it('waits for logo decode/paint and propagates tainted export failure',async()=>
 it('exports PNG only after loaded logo is decoded',async()=>{
  vi.stubGlobal('requestAnimationFrame',(cb:FrameRequestCallback)=>{cb(0);return 1;});const wrap=loadedWrap(),canvas=wrap.querySelector('canvas');if(!canvas)throw Error('fixture');canvas.toDataURL=vi.fn(()=> 'data:image/png;base64,valid');expect(await brandedQRDataUrl(wrap)).toBe('data:image/png;base64,valid');expect(wrap.querySelector('img')?.decode).toHaveBeenCalledOnce();vi.unstubAllGlobals();
 });
+it('decode failure never reaches PNG export',async()=>{const wrap=loadedWrap(),canvas=wrap.querySelector('canvas'),image=wrap.querySelector('img');if(!canvas||!image)throw Error('fixture');image.decode=vi.fn().mockRejectedValue(new Error('decode failed'));canvas.toDataURL=vi.fn();await expect(brandedQRDataUrl(wrap)).rejects.toThrow('decode failed');expect(canvas.toDataURL).not.toHaveBeenCalled();});
