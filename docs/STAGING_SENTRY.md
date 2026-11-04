@@ -4,6 +4,7 @@
 
 - Official `@sentry/react` 11.10.0, installed with Bun. Initialization requires **both** exact staging backend and nonempty structurally valid HTTPS public `VITE_SENTRY_DSN`. Nothing has been configured; DSN absence leaves SDK, listeners and sending off. No DSN was invented.
 - Root independently connects org `workstation-70`, verifies the staging project/public DSN, then supplies the public build variable. Never put `SENTRY_AUTH_TOKEN` in any `VITE_` variable. No token, source-map upload plugin, account creation, plan change or backend endpoint added.
+- Follow-up status: root reports Sentry browser sign-in declined; user chose public DSN but has not supplied its value. DSN remains **UNCONFIGURED**; no credential form, token or DSN configuration, and no ingestion verification claim.
 - Environment is always `staging`. Optional `VITE_SENTRY_RELEASE` accepts only a 7–40 lowercase-hex commit marker, rendered as `decks-staging@<marker>`. No fabricated release; absent/invalid marker omitted.
 - Read-only connector catalog inspection: Sentry is available as an OAuth **chat/MCP** connector for issues/project insights; the App connector catalog has no Sentry entry and no connected MCP is exposed in this session. Org/project connection, membership, DSN and ingestion are **not verified**. No connect or credential request made.
 
@@ -13,15 +14,17 @@
 - `sendDefaultPii:false` is explicit. SDK v11 no longer exposes that legacy option in its types; actual privacy enforcement does **not** depend on it. Both `beforeSend` and the final transport reconstruct events from the same allowlist. Unknown fields are discarded, not blacklisted. Non-event envelope items (including spans/transactions, attachments, sessions, logs, metrics and profiles) are dropped entirely. No SDK `Error` object is captured.
 - Wire payload allows only static action/category, validated numeric HTTP status, bounded integer duration, SDK event ID/timestamp, static environment/platform/fingerprint and optional validated source release. No user identity, nickname/email, guest proof/bootstrap, auth/password/provider credentials, route/query/hash, referrer, request/response body, error message, stack/component stack or arbitrary context survives. Fetch omits credentials and referrer.
 - Ten accepted signals per browser tab per minute, ten queued signals and ten in-flight SDK transport entries maximum; action/category deduplicated for 30s. No local storage, offline replay, persistent queue or application retry. Signals are scheduled after operations and never awaited; failures preserve the exact user result/error. Timing thresholds are initial **3s operation delay** and **5s request absence on a relevant post-ack applied snapshot**, not uptime promises.
-- Client sampling/dedup means counts are not complete outage rates or reliable unique-user metrics. No session/crash-free-rate or performance span dashboard is claimed.
+- Client sampling/dedup means counts (including throttling) are not complete rates or reliable unique-user metrics. No continuous metrics, session/crash-free-rate or performance spans are claimed.
 
 ## Instrumented scope
 
 - Guest `join`, song request, vote and coherent snapshot at `guestInvoke`; Auth request adapter, vote RPC, join-event invocation, coherent own/legacy song snapshot; shared guest/registered music search.
 - Typed 5xx/transport/invalid-response failures are reported before existing throws/null/error outcomes. Business moderation, cooldown, invalid input, duplicates, ended/unavailable events and 4xx are excluded from outage reporting. Unknown untyped failures use static `unknown`, never their message. Legacy `P0001` business raises are excluded rather than inspected for message text.
+- Genuine HTTP429 (including function error response context), search `RateLimitedError`/busy and typed `rate_limited` errors/outcomes produce distinct static **`throttled` WARNING** signals, excluded from outage/error counts. Explicit typed `cooldown` with429 remains business; typed5xx takes precedence and remains server. Throttle reporting uses the same bounded sampling/dedup and never changes UI returns/throws. No arbitrary message/body is inspected to infer capacity or venue identity.
 - Shared coalesced refresh reports failures/duration without changing retained-last-good-state, optimistic locks or cancellation. Guest socket abnormal 1006/1011 closures report transport failure; expected authorization close/rollover/ended and silence do not.
 - Saved-request acknowledgement IDs stay only in bounded page-local memory (20, 30s retention). Only applied post-ack snapshots containing that exact ID establish `snapshot_observed` (**queue state supplied to React, NOT proof of DOM paint or another client's delivery**). Applied post-ack snapshots missing the ID after 5s produce `snapshot_missing` warning, not a system outage. The actual guest HTTP read start is held in a WeakMap so coalescing cannot relabel an older read as newer evidence. No timer alone emits missing/health signals; event end/unmount/identity change clears tracking.
 - Framework capture uses only the static `framework` category from existing React boundary and uncaught-window/unhandled-rejection listeners. No stacks are sent, so grouping/debug detail is intentionally coarse.
+- Readable stack traces and source maps are a **later root-owned privacy/review gate**, not enabled or claimed here; coarse privacy-filtered errors remain unchanged.
 
 ## Honest exclusions
 
@@ -46,6 +49,7 @@ No Edge/server instrumentation or server-side timing; no provider internals, pay
 - [ ] Confirm one synthetic event and redacted envelope actually arrives; verify blockers/CSP/ad blockers/browser offline behavior.
 - [ ] Exclude `synthetic`, `success`, `snapshot_observed`, business outcomes from outage alerts; separate delay/absence warnings from error alerts.
 - [ ] Create narrowly grouped alerts for action/category `server`, `transport`, `invalid_response`, `unknown`, `framework`; choose thresholds from real staging evidence, respecting client sampling.
+- [ ] Create separate sustained/multi-client **`throttled` warning** alerts by static action/category, outside outage/error counts; calibrate to sampled aggregate events, not a claimed unique-client count (no identity is sent). Distinguish from expected cooldown/moderation and do not infer venue/provider cause from warning alone.
 - [ ] Configure alert recipients/routing, retention, usage budget and alert suppression; verify a test alert reaches the intended team. No paid plan assumed.
 - [ ] Set project-side IP-address storage removal/scrubbing: browser envelope excludes IP but ingestion servers inherently observe network source addresses; client filtering alone cannot control server retention.
 - [ ] Independently configure authorized uptime checks outside this app; no public arbitrary telemetry collector or monitoring SQL.

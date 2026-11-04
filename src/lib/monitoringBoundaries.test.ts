@@ -4,6 +4,7 @@ vi.mock('@/integrations/supabase/client',()=>({supabase:{functions:{invoke:m.inv
 vi.mock('./monitoring',()=>({beginMonitoring:()=>m.finish,monitored:async(_action:string,op:()=>Promise<unknown>)=>op()}));
 import {guestInvoke} from './guestClient';
 import {searchMusic,RateLimitedError} from './musicSearch';
+import {classifyFailure} from './monitoringPolicy';
 beforeEach(()=>vi.clearAllMocks());
 describe('shared actor monitoring preserves outcomes without provider calls',()=>{
  it('reports guest typed 503 before throwing, never passing payload/proof to telemetry',async()=>{
@@ -21,5 +22,12 @@ describe('shared actor monitoring preserves outcomes without provider calls',()=
   await expect(searchMusic('x')).resolves.toEqual({provider:'none',results:[]});expect(m.invoke).not.toHaveBeenCalled();
   const error=new TypeError('private transport error');m.invoke.mockResolvedValue({data:null,error});await expect(searchMusic('track')).rejects.toBe(error);
   m.invoke.mockResolvedValue({data:{error:'rate_limited'},error:null});await expect(searchMusic('track')).rejects.toBeInstanceOf(RateLimitedError);
+  expect(classifyFailure(new RateLimitedError(60))).toEqual({category:'throttled',status:429});
+ });
+ it('preserves guest rate_limited outcome object and classifies typed rejection without payloads',async()=>{
+  const result={ok:true,outcome:'rate_limited'};m.invoke.mockResolvedValue({data:result,error:null});
+  await expect(guestInvoke('request',{token:'PRIVATE'})).resolves.toBe(result);expect(m.finish).toHaveBeenCalledExactlyOnceWith('throttled');
+  m.finish.mockClear();m.invoke.mockResolvedValue({data:{ok:false,status:429,error:'rate_limited'},error:null});
+  await expect(guestInvoke('join',{bootstrap:'PRIVATE'})).rejects.toMatchObject({status:429,code:'rate_limited'});expect(m.finish).toHaveBeenCalledExactlyOnceWith('throttled',429);expect(JSON.stringify(m.finish.mock.calls)).not.toContain('PRIVATE');
  });
 });

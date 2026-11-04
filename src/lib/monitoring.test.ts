@@ -34,16 +34,32 @@ describe('staging telemetry policy',()=>{
   expect(Object.keys(clean[0])).toEqual(['event_id','sent_at']);expect(clean[1]).toHaveLength(1);expect(JSON.stringify(clean)).not.toContain('SECRET');
   expect(safeEnvelope([{},[[{type:'event'},{message:'arbitrary failure'}]]])[1]).toEqual([]);
  });
- it.each(['cooldown','blocked','invalid_track','invalid_input','unavailable','duplicate','ended','event_ended','explicit_not_allowed','rate_limited'])('does not treat %s as an outage',code=>{
+ it.each(['cooldown','blocked','invalid_track','invalid_input','unavailable','duplicate','ended','event_ended','explicit_not_allowed'])('does not treat %s as an outage',code=>{
   expect(classifyFailure({code}).category).toBe('business_rejection');expect(outage(classifyFailure({code}).category)).toBe(false);
  });
- it.each([400,401,403,404,409,422,429])('excludes expected HTTP %s rejection',status=>expect(outage(classifyFailure({status}).category)).toBe(false));
+ it.each([400,401,403,404,409,422])('excludes expected HTTP %s rejection',status=>expect(classifyFailure({status}).category).toBe('business_rejection'));
+ it.each([
+  {status:429},
+  {name:'FunctionsHttpError',context:new Response(null,{status:429})},
+  {name:'RateLimitedError'},
+  {code:'rate_limited'},
+ ])('retains typed throttling as warning, never outage, without raw data: %j',error=>{
+  const c=classifyFailure({...error,get message(){throw Error('do not read');},get body(){throw Error('do not read');}});
+  expect(c).toEqual({category:'throttled',status:429});expect(outage(c.category)).toBe(false);
+  const event=sanitizeEvent({tags:{action:'music_search',category:c.category},extra:{status:c.status,password:'PRIVATE',body:'PRIVATE'},...{message:'PRIVATE',request:{url:'PRIVATE'}}});
+  expect(event?.level).toBe('warning');expect(event?.tags).toEqual({action:'music_search',category:'throttled'});expect(event?.extra).toEqual({status:429});expect(JSON.stringify(event)).not.toContain('PRIVATE');
+ });
+ it('distinguishes cooldown429 and rate_limited outcomes while 5xx wins',()=>{
+  expect(classifyFailure({status:429,code:'cooldown'})).toEqual({category:'business_rejection',status:429});
+  expect(classifyFailure({status:503,code:'rate_limited',name:'RateLimitedError'})).toEqual({category:'server',status:503});
+  expect(outcomeCategory('rate_limited')).toBe('throttled');expect(outcomeCategory('cooldown')).toBe('business_rejection');
+ });
  it('detects actual 5xx/transport even when a business code or arbitrary raw message exists',()=>{
   expect(classifyFailure({status:503,code:'cooldown',message:'private'})).toEqual({category:'server',status:503});
   expect(classifyFailure({context:new Response(null,{status:502})})).toEqual({category:'server',status:502});
   expect(classifyFailure({code:'57014'}).category).toBe('server');
   expect(classifyFailure(new TypeError('private')).category).toBe('transport');
-  expect(classifyFailure({name:'RateLimitedError'})).toEqual({category:'business_rejection',status:429});
+  expect(classifyFailure({name:'RateLimitedError'})).toEqual({category:'throttled',status:429});
   expect(outcomeCategory('already_supported')).toBe('business_rejection');
   expect(outcomeCategory('created')).toBe('success');expect(outcomeCategory('error')).toBe('invalid_response');
  });
@@ -78,5 +94,9 @@ describe('nonblocking and bounded reporting',()=>{
   const transport=options.transport({url:'mock-only'});await transport.send([{},[[{type:'attachment'},new Uint8Array()]]]);expect(sdk.send).not.toHaveBeenCalled();
   reportMonitoring('synthetic','server',10,503);expect(sdk.capture).not.toHaveBeenCalled();vi.runAllTimers();expect(sdk.capture).toHaveBeenCalledWith({tags:{action:'synthetic',category:'server'},extra:{status:503,duration:10}});
   sdk.capture.mockClear();const finish=beginMonitoring('vote');vi.advanceTimersByTime(4000);finish('business_rejection',429);vi.runAllTimers();expect(sdk.capture).not.toHaveBeenCalled();
+  const original={name:'RateLimitedError',message:'PRIVATE',body:'PRIVATE'};
+  await expect(monitored('music_search',async()=>{throw original;})).rejects.toBe(original);
+  expect(sdk.capture).not.toHaveBeenCalled();vi.runAllTimers();expect(sdk.capture).toHaveBeenCalledExactlyOnceWith({tags:{action:'music_search',category:'throttled'},extra:{status:429,duration:0}});
+  sdk.capture.mockClear();const throttled=beginMonitoring('vote');vi.advanceTimersByTime(4000);throttled('throttled',429);vi.runAllTimers();expect(sdk.capture).toHaveBeenCalledExactlyOnceWith({tags:{action:'vote',category:'throttled'},extra:{status:429,duration:4000}});
  });
 });

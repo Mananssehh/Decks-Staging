@@ -67,6 +67,7 @@ export function beginMonitoring(action: MonitorAction) {
     if (ended) return; ended = true;
     const duration = performance.now() - start;
     if (category === 'business_rejection') return;
+    if (category === 'throttled') {reportMonitoring(action,category,duration,status);return;}
     if (outage(category) || action === 'join' || action === 'song_request') reportMonitoring(action,category,duration,status);
     if (!outage(category) && duration >= 3000) reportMonitoring(action,'delay',duration,status);
   };
