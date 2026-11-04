@@ -1,7 +1,7 @@
 # Roadmap
 
 ## Staging Sentry instrumentation
-- [ ] Activate supplied public staging DSN, remove obsolete SDK11 transaction hook, verify initialization and at most one sanitized real synthetic event; record acceptance separately from dashboard verification.
+- [x] Activated supplied public staging DSN; removed obsolete transaction hook; preview SDK initialized to project 4512372180320256/staging; one synthetic event HTTP 200, ID 1293111cd5a643329bd25b0d77695da2 (accepted, not dashboard-confirmed).
 - [x] Focused throttle-warning follow-up: genuine429/search busy/rate_limited retained, cooldown429 business and5xx server preserved; 91 focused tests/typecheck/lint passed, DSN still unconfigured; root owns final build.
 - [x] Add exact-backend/DSN gate, allowlisted privacy envelope and bounded nonblocking reporting; official React SDK, no automatic integrations/spans.
 - [x] Instrument join/search/request/vote/snapshot/stream refresh boundaries and evidence-only saved-request observation; preserve outcomes, no room-silence health claims.

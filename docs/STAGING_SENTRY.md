@@ -1,10 +1,20 @@
-# DECKS staging monitoring — source-only
+# DECKS staging monitoring — staging activated
+
+## Activation evidence (2026-11-04)
+
+- Baseline source: `a3f2de098f6878c62bdb6bbb8479dd0fc03cd5e4`. User supplied public client DSN for project `decks-staging`, org `workstation-70`; configured as `VITE_SENTRY_DSN` in the existing staging `.env` (project `4512372180320256`, US ingest host). This is not a token; no auth token, OAuth or credential request.
+- Exact staging backend gate unchanged; other backends and missing DSN remain off. Obsolete SDK11 `beforeSendTransaction` removed; final envelope gate still drops all non-event items; tracing/replay remain off. Release left **unset** (no provenance marker invented).
+- Unit tests force an empty DSN in Vitest config, so tests never ingest into the project.
+- Disposable local preview: SDK client initialized with DSN host `o4512372076052480.ingest.us.sentry.io`, project `4512372180320256`, environment `staging`, no release, no transaction hook; zero Sentry requests before the test; repeat init refused.
+- Exactly one synthetic event via the real app module (`reportMonitoring('synthetic','server',10,503)`, browser-console only, no file fixture, no app data/account mutation): one request, `POST /api/4512372180320256/envelope/`, **HTTP 200**, response ID `1293111cd5a643329bd25b0d77695da2`. No cookie/referrer header. Final payload:
+  `{"event_id":"1293111cd5a643329bd25b0d77695da2","timestamp":1793775588.592,"environment":"staging","platform":"javascript","message":"decks.synthetic.server","level":"error","fingerprint":["decks","synthetic","server"],"tags":{"action":"synthetic","category":"server"},"extra":{"status":503,"duration":10}}`
+- **HTTP 200 = ingestion accepted, NOT dashboard-confirmed.** No Sentry connection exists here to query issues. Root/user should confirm issue titled `decks.synthetic.server` (event ID above, environment `staging`) in `decks-staging`. No framework proof sent; no alerts, uptime, recipients or plan changes verified or configured.
 
 ## Activation and ownership
 
 - Official `@sentry/react` 11.10.0, installed with Bun. Initialization requires **both** exact staging backend and nonempty structurally valid HTTPS public `VITE_SENTRY_DSN`. Nothing has been configured; DSN absence leaves SDK, listeners and sending off. No DSN was invented.
 - Root independently connects org `workstation-70`, verifies the staging project/public DSN, then supplies the public build variable. Never put `SENTRY_AUTH_TOKEN` in any `VITE_` variable. No token, source-map upload plugin, account creation, plan change or backend endpoint added.
-- Follow-up status: root reports Sentry browser sign-in declined; user chose public DSN but has not supplied its value. DSN remains **UNCONFIGURED**; no credential form, token or DSN configuration, and no ingestion verification claim.
+- Historical: DSN was unconfigured until the 2026-11-04 activation above.
 - Environment is always `staging`. Optional `VITE_SENTRY_RELEASE` accepts only a 7–40 lowercase-hex commit marker, rendered as `decks-staging@<marker>`. No fabricated release; absent/invalid marker omitted.
 - Read-only connector catalog inspection: Sentry is available as an OAuth **chat/MCP** connector for issues/project insights; the App connector catalog has no Sentry entry and no connected MCP is exposed in this session. Org/project connection, membership, DSN and ingestion are **not verified**. No connect or credential request made.
 
