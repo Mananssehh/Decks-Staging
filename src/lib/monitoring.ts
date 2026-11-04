@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/react';
-type Envelope = Parameters<ReturnType<typeof Sentry.makeFetchTransport>['send']>[0];
+type Envelope = [Record<string,unknown>, Array<[ {type:string}, unknown ]>];
+type CleanEnvelope = [{event_id?:string}, Array<[{type:'event'},Sentry.Event]>];
 import { monitoringEnabled, sanitizeEvent, safeSignal, classifyFailure, outage, type MonitorAction, type MonitorCategory, type MonitorSignal } from './monitoringPolicy';
 
 /** Ten queued signals, ten accepted/minute, same action/category once/30s. No persistence/retry. */
@@ -22,8 +23,8 @@ export function createReporter(send: (signal: MonitorSignal) => void, enabled: b
 let reportSignal: (signal: MonitorSignal) => void = () => undefined;
 let initialized = false;
 /** Final wire gate drops ALL non-event items, including spans, sessions and attachments. */
-export function safeEnvelope(envelope: Envelope): Envelope {
-  const items: Envelope[1] = [];
+export function safeEnvelope(envelope: Envelope): CleanEnvelope {
+  const items: CleanEnvelope[1] = [];
   for (const [header, payload] of envelope[1]) {
     if (header.type !== 'event' || !payload || typeof payload !== 'object') continue;
     const event = sanitizeEvent(payload as Sentry.Event);
@@ -34,7 +35,7 @@ export function safeEnvelope(envelope: Envelope): Envelope {
 export function initMonitoring(backend: unknown = import.meta.env.VITE_SUPABASE_PROJECT_ID, dsn: unknown = import.meta.env.VITE_SENTRY_DSN) {
   if (initialized || !monitoringEnabled(backend,dsn) || typeof dsn !== 'string') return false;
   try {
-    Sentry.init({
+    const options: Parameters<typeof Sentry.init>[0] & {sendDefaultPii:false} = {
       dsn, environment:'staging', defaultIntegrations:false, integrations:[], sendDefaultPii:false,
       ...(typeof import.meta.env.VITE_SENTRY_RELEASE === 'string' && /^[a-f0-9]{7,40}$/.test(import.meta.env.VITE_SENTRY_RELEASE) ? {release:`decks-staging@${import.meta.env.VITE_SENTRY_RELEASE}`} : {}),
       maxBreadcrumbs:0, beforeBreadcrumb:() => null, attachStacktrace:false,
@@ -47,7 +48,8 @@ export function initMonitoring(backend: unknown = import.meta.env.VITE_SUPABASE_
           return safe[1].length ? transport.send(safe) : Promise.resolve({});
         }};
       },
-    });
+    };
+    Sentry.init(options);
     initialized = true;
     reportSignal = createReporter(signal => Sentry.captureEvent({tags:{action:signal.action,category:signal.category},extra:{status:signal.status,duration:signal.duration}}),true);
     // Static framework categories only: no Error object, stack, reason, or filename enters Sentry.
