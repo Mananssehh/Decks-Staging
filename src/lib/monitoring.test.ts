@@ -42,7 +42,7 @@ describe('staging telemetry policy',()=>{
   expect(classifyFailure({status:503,code:'cooldown',message:'private'})).toEqual({category:'server',status:503});
   expect(classifyFailure({context:new Response(null,{status:502})})).toEqual({category:'server',status:502});
   expect(classifyFailure({code:'57014'}).category).toBe('server');
-  expect(classifyFailure(new TypeError('private'))).category).toBe('transport');
+  expect(classifyFailure(new TypeError('private')).category).toBe('transport');
   expect(classifyFailure({name:'RateLimitedError'})).toEqual({category:'business_rejection',status:429});
   expect(outcomeCategory('already_supported')).toBe('business_rejection');
   expect(outcomeCategory('created')).toBe('success');expect(outcomeCategory('error')).toBe('invalid_response');
