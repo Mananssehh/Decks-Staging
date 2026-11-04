@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Staging QR and email confirmation repair
+- [ ] Refine event-only QR to exact uploaded flat disc/arrows crop; independently decode GUESTQB/Z57YRB at 160/260 and PNG1024; bounded read-only sign-in status audit, no sign-in success claim.
 - [x] Brand shared event QR with official logo, H correction, four internal quiet-zone modules and safe 1024px download; two-code 160/260 display + PNG independently decoded in browser.
 - [x] Persistent tab-scoped confirmation/resend for signup and upgrades; safe same-origin callback/continuation and verified matching guest claim; profile completion deferred until verification.
 - [x] Read-only hosted audit: confirmation ON, signup/email/legacy anonymous enabled, staging wildcard callback allowed, published Site URL observed; bounded error-log query empty (not delivery proof).
