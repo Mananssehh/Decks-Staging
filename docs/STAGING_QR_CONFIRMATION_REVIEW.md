@@ -6,11 +6,11 @@ Source/UI changes only. No SQL, migrations, function deployments, Auth configura
 
 ## QR
 
-- Inspected the existing official `public/brand/decks-logo-mark-transparent.png`: blue-to-purple disc with horizontal opposing arrows; unchanged.
+- Follow-up refinement: the global `public/brand/decks-logo-mark-transparent.png` is a different 3D disc, not the user's flat reference mark. It remains unchanged, as do global branding and the favicon. Event-only `EVENT_QR_LOGO` now uses `/brand/decks-event-qr-logo.png`, a byte-identical copy of the supplied flat disc/arrows crop on its white square canvas; no image generation, cropping or fixed QR data used. Upload/installed SHA-256: `34cc123e4ddbc7c6a75cc5c27d9bcfc6c600eba3ae00f59aee97fd57be9a2d5a`.
 - Management header (`DJEventManage`, 160px) and dashboard modal (`DJDashboard`, 260px) both already use `EventQR`; both now inherit the same branded configuration. Their existing copy links use the same current-origin room-code destination. No camera scanner or Bridge pairing changes.
-- Black square modules on white, H correction, four **internal** quiet-zone modules, centered excavated logo box 18% of total canvas size. Because the official image includes transparent space, visible disc is smaller than that box.
+- Black square modules on white, H correction, four **internal** quiet-zone modules, centered excavated logo box 18% of total canvas size, unchanged. The supplied image's white canvas is preserved exactly, so the visible disc/arrows are smaller than the logo box.
 - Separate 1024px export uses the identical destination/configuration. Download disabled until embedded image load; actual export requires complete/nonzero image, successful decode and two animation frames for the QR library's paint effect. Missing/decode/taint/export failures never silently save an unbranded image.
-- Native browser check mounted the actual shared component without signing in or touching fixtures. Independent ZXing decoding passed for GUESTQB and ROOM2 at 160px and 260px, and all four actual PNG downloads (1024×1024), each pointing to current localhost origin `/join?code=<code>`. Download top border was confirmed white. This checks renderer/export, not physical phone scanning or signed-in management navigation.
+- Follow-up actual browser check (2026-11-04, approximately 05:28 UTC) mounted the shared `EventQR` without signing in or touching fixtures. Independent ZXing-C++ decoding passed for **GUESTQB and Z57YRB**, each displayed at **160px and 260px**, plus all **four actual 1024×1024 PNG downloads**. All eight decodes returned the current test origin `http://localhost:8080/join?code=<its roomCode>`; never the reference destination. Embedded image source was asserted to be the new exact asset. Download top border was confirmed white; inspected the 160px display and 1024px export visually. Evidence: `/tmp/browser/event-qr-refinement/`. This checks the actual renderer/download, not physical phone scanning or signed-in management navigation; root owns staging browser acceptance.
 
 ## Confirmation
 
@@ -37,6 +37,8 @@ Read public hosted `/auth/v1/settings` without logging credentials or addresses:
 Read-only redirect tool showed the staging preview wildcard `https://id-preview*--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app/**`, which covers this staging callback and query. Site URL is the published app, `https://encore-request-rally.lovable.app`; source now supplies an explicit staging callback to avoid falling back to it. Settings were not altered.
 
 Bounded Auth log query over 2026-11-03 00:00 UTC through 2026-11-04 05:20 UTC grouped only path/status counts for HTTP ≥400 or error-level entries and returned zero rows. No addresses, payloads or raw error text were requested. This does **not** prove email delivery or absence of unlogged sender errors. The separate Lovable Auth CLI settings read reported that its product is not enabled; it was not used to infer Cloud settings. Actual Cloud settings above came from the successful hosted settings read.
+
+Follow-up sign-in observation: root reports confirmation ON, restored preview login, but separate DECKS DJ password submission did not visibly advance and a fresh tab remained Guest. A bounded read-only Auth query for 2026-11-04 05:00–05:40 UTC (issued at approximately 05:28 UTC) grouped only allowlisted paths `/token`, `/user`, `/settings`, `/verify`, `/callback`, `/logout`, `/signup`, `/resend` by status/level/count and returned **zero rows**. No raw log messages, addresses, tokens, payloads or query parameters were selected. Empty telemetry cannot establish whether the sign-in reached Auth or succeeded; DJ password sign-in remains **unverified**, not repaired or reported successful. No credential submission, account creation, session minting or Auth code/settings changes in this refinement. Completed confirmation improvements are preserved.
 
 ## Checks
 
@@ -78,3 +80,11 @@ Project constraint memory/index additionally record the user's QR styling and no
 ## Remaining gate
 
 User must supply a safe test inbox address and authorize the bounded delivery test. Only then verify actual delivery and clicked confirmation continuation/guest claim; do not change Auth settings or managed welcome sender/domain as a substitute. Root independently runs final full build/tests.
+
+## Follow-up exact changes and checks
+
+- `public/brand/decks-event-qr-logo.png` — exact supplied event-only crop.
+- `src/lib/eventQR.ts` — event-only logo path; all other QR settings unchanged.
+- `src/lib/eventQR.test.ts` — new asset path and GUESTQB/Z57YRB destination coverage; existing fail-closed export tests retained.
+- `docs/STAGING_QR_CONFIRMATION_REVIEW.md`, `roadmap.md` — follow-up evidence and remaining gates. Project constraint memory updated to distinguish event-only flat logo from global branding.
+- Focused QR suite: **9/9 passed**. `tsgo -p tsconfig.app.json --noEmit`: passed. Changed-TypeScript ESLint with `--max-warnings 0`: passed. Native automatic preview log: **build OK** at 05:28:01 UTC; no manual build/full-suite/SQL run.
