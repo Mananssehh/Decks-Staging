@@ -7,7 +7,10 @@ export type MonitorCategory = typeof CATEGORIES[number];
 export interface MonitorSignal { action: MonitorAction; category: MonitorCategory; status?: number; duration?: number }
 export function monitoringEnabled(backend: unknown, dsn: unknown) {
   if (backend !== MONITORING_BACKEND || typeof dsn !== 'string' || !dsn.trim()) return false;
-  try { const u = new URL(dsn); return u.protocol === 'https:' && !!u.username && !u.password && /^\/[0-9]+$/.test(u.pathname) && !u.search && !u.hash; } catch { return false; }
+  // SDK11 utils/dsn DSN_REGEX uses \w+ for publicKey (ASCII letters/digits/underscore).
+  // Match the original string too: URL normalization must not hide encoding, empty passwords or whitespace.
+  if (!/^https:\/\/[A-Za-z0-9_]+@[\w.-]+(?::[0-9]+)?\/[0-9]+$/.test(dsn)) return false;
+  try { const u = new URL(dsn); return u.protocol === 'https:' && /^[A-Za-z0-9_]+$/.test(u.username) && !u.password && /^\/[0-9]+$/.test(u.pathname) && !u.search && !u.hash; } catch { return false; }
 }
 const business = new Set(['cooldown', 'explicit_not_allowed', 'blocked', 'invalid_track', 'unavailable', 'already_supported', 'duplicate', 'legacy_duplicate_conflict', 'ended', 'event_ended', 'invalid_input']);
 /** Only typed fields are examined. Error.message/details/hint/body are never read. */
