@@ -94,11 +94,6 @@ const Auth = () => {
             password: passParse.data,
           }, { emailRedirectTo: confirmationRedirect(window.location.origin, destination) });
           if (error) throw error;
-          const { error: profileError } = await supabase.rpc("upgrade_anonymous_profile", {
-            p_nickname: nickParse.data,
-          });
-          if (profileError) throw profileError;
-          await refreshProfile();
           confirmation.begin({email:emailParse.data,next:destination,type:'email_change',legacyUserId:user?.id,nickname:nickParse.data});
           setPassword('');
           return;

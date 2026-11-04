@@ -10,7 +10,7 @@ vi.mock('@/integrations/supabase/client',()=>({supabase:{auth:{signUp:m.signup,r
 vi.mock('sonner',()=>({toast:{success:m.success,error:m.error}}));
 afterEach(cleanup);beforeEach(()=>{vi.clearAllMocks();sessionStorage.clear();});
 it.each([true,false])('guest signup reports confirmation state accurately (immediate claim %s) and binds intent email',async(confirmed)=>{
- m.signup.mockResolvedValue({data:{session:confirmed?{user:{email_confirmed_at:'2026-11-03'}}:null},error:null});m.claim.mockResolvedValue(confirmed);
+ m.signup.mockResolvedValue({data:{session:confirmed?{user:{email:'guest@example.test',email_confirmed_at:'2026-11-03'}}:null},error:null});m.claim.mockResolvedValue(confirmed);
  render(<MemoryRouter><UpgradeAccountDialog open onOpenChange={vi.fn()}/></MemoryRouter>);
  fireEvent.change(screen.getByLabelText('Email'),{target:{value:'guest@example.test'}});fireEvent.change(screen.getByLabelText('Password'),{target:{value:'SafePassword123!'}});fireEvent.click(screen.getByRole('button',{name:'Create account'}));
  if(confirmed){await waitFor(()=>expect(m.success).toHaveBeenCalledOnce());expect(m.success.mock.calls[0][0]).toBe('Account created — your guest progress is linked.');}

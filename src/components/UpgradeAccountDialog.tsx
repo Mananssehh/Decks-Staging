@@ -67,12 +67,6 @@ export function UpgradeAccountDialog({ open, onOpenChange }: Props) {
       }, {emailRedirectTo:confirmationRedirect(window.location.origin,next)});
       if (upErr) throw upErr;
 
-      // Re-stamp profile (no-op for nickname if unchanged).
-      const {error:profileError}=await supabase.rpc("upgrade_anonymous_profile", {
-        p_nickname: profile?.nickname ?? null,
-      });
-      if(profileError)throw profileError;
-      await refreshProfile();
       confirmation.begin({email:emailParse.data,next,type:'email_change',legacyUserId:user?.id,nickname:profile?.nickname});
       setPassword("");
     } catch (err) {
