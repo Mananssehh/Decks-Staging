@@ -1,5 +1,11 @@
 # Roadmap
 
+## Staging Sentry instrumentation
+- [x] Add exact-backend/DSN gate, allowlisted privacy envelope and bounded nonblocking reporting; official React SDK, no automatic integrations/spans.
+- [x] Instrument join/search/request/vote/snapshot/stream refresh boundaries and evidence-only saved-request observation; preserve outcomes, no room-silence health claims.
+- [x] Focused privacy/operation/guest/QR/confirmation regressions, typecheck/lint and native build checked; docs/STAGING_SENTRY.md records synthetic acceptance and honest exclusions.
+- [ ] Root supplies verified public staging DSN and verifies ingestion/routing; source remains inactive meanwhile.
+
 ## Staging QR and email confirmation repair
 - [x] Refine event-only QR to exact uploaded flat disc/arrows crop; GUESTQB/Z57YRB 160/260 displays and four PNG1024 downloads independently decoded; nine QR tests/typecheck/lint passed. Bounded read-only sign-in status audit empty, DJ password sign-in unverified; global branding and confirmation preserved.
 - [x] Brand shared event QR with official logo, H correction, four internal quiet-zone modules and safe 1024px download; two-code 160/260 display + PNG independently decoded in browser.

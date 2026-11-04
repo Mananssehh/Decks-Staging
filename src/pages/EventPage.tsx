@@ -38,6 +38,8 @@ import {useGuest} from '@/contexts/guest-state';
 import {guestStore,guestInvoke,guestScope,ownEventSnapshot,guestApplicationEnabled,ownAliases} from '@/lib/guestClient';
 import {GuestError,type GuestSnapshot} from '@/lib/guestApplication';
 import {connectGuestStream} from '@/lib/guestStream';
+import {createRequestVisibility} from '@/lib/requestVisibility';
+import {snapshotReadStarted} from '@/lib/snapshotEvidence';
 
 
 type SortMode = "top" | "trending" | "played";
@@ -58,6 +60,8 @@ const EventPage = () => {
   const isGuest=!user&&!!guest?.enabled;
   const guestRef=useRef(guest);guestRef.current=guest;
   const [guestData,setGuestData]=useState<GuestSnapshot|null>(null);
+  const requestVisibility=useMemo(()=>createRequestVisibility(),[]);
+  useEffect(()=>{requestVisibility.clear();return()=>requestVisibility.clear();},[code,user?.id,requestVisibility]);
   const [guestTipTotals,setGuestTipTotals]=useState<Record<string,{amount:number;count:number}>>({});
   const [guestFailure,setGuestFailure]=useState<string|null>(null);
   const [aliases,setAliases]=useState<string[]>([]);
@@ -166,9 +170,10 @@ const EventPage = () => {
     let cancelled=false,disposeStream:(()=>void)|undefined,unlisten:(()=>void)|undefined;
     const activeLocks=voteLocks.current;
     const sync=createEventRefresh(async()=>{
+      const readStarted=Date.now();
       const state=guestRef.current,s=guestStore().byCode(code);if(!state||!s)throw Error('Guest session missing');
-      try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return data;}catch(e){if(!cancelled&&e instanceof GuestError){setLoading(false);setGuestFailure(e.message);if(e.status===401){disposeStream?.();unlisten?.();}}throw e;}
-    },s=>{setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
+      try{const data=await state.load(s);void guestInvoke('tip_summary',guestScope(s)).then(r=>{if(cancelled)return;const totals=r.totals as {song_request_id:string;amount_cents:number;count:number}[];setGuestTipTotals(Object.fromEntries(totals.map(t=>[t.song_request_id,{amount:t.amount_cents,count:t.count}])));}).catch(()=>{});return {data,readStarted};}catch(e){if(!cancelled&&e instanceof GuestError){setLoading(false);setGuestFailure(e.message);if(e.status===401){disposeStream?.();unlisten?.();}}throw e;}
+    },({data:s})=>{requestVisibility.observe(s.songs,snapshotReadStarted(s),s.event.requests_status==='ended');setGuestData(s);setEventInfo(s.event);setSongs(s.songs);setMyVotes(Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>);setLoading(false);setGuestFailure(null);},()=>voteLocks.current.size>0);
     refreshRef.current=sync;
     void(async()=>{try{
       let s=guestStore().byCode(code);
@@ -179,7 +184,7 @@ const EventPage = () => {
       unlisten=listenEventRefresh(s.event_id,s.principal_id,()=>{void sync.refresh().catch(()=>{/* typed failure is displayed by sync */});});
     }catch(e){if(!cancelled){setLoading(false);setGuestFailure(e instanceof GuestError?e.message:'This event could not load. Please retry later.');}}})();
     return()=>{cancelled=true;sync.dispose();disposeStream?.();unlisten?.();activeLocks.clear();if(refreshRef.current===sync)refreshRef.current=null;};
-  },[isGuest,code,authLoading,navNickname]);
+  },[isGuest,code,authLoading,navNickname,requestVisibility]);
 
   // Restore scroll position when returning from a user profile page (Back button).
   // Source of truth in priority order: location.state.scrollY, then sessionStorage.
@@ -226,13 +231,15 @@ const EventPage = () => {
     let cancelled = false;
 
     const sync = createEventRefresh(async () => {
+      const readStarted=Date.now();
       const [snapshot, event] = await Promise.all([
         guestApplicationEnabled?ownEventSnapshot(eventId).then(s=>({songs:s.songs,votes:Object.fromEntries(s.songs.filter(r=>r.my_vote).map(r=>[r.id,r.my_vote])) as Record<string,1|-1>})):loadEventSongs(eventId,userId),
         supabase.from("events").select("*").eq("id", eventId).single(),
       ]);
       if (event.error) throw Error("Event refresh failed");
-      return { ...snapshot, event: event.data as EventInfo };
+      return { ...snapshot, event: event.data as EventInfo, readStarted };
     }, snapshot => {
+      requestVisibility.observe(snapshot.songs,snapshot.readStarted,snapshot.event.requests_status==='ended');
       setSongs(snapshot.songs); setEventInfo(snapshot.event); setMyVotes(snapshot.votes);
     }, () => voteLocks.current.size > 0);
     refreshRef.current = sync;
@@ -285,7 +292,7 @@ const EventPage = () => {
       unlisten();
       if (channel) supabase.removeChannel(channel);
     };
-  }, [eventInfo?.id, user?.id]);
+  }, [eventInfo?.id, user?.id,requestVisibility]);
 
   const nowPlaying = useMemo(() => songs.find((s) => s.status === "playing"), [songs]);
 
@@ -520,6 +527,7 @@ const EventPage = () => {
     const result=isGuest&&guest?.session?await guestInvoke('request',{...guestScope(guest.session),...Object.fromEntries(Object.entries(song).filter(([,v])=>v!==null)),source_song_id:song.source_song_id??'',idempotency_key:requestKey}):null;
     if(result?.ok===true)localStorage.removeItem(requestKeyName);
     const { outcome, requestId } = result?{outcome:result.outcome as Awaited<ReturnType<typeof submitSongRequest>>['outcome'],requestId:result.request_id as string}:await submitSongRequest(eventInfo.id, song);
+    requestVisibility.acknowledge(requestId,outcome);
     void refreshRef.current?.refresh();
     const feedback = requestFeedback(outcome, eventInfo.cooldown_seconds ?? 30);
 
