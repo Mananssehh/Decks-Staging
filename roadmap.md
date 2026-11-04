@@ -1,9 +1,9 @@
 # Roadmap
 
 ## Staging Sentry instrumentation
-- [ ] Add exact-backend/DSN gate, allowlisted privacy envelope and bounded nonblocking reporting.
-- [ ] Instrument join/search/request/vote/snapshot/stream boundaries and evidence-only saved-request observation; preserve outcomes.
-- [ ] Run focused regressions/typecheck/lint; document safe synthetic acceptance and root-owned alerts/uptime.
+- [x] Add exact-backend/DSN gate, allowlisted privacy envelope and bounded nonblocking reporting; official React SDK, no automatic integrations/spans.
+- [x] Instrument join/search/request/vote/snapshot/stream refresh boundaries and evidence-only saved-request observation; preserve outcomes, no room-silence health claims.
+- [x] Focused privacy/operation/guest/QR/confirmation regressions, typecheck/lint and native build checked; docs/STAGING_SENTRY.md records synthetic acceptance and honest exclusions.
 - [ ] Root supplies verified public staging DSN and verifies ingestion/routing; source remains inactive meanwhile.
 
 ## Staging QR and email confirmation repair

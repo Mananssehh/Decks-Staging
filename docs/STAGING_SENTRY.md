@@ -47,6 +47,7 @@ No Edge/server instrumentation or server-side timing; no provider internals, pay
 - [ ] Exclude `synthetic`, `success`, `snapshot_observed`, business outcomes from outage alerts; separate delay/absence warnings from error alerts.
 - [ ] Create narrowly grouped alerts for action/category `server`, `transport`, `invalid_response`, `unknown`, `framework`; choose thresholds from real staging evidence, respecting client sampling.
 - [ ] Configure alert recipients/routing, retention, usage budget and alert suppression; verify a test alert reaches the intended team. No paid plan assumed.
+- [ ] Set project-side IP-address storage removal/scrubbing: browser envelope excludes IP but ingestion servers inherently observe network source addresses; client filtering alone cannot control server retention.
 - [ ] Independently configure authorized uptime checks outside this app; no public arbitrary telemetry collector or monitoring SQL.
 - [ ] Root independently runs full tests/build and reviews any uninstrumented areas before expanding scope.
 
