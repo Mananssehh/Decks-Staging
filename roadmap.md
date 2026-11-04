@@ -1,7 +1,7 @@
 # Roadmap
 
 ## Staging Sentry instrumentation
-- [ ] Focused follow-up: retain genuine throttling as sampled warnings, preserve cooldown/business exclusions and validate without configuring DSN.
+- [x] Focused throttle-warning follow-up: genuine429/search busy/rate_limited retained, cooldown429 business and5xx server preserved; 91 focused tests/typecheck/lint passed, DSN still unconfigured; root owns final build.
 - [x] Add exact-backend/DSN gate, allowlisted privacy envelope and bounded nonblocking reporting; official React SDK, no automatic integrations/spans.
 - [x] Instrument join/search/request/vote/snapshot/stream refresh boundaries and evidence-only saved-request observation; preserve outcomes, no room-silence health claims.
 - [x] Focused privacy/operation/guest/QR/confirmation regressions, typecheck/lint and native build checked; docs/STAGING_SENTRY.md records synthetic acceptance and honest exclusions.
