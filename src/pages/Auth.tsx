@@ -14,6 +14,10 @@ import { emailSchema, nicknameSchema, passwordSchema } from "@/lib/validation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { logGuestFunnel } from "@/lib/guestFunnel";
 import {guestApplicationEnabled,guestStore} from '@/lib/guestClient';
+import { localNext } from '@/lib/authCallback';
+import { confirmationRedirect, confirmedAccount } from '@/lib/emailConfirmation';
+import { useEmailConfirmation } from '@/hooks/useEmailConfirmation';
+import { EmailConfirmationNotice } from '@/components/EmailConfirmationNotice';
 
 
 
@@ -23,7 +27,7 @@ const Auth = () => {
   const [searchParams] = useSearchParams();
   const djIntent = searchParams.get("role") === "dj" || searchParams.get("mode") === "dj";
   const nextRaw = searchParams.get("next");
-  const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : null;
+  const nextPath = nextRaw ? localNext(nextRaw) : null;
   const authReason = searchParams.get("reason");
   const joiningEventCode = nextPath && nextPath.startsWith("/event/") ? nextPath.slice("/event/".length).split(/[/?#]/)[0] : null;
   const fromPath = (location.state as { from?: string } | null)?.from;
@@ -35,6 +39,8 @@ const Auth = () => {
   const [nickname, setNickname] = useState(profile?.nickname && profile.nickname !== "Guest" ? profile.nickname : "");
   const [loading, setLoading] = useState(false);
   const [wantsDj, setWantsDj] = useState(djIntent);
+  const confirmation = useEmailConfirmation();
+  const destination = nextPath || ((djIntent || wantsDj) ? '/dj/onboarding' : localNext(fromPath ?? null));
 
   useEffect(() => {
     if (notice) {
@@ -56,15 +62,15 @@ const Auth = () => {
     if (authLoading || !user) return;
     // Anonymous users stay on this page so they can upgrade via the signup form;
     // only redirect once they've actually become a permanent account.
-    if (isAnonymous) return;
+    if (isAnonymous || !confirmedAccount(user) || confirmation.pending) return;
     if (nextPath) {
       navigate(nextPath, { replace: true });
     } else if (djIntent) {
-      navigate(isDJ ? (fromPath || "/dj") : "/dj/onboarding", { replace: true });
+      navigate(isDJ ? localNext(fromPath || "/dj") : "/dj/onboarding", { replace: true });
     } else {
-      navigate(fromPath || "/", { replace: true });
+      navigate(localNext(fromPath ?? null), { replace: true });
     }
-  }, [user, isDJ, isAnonymous, authLoading, navigate, djIntent, fromPath, nextPath]);
+  }, [user, isDJ, isAnonymous, authLoading, navigate, djIntent, fromPath, nextPath, confirmation.pending]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,28 +92,22 @@ const Auth = () => {
           const { error } = await supabase.auth.updateUser({
             email: emailParse.data,
             password: passParse.data,
-          });
+          }, { emailRedirectTo: confirmationRedirect(window.location.origin, destination) });
           if (error) throw error;
-          await supabase.rpc("upgrade_anonymous_profile", {
+          const { error: profileError } = await supabase.rpc("upgrade_anonymous_profile", {
             p_nickname: nickParse.data,
           });
+          if (profileError) throw profileError;
           await refreshProfile();
-          // Fire-and-forget welcome email after anonymous upgrade.
-          supabase.functions.invoke("send-welcome-email", {
-            body: {
-              kind: "guest",
-              nickname: nickParse.data,
-              idempotencyKey: `guest-welcome:${emailParse.data.toLowerCase()}`,
-            },
-          }).catch(() => undefined);
-          toast.success("Account created — your nickname, points, and history are saved.");
-          void logGuestFunnel("guest_signup_completed", { metadata: { reason: authReason, path: "anonymous_upgrade" } });
+          confirmation.begin({email:emailParse.data,next:destination,type:'email_change',legacyUserId:user?.id,nickname:nickParse.data});
+          setPassword('');
+          return;
         } else {
           const { data, error } = await supabase.auth.signUp({
             email: emailParse.data,
             password: passParse.data,
             options: {
-              emailRedirectTo: `${window.location.origin}/auth/callback`,
+              emailRedirectTo: confirmationRedirect(window.location.origin, destination),
               data: { nickname: nickParse.data },
             },
           });
@@ -116,26 +116,18 @@ const Auth = () => {
           // If no session was returned, Supabase requires email confirmation
           // before the user can sign in. Do NOT navigate away — show the
           // "check your inbox" state so the user knows what to do next.
-          if (!data.session) {
-            toast.success("Check your inbox to confirm your email.");
-            setMode("login");
+          if (!data.session || !confirmedAccount(data.session.user, emailParse.data)) {
+            confirmation.begin({email:emailParse.data,next:destination,type:'signup'});
             setPassword("");
             return;
           }
 
           // Auto-confirm was on (or user was already confirmed): welcome + go.
-          supabase.functions.invoke("send-welcome-email", {
-            body: {
-              kind: "guest",
-              nickname: nickParse.data,
-              idempotencyKey: `guest-welcome:${emailParse.data.toLowerCase()}`,
-            },
-          }).catch(() => undefined);
           toast.success("Account created! Welcome to Decks.");
           void logGuestFunnel("guest_signup_completed", { metadata: { reason: authReason, path: "signup" } });
         }
 
-        navigate(nextPath || ((djIntent || wantsDj) ? "/dj/onboarding" : (fromPath || "/")), { replace: true });
+        navigate(destination, { replace: true });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: emailParse.data,
@@ -185,6 +177,7 @@ const Auth = () => {
         </div>
 
         <div className="p-6 sm:p-7 rounded-3xl glass-strong">
+          {confirmation.pending ? <EmailConfirmationNotice confirmation={confirmation} /> : <>
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <div className="space-y-2">
@@ -290,6 +283,7 @@ const Auth = () => {
             <br />
             Need help? <a href="mailto:support@linku99.com" className="hover:text-primary">support@linku99.com</a>
           </p>
+          </>}
         </div>
       </div>
     </div>

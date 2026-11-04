@@ -1,10 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { completeCallback } from "@/lib/authCallback";
 import {claimPendingGuest} from '@/lib/guestClient';
+import { confirmedAccount, readConfirmation, saveConfirmation } from '@/lib/emailConfirmation';
+import { Button } from '@/components/ui/button';
 
 /**
  * Dedicated OAuth callback route.
@@ -13,6 +15,7 @@ import {claimPendingGuest} from '@/lib/guestClient';
  */
 const AuthCallback = () => {
   const navigate = useNavigate();
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -28,12 +31,25 @@ const AuthCallback = () => {
       try {
         const next = await completeCallback(window.location.href,
           code => supabase.auth.exchangeCodeForSession(code),
-          async () => !!(await supabase.auth.getSession()).data.session);
+          async () => {
+            const {data,error}=await supabase.auth.getUser();
+            const pending=readConfirmation();
+            if(error||!confirmedAccount(data.user,pending?.email))return false;
+            if(pending?.legacyUserId){
+              if(data.user?.id!==pending.legacyUserId)return false;
+              const result=await supabase.rpc('upgrade_anonymous_profile',{p_nickname:pending.nickname??null});
+              if(result.error)throw new Error('Your email is verified, but your profile could not be updated. Try signing in again.');
+            }
+            return true;
+          });
         await claimPendingGuest();
+        saveConfirmation(null);
         finish(next);
       } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "Sign-in failed");
-        finish("/auth");
+        if(cancelled)return;
+        const message=e instanceof Error ? e.message : 'Sign-in failed';
+        setError(message);toast.error(message);
+        window.history.replaceState({},document.title,'/auth/callback');
       }
     };
 
@@ -45,10 +61,10 @@ const AuthCallback = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="flex items-center gap-3 text-muted-foreground">
+      {error?<div className="max-w-md space-y-4 px-6"><p role="alert">{error}</p><Button onClick={()=>navigate('/auth',{replace:true})}>Return to confirmation / sign in</Button></div>:<div className="flex items-center gap-3 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span>Signing you in…</span>
-      </div>
+      </div>}
     </div>
   );
 };

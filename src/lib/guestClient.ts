@@ -16,7 +16,8 @@ export async function ownEventSnapshot(event:string){const r=await applicationRp
 export async function claimPendingGuest(){
  if(!guestApplicationEnabled)return false;
  const store=guestStore(),intent=store.pending();if(!intent)return false;
- const {data}=await supabase.auth.getSession(),user=data.session?.user;
+ const {data,error}=await supabase.auth.getUser(),user=data.user;
+ if(error)return false;
  if(!user||user.is_anonymous||!user.email_confirmed_at||!intent.email||intent.email!==user.email?.trim().toLowerCase())return false;
  const r=await applicationRpc('claim_guest_principal',{_bootstrap:intent.bootstrap});const p=r.data as {ok?:boolean};
  if(r.error||!p?.ok)throw Error('Guest progress could not be linked. Your guest credentials are still saved.');
