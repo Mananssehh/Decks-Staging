@@ -5,6 +5,8 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Activation must never make unit tests ingest into the configured staging project.
+    env: { VITE_SENTRY_DSN: "", VITE_SENTRY_RELEASE: "" },
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],

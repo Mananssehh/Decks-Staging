@@ -103,7 +103,7 @@ describe('nonblocking and bounded reporting',()=>{
   expect(initMonitoring(MONITORING_BACKEND,fixtureDsn)).toBe(true);
   const options=sdk.init.mock.calls[0][0];
   expect(options).toMatchObject({environment:'staging',defaultIntegrations:false,integrations:[],sendDefaultPii:false,maxBreadcrumbs:0,tracesSampleRate:0,tracePropagationTargets:[],sendClientReports:false});
-  expect(options.beforeBreadcrumb({message:'secret'})).toBeNull();expect(options.beforeSendTransaction({})).toBeNull();expect(options.beforeSend({message:'secret'})).toBeNull();
+  expect(options.beforeBreadcrumb({message:'secret'})).toBeNull();expect(options).not.toHaveProperty('beforeSendTransaction');expect(options.beforeSend({message:'secret'})).toBeNull();
   const transport=options.transport({url:'mock-only'});await transport.send([{},[[{type:'attachment'},new Uint8Array()]]]);expect(sdk.send).not.toHaveBeenCalled();
   reportMonitoring('synthetic','server',10,503);expect(sdk.capture).not.toHaveBeenCalled();vi.runAllTimers();expect(sdk.capture).toHaveBeenCalledWith({tags:{action:'synthetic',category:'server'},extra:{status:503,duration:10}});
   sdk.capture.mockClear();const finish=beginMonitoring('vote');vi.advanceTimersByTime(4000);finish('business_rejection',429);vi.runAllTimers();expect(sdk.capture).not.toHaveBeenCalled();
