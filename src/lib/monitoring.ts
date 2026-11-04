@@ -49,7 +49,9 @@ export function initMonitoring(backend: unknown = import.meta.env.VITE_SUPABASE_
         }};
       },
     };
-    Sentry.init(options);
+    const client = Sentry.init(options);
+    const usable = client?.getDsn();
+    if (!usable || usable.pass || !monitoringEnabled(backend,`${usable.protocol}://${usable.publicKey}@${usable.host}${usable.port ? `:${usable.port}` : ''}/${usable.path ? `${usable.path}/` : ''}${usable.projectId}`)) return false;
     initialized = true;
     reportSignal = createReporter(signal => Sentry.captureEvent({tags:{action:signal.action,category:signal.category},extra:{status:signal.status,duration:signal.duration}}),true);
     // Static framework categories only: no Error object, stack, reason, or filename enters Sentry.

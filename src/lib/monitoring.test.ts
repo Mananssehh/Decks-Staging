@@ -3,8 +3,9 @@ import {ACTIONS,CATEGORIES,MONITORING_BACKEND,monitoringEnabled,sanitizeEvent,cl
 const sdk=vi.hoisted(()=>({init:vi.fn(),capture:vi.fn(),send:vi.fn(),flush:vi.fn()}));
 vi.mock('@sentry/react',()=>({init:sdk.init,captureEvent:sdk.capture,makeFetchTransport:()=>({send:sdk.send,flush:sdk.flush})}));
 import {createReporter,safeEnvelope,monitored,initMonitoring,reportMonitoring,beginMonitoring} from './monitoring';
-const fixtureDsn='https://public-test-key@o0.ingest.sentry.io/1'; // parser fixture only; SDK always mocked
-beforeEach(()=>{vi.useFakeTimers();vi.clearAllMocks();});
+const fixtureDsn='https://00000000000000000000000000000000@o0.ingest.sentry.io/1'; // parser fixture only; SDK always mocked
+const fakeDsn={protocol:'https',publicKey:'00000000000000000000000000000000',host:'o0.ingest.sentry.io',port:'',path:'',projectId:'1',pass:''};
+beforeEach(()=>{vi.useFakeTimers();vi.clearAllMocks();sdk.init.mockReturnValue({getDsn:()=>fakeDsn});});
 afterEach(()=>{vi.useRealTimers();});
 describe('staging telemetry policy',()=>{
  it('requires exact staging AND DSN; production/unknown/missing/malformed are fully off',()=>{
@@ -13,6 +14,18 @@ describe('staging telemetry policy',()=>{
    expect(monitoringEnabled(backend,dsn)).toBe(false);expect(initMonitoring(backend,dsn)).toBe(false);
   }
   expect(sdk.init).not.toHaveBeenCalled();
+ });
+ it.each(['public-test-key','bad.key','bad%20key','bad%5Fkey','bad+key','', 'key:','key:password'])('rejects SDK-invalid or password-bearing public key %s before init',key=>{
+  const dsn=`https://${key}@o0.ingest.sentry.io/1`;
+  expect(monitoringEnabled(MONITORING_BACKEND,dsn)).toBe(false);expect(initMonitoring(MONITORING_BACKEND,dsn)).toBe(false);expect(sdk.init).not.toHaveBeenCalled();
+ });
+ it.each(['00000000000000000000000000000000','ABCdef0123','test_key'])('accepts SDK word-key grammar %s',key=>{
+  expect(monitoringEnabled(MONITORING_BACKEND,`https://${key}@o0.ingest.sentry.io/1`)).toBe(true);
+ });
+ it.each([undefined,{getDsn:()=>undefined},{getDsn:()=>({...fakeDsn,publicKey:'invalid-key'})},{getDsn:()=>({...fakeDsn,pass:'forbidden'})},{getDsn:()=>({...fakeDsn,projectId:''})}])('leaves unusable SDK client off with no listeners or reporting, allowing correction',client=>{
+  const listener=vi.spyOn(window,'addEventListener');sdk.init.mockReturnValueOnce(client);
+  expect(initMonitoring(MONITORING_BACKEND,fixtureDsn)).toBe(false);
+  reportMonitoring('synthetic','server',10,503);vi.runAllTimers();expect(sdk.capture).not.toHaveBeenCalled();expect(listener).not.toHaveBeenCalled();listener.mockRestore();
  });
  it('reconstructs an allowlist and drops identities, secrets, URLs, arbitrary messages/frames and future fields',()=>{
   const secret='DO_NOT_SEND';
