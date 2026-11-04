@@ -8,6 +8,9 @@ describe("OAuth callback boundary", () => {
   });
   it.each(["https://evil.invalid", "//evil.invalid", "/\\evil.invalid", "/\nevil", "javascript:alert(1)"])("rejects non-local redirect %s", raw => expect(localNext(raw)).toBe("/"));
   it("keeps local query and hash", () => expect(localNext("/dj?tab=queue#next")).toBe("/dj?tab=queue#next"));
-  it("does not finish without a session", async () => expect(await completeCallback("https://app.invalid/auth/callback", vi.fn(), async () => false)).toBe("/auth"));
+  it("does not finish without a verified account", async () => expect(completeCallback("https://app.invalid/auth/callback", vi.fn(), async () => false)).rejects.toThrow('No verified account'));
   it("propagates exchange errors", async () => expect(completeCallback("https://app.invalid/?code=bad", async () => ({error:{message:"Invalid code"}}), async () => true)).rejects.toThrow("Invalid code"));
+  it.each(['?error=access_denied','#error=access_denied&error_description=private'])('rejects confirmation errors before exchange or verification %s',async(suffix)=>{
+    const exchange=vi.fn(),verify=vi.fn();await expect(completeCallback('https://app.invalid/auth/callback'+suffix,exchange,verify)).rejects.toThrow('invalid or expired');expect(exchange).not.toHaveBeenCalled();expect(verify).not.toHaveBeenCalled();
+  });
 });
