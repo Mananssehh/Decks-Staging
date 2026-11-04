@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/react';
 type Envelope = [Record<string,unknown>, Array<[ {type:string}, unknown ]>];
-type CleanEnvelope = [{event_id?:string}, Array<[{type:'event'},Sentry.Event]>];
+type CleanEnvelope = [{event_id:string;sent_at:string}, Array<[{type:'event'},Sentry.Event]>];
 import { monitoringEnabled, sanitizeEvent, safeSignal, classifyFailure, outage, type MonitorAction, type MonitorCategory, type MonitorSignal } from './monitoringPolicy';
 
 /** Ten queued signals, ten accepted/minute, same action/category once/30s. No persistence/retry. */
@@ -30,7 +30,7 @@ export function safeEnvelope(envelope: Envelope): CleanEnvelope {
     const event = sanitizeEvent(payload as Sentry.Event);
     if (event) items.push([{type:'event'},event]);
   }
-  return [{},items];
+  return [{event_id:items[0]?.[1].event_id ?? '',sent_at:new Date().toISOString()},items];
 }
 export function initMonitoring(backend: unknown = import.meta.env.VITE_SUPABASE_PROJECT_ID, dsn: unknown = import.meta.env.VITE_SENTRY_DSN) {
   if (initialized || !monitoringEnabled(backend,dsn) || typeof dsn !== 'string') return false;

@@ -31,8 +31,8 @@ describe('staging telemetry policy',()=>{
    [{type:'session'},{sid:'SECRET'}],
   ] as Parameters<typeof safeEnvelope>[0][1]];
   const clean=safeEnvelope(envelope);
-  expect(clean[0]).toEqual({});expect(clean[1]).toHaveLength(1);expect(JSON.stringify(clean)).not.toContain('SECRET');
-  expect(safeEnvelope([{},[[{type:'event'},{message:'arbitrary failure'}]]])).toEqual([{},[]]);
+  expect(Object.keys(clean[0])).toEqual(['event_id','sent_at']);expect(clean[1]).toHaveLength(1);expect(JSON.stringify(clean)).not.toContain('SECRET');
+  expect(safeEnvelope([{},[[{type:'event'},{message:'arbitrary failure'}]]])[1]).toEqual([]);
  });
  it.each(['cooldown','blocked','invalid_track','invalid_input','unavailable','duplicate','ended','event_ended','explicit_not_allowed','rate_limited'])('does not treat %s as an outage',code=>{
   expect(classifyFailure({code}).category).toBe('business_rejection');expect(outage(classifyFailure({code}).category)).toBe(false);
