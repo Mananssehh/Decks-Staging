@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import {beginMonitoring} from './monitoring';
+import {classifyFailure} from './monitoringPolicy';
 
 /**
  * Event entry resolution shared by the join-by-code screen and direct event links.
@@ -30,12 +32,17 @@ const EVENT_COLUMNS =
   "id, dj_id, name, venue, dj_name, is_active, requests_status, allow_explicit, require_approval, cooldown_seconds, rules_text";
 
 async function callJoin(code: string, nickname: string) {
+  const finish=beginMonitoring('join');
+  try{
   const { data, error } = await supabase.functions.invoke("join-event", {
     body: { code: code.toUpperCase(), nickname },
   });
   const payload = data as { ok?: boolean; event?: EventEntryInfo } | null;
-  if (error || !payload?.ok || !payload.event) return null;
+  if (error) {const c=classifyFailure(error);finish(c.category,c.status);return null;}
+  if (!payload?.ok || !payload.event) {finish('business_rejection');return null;}
+  finish();
   return { ...payload.event, is_active: true } as EventEntryInfo;
+  }catch(error){const c=classifyFailure(error);finish(c.category,c.status);throw error;}
 }
 
 /**

@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { logCritical } from "@/lib/errorLogger";
+import { reportMonitoring } from "@/lib/monitoring";
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean }
@@ -13,6 +14,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    reportMonitoring('framework','framework');
     logCritical("ErrorBoundary", error.message, { componentStack: info.componentStack }, error.stack);
   }
 

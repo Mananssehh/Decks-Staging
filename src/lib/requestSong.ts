@@ -6,6 +6,8 @@
 import type { MusicSearchResult } from "@/lib/musicSearch";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import {beginMonitoring} from './monitoring';
+import {classifyFailure,outcomeCategory} from './monitoringPolicy';
 
 export type RequestSongArgs =
   Database["public"]["Functions"]["request_song"]["Args"];
@@ -121,20 +123,24 @@ export async function submitSongRequest(
   client: SupabaseRequestSongClient = supabase,
 ): Promise<RequestResult> {
   const args = buildRequestSongArgs(eventId, song);
+  const finish=beginMonitoring('song_request');
   try {
     const { data, error } = await client.rpc("request_song", args);
-    if (error)
+    if (error){
+      const c=classifyFailure(error);finish(isLegacyActiveIndexError(error)?'business_rejection':c.category,c.status);
       return {
         outcome: isLegacyActiveIndexError(error) ? "legacy_duplicate_conflict" : "error",
         requestId: null,
       };
+    }
     const row = Array.isArray(data) ? data[0] : data;
     const outcome = (row as { outcome?: unknown } | null | undefined)?.outcome;
-    if (!isRequestOutcome(outcome)) return { outcome: "error", requestId: null };
+    if (!isRequestOutcome(outcome)) {finish('invalid_response');return { outcome: "error", requestId: null };}
     const requestId =
       (row as { request_id?: string | null } | null | undefined)?.request_id ?? null;
-    return { outcome, requestId };
+    finish(outcomeCategory(outcome));return { outcome, requestId };
   } catch (thrown) {
+    const c=classifyFailure(thrown);finish(isLegacyActiveIndexError(thrown)?'business_rejection':c.category,c.status);
     return {
       outcome: isLegacyActiveIndexError(thrown) ? "legacy_duplicate_conflict" : "error",
       requestId: null,

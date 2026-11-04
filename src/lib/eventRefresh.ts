@@ -1,3 +1,5 @@
+import {beginMonitoring} from './monitoring';
+import {classifyFailure} from './monitoringPolicy';
 /** Coalesces bursts and discards responses invalidated by newer events or mutations. */
 export function createEventRefresh<T>(load: () => Promise<T>, apply: (value: T) => void, busy: () => boolean) {
   let revision = 0;
@@ -14,10 +16,13 @@ export function createEventRefresh<T>(load: () => Promise<T>, apply: (value: T) 
       while (dirty && !disposed && !busy()) {
         dirty = false;
         const ticket = revision;
+        const finish=beginMonitoring('stream_update');
         try {
           const value = await load();
           if (!disposed && ticket === revision && !busy()) apply(value);
-        } catch {
+          finish();
+        } catch (error) {
+          if(!disposed){const c=classifyFailure(error);finish(c.category,c.status);}
           // Leave last good state; a later reconnect retries, never empty it on errors.
         }
       }

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { monitored } from './monitoring';
 
 /** Narrow adapter contracts; hosted types were regenerated after independent core installation. */
 type RepairContracts = {
@@ -17,8 +18,10 @@ type RepairClient = {
 const client = supabase as unknown as RepairClient;
 
 export async function setSongVote(songId: string, value: 1 | -1 | null) {
+  return monitored('vote',async()=>{
   const { error } = await client.rpc("set_song_vote", { _song_request_id: songId, _value: value });
   if (error) throw error;
+  });
 }
 
 export async function transitionRequest(eventId: string, songId: string, status: string) {

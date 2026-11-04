@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { functionContext } from "./functionPayload";
+import { monitored } from './monitoring';
 
 export interface MusicSearchResult {
   source_song_id: string | null;
@@ -34,6 +35,7 @@ export async function searchMusic(query: string,guest?:{event_id:string;token:st
   const q = query.trim();
   if (q.length < 2) return { provider: "none", results: [] };
 
+  return monitored('music_search',async()=>{
   const { data, error } = await supabase.functions.invoke<MusicSearchResponse & { error?: string }>(
     "music-search",
     { body: { q,...(guest?{guest}: {}) } },
@@ -52,6 +54,7 @@ export async function searchMusic(query: string,guest?:{event_id:string;token:st
     throw new RateLimitedError(60);
   }
   return data ?? { provider: "none", results: [] };
+  });
 }
 
 export function normalizeKey(title: string, artist: string): string {
