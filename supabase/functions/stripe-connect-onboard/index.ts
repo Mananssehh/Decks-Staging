@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     }
     const userId = claims.claims.sub as string;
     const email = (claims.claims.email as string | undefined) ?? undefined;
-    console.log("[stripe-connect-onboard] user:", userId, "email:", email);
+    console.log("[stripe-connect-onboard] identity verified");
 
     step = "role_check";
     const admin = createClient(
