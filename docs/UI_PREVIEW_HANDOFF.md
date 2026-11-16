@@ -123,7 +123,7 @@ Providers wrap everything: `QueryClientProvider → TooltipProvider → Toaster 
 | `/forgot-password` | `ForgotPassword` | Send reset email | public | `supabase.auth.resetPasswordForEmail` |
 | `/reset-password` | `ResetPassword` | Set new password from email link | recovery session | `supabase.auth.updateUser` |
 | `/join` | `Join` | Room-code + nickname entry; QR landing (`/join?code=XXXXXX`) | public | anonymous sign-in, `ensure_profile` RPC, event lookup, guest limit gate |
-| `/connect` | `Connect` | Bridge/desktop connect helper page | public | — |
+| `/connect` | `Connect` | Code-free Bridge pairing instructions (no code in the URL, no deep link, no download) | public | — |
 | `/event/:code` | `EventPage` | The live guest room | any session (anonymous OK) | events, event_participants, song_requests, votes, now_playing, dj_tips; realtime |
 | `/dj` | `DJDashboard` | DJ event list / create | DJ role | events |
 | `/dj/onboarding` | `DJOnboarding` | Certification acceptance + `claim_dj_role()` | signed-in | RPC + welcome email |
@@ -376,7 +376,8 @@ RLS is enabled across these tables; the frontend relies on it (e.g. the request 
 | `stripe-connect-onboard` / `stripe-connect-refresh` | Express onboarding + status refresh | `components/PayoutStatusCard.tsx` | Low |
 | `stripe-payout-summary` | Payout/balance summary | `components/PayoutSummaryCard.tsx` | Low |
 | `stripe-whoami` | Stripe env diagnostic | none | None |
-| `bridge-pair` | Claims a 6-digit pairing code → returns `event_id`, `ingest_token`, function URL. Codes expire in 5 min, single use, 10 failed attempts / 10 min per IP | Decks Bridge (desktop) | **Do not touch** |
+| `bridge-pair` | Pairing Protocol v2 (`docs/BRIDGE_PAIRING_PROTOCOL_V2.md`): claims a 16-character one-time code plus client nonce → returns `event_id`, `event_name`, `ingest_token`, `endpoint_url` and rotates the token. Codes expire in 5 min, single use. Six-digit codes are retired and refused | Decks Bridge (desktop) | **Do not touch** |
+| `bridge-revoke` | Retires the presented ingest token (`X-Ingest-Token`); body-free `204` | Decks Bridge (desktop) | **Do not touch** |
 | `bridge-event-snapshot` | Read-only live snapshot for Decks Bridge (details below) | Decks Bridge (desktop) | **Do not touch** |
 | `now-playing-ingest` | Bridge/helper posts track metadata with `X-Ingest-Token`; zod-validated | Decks Bridge, `DJDevTools` test panel | **Do not touch** |
 | `send-transactional-email` | Queues transactional email (pgmq) | `Auth.tsx`, `DJOnboarding.tsx` | None |
@@ -430,9 +431,9 @@ then two parallel `IN (...)` queries load `event_participants(user_id, nickname)
 Decks Bridge is a **separate desktop application**. It is not in this repo; the website only exposes
 the backend contract and the pairing/monitoring UI.
 
-**Pairing:** the DJ opens `components/BridgePairing.tsx` in `DJEventManage`, which surfaces a 6-digit
-code. Bridge POSTs it to `bridge-pair`, which returns `event_id`, the per-event `ingest_token` and the
-function URL. Codes expire after 5 minutes and are single-use; failed attempts are IP-rate-limited.
+**Pairing:** the DJ opens `components/BridgePairing.tsx` in `DJEventManage`, which surfaces a 16-character
+code shown as `XXXX-XXXX-XXXX-XXXX` (Pairing Protocol v2, `docs/BRIDGE_PAIRING_PROTOCOL_V2.md`; six-digit codes are retired, and the code never goes in a link or QR). Bridge POSTs it to `bridge-pair`, which returns `event_id`, the per-event `ingest_token` and the
+`endpoint_url`, and rotates the token. Codes expire after 5 minutes and are single-use; no network address is used.
 Rotating the token (`regenerate_ingest_token` RPC) revokes Bridge access.
 
 **Reading live data:** Bridge polls `bridge-event-snapshot` (~4 s recommended) with the ingest token —

@@ -12,3 +12,15 @@ verify_jwt = false
 verify_jwt = false
 [functions.tip-create-checkout]
 verify_jwt = false
+
+# Bridge Pairing Protocol v2: called by the desktop app, which has no user JWT. The handlers
+# authenticate at the application layer before any protected action: bridge-pair by the 80-bit
+# one-time pairing code (the client nonce only makes a retry idempotent; it is not authentication),
+# bridge-revoke by the current ingest token.
+# UNRESOLVED DEPLOYMENT GATE: a public verify_jwt=false pairing endpoint needs independently
+# verified trusted gateway/platform request limiting before deployment. See the protocol contract.
+[functions.bridge-pair]
+verify_jwt = false
+
+[functions.bridge-revoke]
+verify_jwt = false

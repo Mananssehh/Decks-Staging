@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Link2, RefreshCw, Radio, ShieldAlert, Check, Copy, QrCode } from "lucide-react";
+import { Loader2, Link2, RefreshCw, Radio, ShieldAlert, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { QRCodeSVG } from "qrcode.react";
+import { groupedPairingCode } from "@/lib/bridgePairingCode";
 
 interface Props {
   eventId: string;
 }
 
+// Protocol v2: `code` is the grouped display form XXXX-XXXX-XXXX-XXXX. It is a short-lived
+// secret held in component state only — never a URL, QR payload, deep link, log or storage.
 interface PairingCode {
   code: string;
   expires_at: string;
 }
 
 type ConnState = "idle" | "waiting" | "connected";
+
+// Fixed user-facing messages. Raw backend or database error text is never rendered.
+const GENERATE_FAILED = "Couldn't create a pairing code. Please try again.";
+const ROTATE_FAILED = "Couldn't update the Bridge connection. Please try again.";
 
 export function BridgePairing({ eventId }: Props) {
   const [pairing, setPairing] = useState<PairingCode | null>(null);
@@ -99,11 +105,13 @@ export function BridgePairing({ eventId }: Props) {
       });
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error("No code returned");
-      setPairing({ code: row.code as string, expires_at: row.expires_at as string });
+      const code = groupedPairingCode(row?.code);
+      if (!row || !code || typeof row.expires_at !== "string") throw new Error("unexpected pairing response");
+      setPairing({ code, expires_at: row.expires_at });
       setConnState("waiting");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not generate code");
+    } catch {
+      // Backend error text is never shown: it can carry internal detail and is not written for users.
+      toast.error(GENERATE_FAILED);
     } finally {
       setGenerating(false);
     }
@@ -121,8 +129,8 @@ export function BridgePairing({ eventId }: Props) {
       baselineLastSeen.current = null;
       await loadIntegration();
       toast.success(opts?.successMsg ?? "Ingest token rotated. Pair Bridge again to reconnect.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not rotate token");
+    } catch {
+      toast.error(ROTATE_FAILED);
     } finally {
       setRotating(false);
     }
@@ -134,10 +142,14 @@ export function BridgePairing({ eventId }: Props) {
       successMsg: "Decks Bridge disconnected.",
     });
 
-  const copyCode = () => {
+  const copyCode = async () => {
     if (!pairing) return;
-    navigator.clipboard.writeText(pairing.code);
-    toast.success("Pairing code copied");
+    try {
+      await navigator.clipboard.writeText(pairing.code);
+      toast.success("Pairing code copied");
+    } catch {
+      toast.error("Copy failed. Type the code into Decks Bridge instead.");
+    }
   };
 
   const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -200,10 +212,10 @@ export function BridgePairing({ eventId }: Props) {
           <div className="rounded-xl bg-background/60 border p-4 sm:p-5">
             <div className="text-center sm:text-left">
               <div className="text-sm font-medium mb-1">
-                Open Decks Bridge and enter this 6-digit code
+                Open Decks Bridge and enter this 16-character code
               </div>
               <div className="text-xs text-muted-foreground mb-3">
-                No QR scan or link needed — just type the code into the Bridge app.
+                Type or paste it into the Bridge app. Hyphens, spaces and lowercase are fine. The code works once and is never sent in a link.
               </div>
             </div>
 
@@ -212,7 +224,10 @@ export function BridgePairing({ eventId }: Props) {
               className="group w-full rounded-lg bg-primary/5 hover:bg-primary/10 border border-primary/20 py-5 sm:py-6 transition-colors"
               aria-label="Copy pairing code"
             >
-              <div className="font-mono text-5xl sm:text-6xl font-bold tracking-[0.3em] sm:tracking-[0.5em] text-center text-foreground select-all">
+              <div
+                data-testid="bridge-pairing-code"
+                className="font-mono text-xl sm:text-3xl font-bold tracking-[0.12em] sm:tracking-[0.18em] text-center text-foreground select-all whitespace-nowrap"
+              >
                 {pairing.code}
               </div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-2 opacity-0 group-hover:opacity-100 transition-opacity text-center">
@@ -233,22 +248,6 @@ export function BridgePairing({ eventId }: Props) {
                 </Button>
               </div>
             </div>
-
-            <details className="mt-4 group">
-              <summary className="text-xs text-muted-foreground cursor-pointer inline-flex items-center gap-1.5 hover:text-foreground">
-                <QrCode className="h-3.5 w-3.5" /> Show QR (optional)
-              </summary>
-              <div className="mt-3 flex justify-center">
-                <div className="rounded-lg bg-white p-2.5">
-                  <QRCodeSVG
-                    value={`https://linku99.com/connect?code=${pairing.code}`}
-                    size={140}
-                    level="M"
-                    includeMargin={false}
-                  />
-                </div>
-              </div>
-            </details>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
