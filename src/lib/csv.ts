@@ -1,7 +1,11 @@
 function escape(v: unknown): string {
   if (v === null || v === undefined) return "";
-  const s = String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  // Treat untrusted text as text, including prefixes hidden behind whitespace.
+  // Numeric values remain numeric (notably negative ledger amounts).
+  const raw = String(v);
+  const s = typeof v === "string" && (/^[\s\u0000-\u001f]*[=+@-]/u.test(raw) || /^[\t\r\n]/.test(raw))
+    ? `'${raw}` : raw;
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
 

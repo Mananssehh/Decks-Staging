@@ -1,5 +1,7 @@
-// Public diagnostic: inspects STRIPE_SECRET_KEY shape and calls Stripe.
+// Admin-only diagnostic: inspects STRIPE_SECRET_KEY shape and calls Stripe.
 // Never prints key material.
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { authorizeDiagnostic } from "./authorization.ts";
 import { getStripe } from "../_shared/stripe.ts";
 import { parseStripeKey } from "../_shared/stripe-key.ts";
 import type Stripe from "https://esm.sh/stripe@17.5.0?target=denonext";
@@ -18,6 +20,27 @@ function jsonResp(body: unknown, status = 200) {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "GET") return jsonResp({ error: "method_not_allowed" }, 405);
+
+  // Authenticate and authorize before key inspection or any provider call.
+  const url = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anonKey) return jsonResp({ error: "service_unavailable" }, 503);
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const caller = createClient(url, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const denied = await authorizeDiagnostic(req, async token => {
+    const { data, error } = await caller.auth.getClaims(token);
+    if (error || !data?.claims || data.claims.is_anonymous === true) return null;
+    return typeof data.claims.sub === "string" ? data.claims.sub : null;
+  }, async userId => {
+    const { data, error } = await caller.rpc("has_role", { _user_id: userId, _role: "admin" });
+    if (error) throw new Error("role_unavailable");
+    return data === true;
+  });
+  if (denied) return jsonResp({ error: denied === 401 ? "sign_in_required" : denied === 403 ? "forbidden" : "service_unavailable" }, denied);
 
   const raw = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
   const trimmed = raw.trim();
