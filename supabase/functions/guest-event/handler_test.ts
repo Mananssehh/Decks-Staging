@@ -44,3 +44,32 @@ Deno.test('logger failure never changes public response',async()=>{
  const h=createHandler({url,log:()=>{throw Error('sink down');},rpc:async()=>({data:null,error:{code:'57014'}})});
  equal((await h(new Request('https://local',{method:'POST',body:'{"action":"contract"}'}))).status,503);
 });
+
+const PUBLISHED='https://encore-request-rally.lovable.app',PREVIEW='https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app';
+const REJECTED=['https://linku99.com','https://www.linku99.com','https://encore-request-rally.lovable.app.evil.com','https://evil-encore-request-rally.lovable.app','https://x.encore-request-rally.lovable.app','http://encore-request-rally.lovable.app','https://encore-request-rally.lovable.app:8443','https://encore-request-rally.lovable.app/','https://ENCORE-REQUEST-RALLY.lovable.app','https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app.evil.com','https://id-preview-evil--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app','https://lovable.app','null','*',''];
+function corsHandler(){let calls=0;const h=createHandler({url,rpc:async()=>{calls++;return {data:{ok:true,contract:'guest-integration-v1'},error:null};}});return {h,calls:()=>calls};}
+const post=(origin?:string)=>new Request('https://local',{method:'POST',body:'{"action":"contract"}',headers:origin===undefined?{}:{origin}});
+const options=(origin?:string)=>new Request('https://local',{method:'OPTIONS',headers:origin===undefined?{}:{origin,'access-control-request-method':'POST','access-control-request-headers':'authorization,content-type,apikey,x-client-info'}});
+Deno.test('published and preview staging origins are echoed exactly with Vary: Origin',async()=>{
+ for(const origin of [PUBLISHED,PREVIEW]){const s=corsHandler();const r=await s.h(post(origin));equal(r.status,200);equal(r.headers.get('access-control-allow-origin'),origin);equal(r.headers.get('vary'),'Origin');equal(s.calls(),1);}
+});
+Deno.test('production, malicious suffix/subdomain/scheme/port and null origins are refused before any backend call',async()=>{
+ for(const origin of REJECTED){const s=corsHandler();const r=await s.h(post(origin));equal(r.status,403);equal(r.headers.get('access-control-allow-origin'),null);equal(r.headers.get('vary'),'Origin');equal(await r.json(),{ok:false,status:403,error:'origin_not_allowed'});equal(s.calls(),0);}
+});
+Deno.test('rejected origin never consumes the request body',async()=>{
+ let pulled=false;const stream=new ReadableStream({pull(c){pulled=true;c.enqueue(new Uint8Array(16));c.close();}},{highWaterMark:0});
+ const s=corsHandler();const r=await s.h(new Request('https://local',{method:'POST',body:stream,headers:{origin:'https://linku99.com'}}));equal(r.status,403);equal(pulled,false);equal(s.calls(),0);
+});
+Deno.test('missing origin gets no CORS grant and no wildcard; staging and validation still enforced',async()=>{
+ const s=corsHandler();const r=await s.h(post());equal(r.status,200);equal(r.headers.get('access-control-allow-origin'),null);equal(r.headers.get('vary'),'Origin');
+ const off=createHandler({url:'https://prod.supabase.co',rpc:async()=>({data:{ok:true},error:null})});
+ const denied=await off(post(PUBLISHED));equal(denied.status,503);equal((await denied.json()).error,'guest_unavailable');equal(denied.headers.get('access-control-allow-origin'),PUBLISHED);
+ const bad=await s.h(new Request('https://local',{method:'POST',body:'{"action":"snapshot","payload":{}}',headers:{origin:PUBLISHED}}));equal(bad.status,400);equal(bad.headers.get('access-control-allow-origin'),PUBLISHED);
+});
+Deno.test('allowed OPTIONS preflight returns 204 with exact origin, methods and headers',async()=>{
+ for(const origin of [PUBLISHED,PREVIEW]){const s=corsHandler();const r=await s.h(options(origin));equal(r.status,204);equal(r.headers.get('access-control-allow-origin'),origin);equal(r.headers.get('access-control-allow-methods'),'POST,OPTIONS');equal(r.headers.get('access-control-allow-headers'),'authorization,content-type,apikey,x-client-info');equal(r.headers.get('vary'),'Origin');equal(await r.text(),'');equal(s.calls(),0);}
+});
+Deno.test('rejected OPTIONS preflight returns 403 without any allow-origin',async()=>{
+ for(const origin of REJECTED){const s=corsHandler();const r=await s.h(options(origin));equal(r.status,403);equal(r.headers.get('access-control-allow-origin'),null);equal(r.headers.get('vary'),'Origin');equal(s.calls(),0);}
+ const s=corsHandler();const r=await s.h(options());equal(r.status,204);equal(r.headers.get('access-control-allow-origin'),null);
+});

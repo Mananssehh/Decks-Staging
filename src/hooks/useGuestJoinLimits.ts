@@ -18,11 +18,23 @@ const DEFAULTS: GuestJoinLimits = {
 let cache: GuestJoinLimits | null = null;
 let inflight: Promise<GuestJoinLimits> | null = null;
 
+/** Both RPCs are granted to signed-in users only; a signed-out call can only return 401. */
+async function hasSession(): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return !!data.session;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchGuestJoinLimits(): Promise<GuestJoinLimits> {
   if (cache) return cache;
   if (inflight) return inflight;
   inflight = (async () => {
     try {
+      // Signed out: use safe defaults without caching, so a later signed-in read still loads.
+      if (!(await hasSession())) return DEFAULTS;
       const { data } = await supabase.rpc("get_guest_join_limits");
       const v = (data ?? {}) as Partial<GuestJoinLimits>;
       cache = { ...DEFAULTS, ...v };
@@ -38,6 +50,7 @@ export async function fetchGuestJoinLimits(): Promise<GuestJoinLimits> {
 
 export async function fetchGuestEventCount(): Promise<number> {
   try {
+    if (!(await hasSession())) return 0;
     const { data } = await supabase.rpc("get_guest_event_count");
     return typeof data === "number" ? data : 0;
   } catch {

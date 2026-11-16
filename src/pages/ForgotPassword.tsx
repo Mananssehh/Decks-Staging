@@ -9,8 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppHeader } from "@/components/AppHeader";
 import { emailSchema } from "@/lib/validation";
+import { localNext } from "@/lib/authCallback";
 
-const RESET_REDIRECT = "https://linku99.com/reset-password";
+/** Same-origin only: the reset link returns to whichever deployment started it. */
+function resetRedirect(origin: string) {
+  return new URL(localNext("/reset-password"), origin).href;
+}
 const GENERIC_MESSAGE =
   "If an account exists for that email, we've sent a reset link. Check your inbox.";
 
@@ -29,7 +33,7 @@ const ForgotPassword = () => {
 
       // Fire-and-forget — never reveal whether the account exists.
       await supabase.auth
-        .resetPasswordForEmail(parsed.data, { redirectTo: RESET_REDIRECT })
+        .resetPasswordForEmail(parsed.data, { redirectTo: resetRedirect(window.location.origin) })
         .catch(() => undefined);
 
       setSubmitted(true);
