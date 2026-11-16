@@ -1,4 +1,6 @@
 # Architecture rules
+- Provider diagnostics verify a real Auth session and server-held admin role before any provider access; onboarding logs contain static stages/codes only, preventing personal-email retention.
+- CSV serialization neutralizes formula-like string cells and headers before quoting while preserving typed numeric values, preventing executable guest-controlled exports.
 - Client monitoring uses a staging/DSN gate, shared typed signals and a final event-only reconstructed envelope; no automatic integrations or spans are sent, preventing identity/payload leakage and preserving operation outcomes.
 - Request visibility monitoring consumes acknowledged request IDs only in bounded page-local memory and post-ack applied snapshots; transport success and quiet rooms cannot establish UI delivery or outages.
 - Event QR display/export share one configuration and require a decoded same-origin embedded logo before PNG export; this prevents quiet-zone loss and unbranded downloads.
