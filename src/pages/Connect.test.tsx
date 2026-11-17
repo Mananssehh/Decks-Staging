@@ -24,7 +24,21 @@ it("explains that the updated Bridge is required and not yet available here", ()
 it("offers no download, link, button or navigation of any kind", () => {
   const { container } = render(<Connect />);
   expect(container.querySelector("a, button, form, iframe, img, link, script, [href], [src]")).toBeNull();
-  expect(container.innerHTML).not.toMatch(/linku99|https?:\/\/|decksbridge/i);
+  // DOM-level: no interactive, navigational, download or resource-loading element or attribute.
+  expect(container.querySelector(
+    "area, input, select, textarea, object, embed, video, audio, source, base, meta, [role='link'], [role='button'], " +
+    "[download], [action], [formaction], [srcset], [ping], [onclick], [target], [tabindex], [xlink\\:href]",
+  )).toBeNull();
+  const forbidden = /linku99|https?:\/\/|decksbridge|\/\//i;
+  for (const el of Array.from(container.querySelectorAll("*"))) {
+    for (const attr of Array.from(el.attributes)) {
+      // An XML namespace declaration on the inline icon is not a link; it must be exactly the SVG namespace.
+      if (attr.name === "xmlns") { expect(attr.value).toBe("http://www.w3.org/2000/svg"); continue; }
+      expect(attr.name.startsWith("xmlns:"), `${el.tagName} ${attr.name}`).toBe(false);
+      expect(attr.value, `${el.tagName} ${attr.name}`).not.toMatch(forbidden);
+    }
+  }
+  expect(container.textContent ?? "").not.toMatch(forbidden);
 });
 
 it("makes no network request, including to linku99.com", () => {

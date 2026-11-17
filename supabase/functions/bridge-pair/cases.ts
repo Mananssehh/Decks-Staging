@@ -73,7 +73,7 @@ export const bridgePairCases: readonly Case[] = [
     }
   }],
   ['missing or invalid client_nonce gets the uniform refusal', async () => {
-    for (const client_nonce of [undefined, null, '', 'short', 'A'.repeat(65), `${'A'.repeat(21)}+`, 12345678901234567890, { a: 1 }]) {
+    for (const client_nonce of [undefined, null, '', 'short', 'A'.repeat(65), `${'A'.repeat(21)}+`, 1.2345678901234567e19, { a: 1 }]) {
       const { handler, calls } = setup();
       equal(await shape(await handler(pair(valid({ client_nonce })))), REFUSAL, JSON.stringify(client_nonce));
       equal(calls.length, 0);

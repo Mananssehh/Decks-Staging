@@ -1,9 +1,16 @@
+/** True when a formula trigger (= + @ -) follows any run of leading whitespace or C0 control characters (U+0000-U+001F). */
+function hiddenFormulaPrefix(raw: string): boolean {
+  let i = 0;
+  while (i < raw.length && (raw.charCodeAt(i) <= 0x1f || /\s/.test(raw[i]))) i++;
+  return i < raw.length && "=+@-".includes(raw[i]);
+}
+
 function escape(v: unknown): string {
   if (v === null || v === undefined) return "";
   // Treat untrusted text as text, including prefixes hidden behind whitespace.
   // Numeric values remain numeric (notably negative ledger amounts).
   const raw = String(v);
-  const s = typeof v === "string" && (/^[\s\u0000-\u001f]*[=+@-]/u.test(raw) || /^[\t\r\n]/.test(raw))
+  const s = typeof v === "string" && (hiddenFormulaPrefix(raw) || /^[\t\r\n]/.test(raw))
     ? `'${raw}` : raw;
   if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
