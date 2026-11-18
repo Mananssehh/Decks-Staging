@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { protocolCases } from "../../supabase/functions/_shared/bridge-protocol_cases";
+import { admissionCases } from "../../supabase/functions/_shared/bridge-admission_cases";
 import { bridgePairCases } from "../../supabase/functions/bridge-pair/cases";
 import { bridgeRevokeCases } from "../../supabase/functions/bridge-revoke/cases";
 
@@ -10,6 +11,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 const code = (sql: string) => sql.split("\n").filter(line => !line.trimStart().startsWith("--")).join("\n");
 
 describe("bridge protocol v2 helpers", () => { for (const [name, run] of protocolCases) it(name, run); });
+describe("bridge-pair pending-claim limit", () => { for (const [name, run] of admissionCases) it(name, run); });
 describe("bridge-pair handler", () => { for (const [name, run] of bridgePairCases) it(name, run); });
 describe("bridge-revoke handler", () => { for (const [name, run] of bridgeRevokeCases) it(name, run); });
 
@@ -183,10 +185,12 @@ describe("gateway configuration and endpoint contract (static)", () => {
   });
   it("handlers authenticate before the protected call: validation precedes the RPC in source order", () => {
     const pair = read("supabase/functions/bridge-pair/handler.ts");
-    const order = ["allowedOrigin(req)", "stagingBackend(deps.url)", "hasQuery(req)", "jsonMediaType(req)", "boundedJsonObject(req)", "normalizePairingCode(body.code)", "validClientNonce(clientNonce)", "deps.claim(code, clientNonce)"].map(n => pair.indexOf(n));
+    const order = ["allowedOrigin(req)", "stagingBackend(deps.url)", "hasQuery(req)", "jsonMediaType(req)", "boundedJsonObject(req)", "normalizePairingCode(body.code)", "validClientNonce(clientNonce)", "admission.tryRun(() => claim(code, clientNonce))", "if (!pending) return json(503, { error: 'service_unavailable' });", "await pending"].map(n => pair.indexOf(n));
     expect(order.every(i => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(pair.match(/deps\.claim\(/g)?.length).toBe(1);
+    expect(pair.match(/claim\(code, clientNonce\)/g)?.length).toBe(1);
+    expect(pair).not.toContain("deps.claim(");
+    expect(pair.match(/tryRun\(/g)?.length).toBe(1);
     const revoke = read("supabase/functions/bridge-revoke/handler.ts");
     const revokeOrder = ["allowedOrigin(req)", "stagingBackend(deps.url)", "if (hasQuery(req) || carriesBody(req) || req.headers.has('authorization')) return done();", "validRevocableToken(token)", "deps.revoke(token)"].map(n => revoke.indexOf(n));
     expect(revokeOrder.every(i => i >= 0)).toBe(true);
@@ -226,10 +230,20 @@ describe("gateway configuration and endpoint contract (static)", () => {
       "independently confirmed to execute the complete file in one transaction",
       "Unresolved deployment gate",
       "independently verified trusted gateway or platform request limiting",
+      "## Pending-claim limit",
+      "This is database backpressure, not request-volume limiting",
+      "can exhaust the five-minute first-claim window",
+      "or the two-minute same-nonce recovery window",
+      "If a claim call never settles",
+      "gets the `404` before admission",
+      "a well-formed request, whatever the state of its code, is answered at once with `503",
+      "An admitted claim that the database refuses (unknown, expired or already claimed) gets the `404`",
+      "A claim call that throws before returning a promise frees its slot immediately.",
       "`^[0-9a-f]{64}$`",
       "`^(?:[0-9a-f]{48}|[0-9a-f]{64})$`",
     ]) expect(contract).toContain(sentence);
     expect(contract).not.toMatch(/code plus nonce|secret plus nonce/i);
+    expect(contract).not.toMatch(/held by nobody|nobody holds/i);
   });
   it("only the two desktop-webview origins are allowlisted", () => {
     const shared = read("supabase/functions/_shared/bridge-protocol.ts");
@@ -255,19 +269,31 @@ describe("no secret logging or secret-bearing URLs in touched sources (static)",
   const revoke = read("supabase/functions/bridge-revoke/handler.ts");
   const shared = read("supabase/functions/_shared/bridge-protocol.ts");
   const entrypoints = read("supabase/functions/bridge-pair/index.ts") + read("supabase/functions/bridge-revoke/index.ts");
+  const admission = read("supabase/functions/_shared/bridge-admission.ts");
   it("handlers and entrypoints never call console directly; the shared logger prints one allowlisted object", () => {
-    for (const source of [pair, revoke, entrypoints]) expect(source).not.toMatch(/console\./);
+    for (const source of [pair, revoke, entrypoints, admission]) expect(source).not.toMatch(/console\./);
     expect(shared.match(/console\.[a-z]+\(/g)).toEqual(["console.error("]);
     expect(shared).toContain("console.error(JSON.stringify(entry))");
   });
   it("handlers read no forwarded-address header and accept no six-digit pattern", () => {
-    for (const source of [pair, revoke, shared, entrypoints]) {
+    for (const source of [pair, revoke, shared, entrypoints, admission]) {
       expect(source).not.toMatch(/x-forwarded-for|x-real-ip|cf-connecting-ip/i);
       expect(source).not.toMatch(/\\d\{6\}|\{6\}/);
       expect(source).not.toContain("repair_claim_bridge_code");
     }
     expect(entrypoints).toContain("bridge_pair_claim_v2");
     expect(entrypoints).toContain("bridge_revoke_v2");
+  });
+  it("the pending-claim limit is per worker, untimed and stateless, and only bridge-pair uses it", () => {
+    expect(admission).not.toMatch(/setTimeout|setInterval|Date\.now|performance\.now|AbortSignal|signal|fetch\(|Deno\.|localStorage|indexedDB|import /);
+    expect(admission).toContain("export const PROVISIONAL_PENDING_CLAIM_LIMIT = 4;");
+    expect(admission).toContain("settled.then(release, release);");
+    expect(read("supabase/functions/bridge-pair/index.ts")).toContain("createPendingCallLimit(PROVISIONAL_PENDING_CLAIM_LIMIT)");
+    const shed = pair.slice(pair.indexOf("if (!pending)"), pair.indexOf("\n", pair.indexOf("if (!pending)")));
+    expect(shed).toBe("if (!pending) return json(503, { error: 'service_unavailable' });");
+    for (const path of ["supabase/functions/bridge-revoke/handler.ts", "supabase/functions/bridge-revoke/index.ts"]) {
+      expect(read(path)).not.toMatch(/bridge-admission|PendingCallLimit|tryRun/);
+    }
   });
   it("web pairing UI has no QR, link or deep link and never touches the hash or token", () => {
     const ui = read("src/components/BridgePairing.tsx");

@@ -4,6 +4,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.0';
 import { createBridgePairHandler, type ClaimRpc } from './handler.ts';
 import { stagingBackend } from '../_shared/bridge-protocol.ts';
+import { PROVISIONAL_PENDING_CLAIM_LIMIT, createPendingCallLimit } from '../_shared/bridge-admission.ts';
 const url = Deno.env.get('SUPABASE_URL');
 const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 let claim: ClaimRpc | undefined;
@@ -14,4 +15,6 @@ if (url && key && stagingBackend(url)) {
     return { data, error };
   };
 }
-Deno.serve(createBridgePairHandler({ url, claim }));
+// One pending-claim limit per worker (provisional, uncalibrated). Not shared between workers.
+const admission = createPendingCallLimit(PROVISIONAL_PENDING_CLAIM_LIMIT);
+Deno.serve(createBridgePairHandler({ url, claim, admission }));

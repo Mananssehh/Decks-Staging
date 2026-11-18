@@ -4,9 +4,17 @@ import {
   PROTOCOL_VERSION, allowedOrigin, boundedJsonObject, defaultLog, diagnose, hasQuery, jsonMediaType, normalizePairingCode,
   responseHeaders, stagingBackend, validClientNonce, validIssuedToken, validUuid, type Log,
 } from '../_shared/bridge-protocol.ts';
+import { createPendingCallLimit, type PendingCallLimit } from '../_shared/bridge-admission.ts';
 
 export type ClaimRpc = (code: string, clientNonce: string) => Promise<{ data: unknown; error: unknown }>;
-export interface Dependencies { url?: string; claim?: ClaimRpc; log?: Log; id?: () => string }
+export interface Dependencies {
+  url?: string;
+  claim?: ClaimRpc;
+  log?: Log;
+  id?: () => string;
+  /** Pending-claim limit for this worker. Defaults to a new limit per handler instance. */
+  admission?: PendingCallLimit;
+}
 
 /** The only request header a browser-context caller may send to this endpoint. */
 export const ALLOW_HEADERS = 'content-type';
@@ -14,6 +22,9 @@ export const ALLOW_HEADERS = 'content-type';
 export const UNIFORM_FAILURE = { status: 404, body: { error: 'pairing_unavailable' } } as const;
 
 export function createBridgePairHandler(deps: Dependencies) {
+  // One limit per handler instance, and one handler instance per worker: never shared across workers.
+  const admission = deps.admission ?? createPendingCallLimit();
+  const claim = deps.claim;
   return async (req: Request): Promise<Response> => {
     const origin = allowedOrigin(req);
     if (origin === false) {
@@ -24,7 +35,7 @@ export function createBridgePairHandler(deps: Dependencies) {
     const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
       new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', ...extra } });
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-    if (!stagingBackend(deps.url) || !deps.claim) return json(503, { error: 'service_unavailable' });
+    if (!stagingBackend(deps.url) || !claim) return json(503, { error: 'service_unavailable' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     const refuse = () => json(UNIFORM_FAILURE.status, UNIFORM_FAILURE.body);
 
@@ -46,8 +57,14 @@ export function createBridgePairHandler(deps: Dependencies) {
       } catch { /* logging never changes the response */ }
       return json(503, { error: 'service_unavailable' }, { 'x-correlation-id': cid });
     };
+    // Validation is complete. Take a slot immediately before the claim call. When this worker
+    // already has its limit of claim calls pending, answer with the existing 503 at once: no
+    // queue, no database call and no correlation id, because the database was not reached.
+    // The slot is freed only when the claim call itself settles (see _shared/bridge-admission.ts).
+    const pending = admission.tryRun(() => claim(code, clientNonce));
+    if (!pending) return json(503, { error: 'service_unavailable' });
     try {
-      const result = await deps.claim(code, clientNonce);
+      const result = await pending;
       if (result.error) return unavailable(diagnose(result.error));
       const data = result.data;
       if (!data || typeof data !== 'object' || Array.isArray(data)) return unavailable({ sqlstate: 'none', category: 'invalid_response' });

@@ -3,7 +3,7 @@
 Status: source candidate, not installed or deployed. Staging backend only.
 Protocol v1 (six-digit codes) is retired with no compatibility path: v1 requests are refused and no rollback restores them.
 
-Sources: `supabase/repair-staged/10_bridge_pairing_security.sql`, `supabase/functions/bridge-pair`, `supabase/functions/bridge-revoke`, `supabase/functions/_shared/bridge-protocol.ts`, `src/components/BridgePairing.tsx`.
+Sources: `supabase/repair-staged/10_bridge_pairing_security.sql`, `supabase/functions/bridge-pair`, `supabase/functions/bridge-revoke`, `supabase/functions/_shared/bridge-protocol.ts`, `supabase/functions/_shared/bridge-admission.ts`, `src/components/BridgePairing.tsx`.
 
 This document supersedes every earlier description of Bridge pairing. `supabase/repair-staged/README.md` (including its "Pairing network limitation" section and the shared `unverified-gateway` bucket) and `05_bridge.sql` are historical evidence of the previous repair and are kept unedited because they are hash-recorded; where they differ from this contract, this contract applies.
 
@@ -12,7 +12,7 @@ This document supersedes every earlier description of Bridge pairing. `supabase/
 - Bridge pairing is Protocol v2 only. Never restore six-digit issuance or acceptance, including in a rollback.
 - Pairing codes, client nonces and ingest tokens never enter URLs, QR payloads, deep links, logs or analytics.
 - Pairing secrets are stored only as SHA-256, in a table with no grants and no policies.
-- A refused attempt must have no lasting effect. Never reintroduce a failure counter or shared bucket that a valid code has to pass.
+- A refused attempt must have no lasting effect. Never reintroduce a failure counter or a persistent or rate-based shared bucket that a valid code has to pass. The one exception is the per-worker pending-claim limit (see below): it counts only claim calls still in flight, keeps nothing after a call settles, and answers with the retryable `503`, never the `404`.
 
 ## Pairing code
 
@@ -82,7 +82,7 @@ Neither endpoint allows `authorization`, `apikey` or `x-client-info`.
 
 CORS is not the authorization boundary. Both functions set `verify_jwt = false` in `supabase/config.toml` because the desktop has no user JWT; the handlers authenticate at the application layer before any protected action: `bridge-pair` by the one-time 80-bit pairing code, `bridge-revoke` by the current ingest token. Both refuse to run against any backend other than staging.
 
-**Unresolved deployment gate.** With `verify_jwt = false`, `bridge-pair` is reachable by anyone on the internet. Guessing a code is infeasible, but nothing in this patch limits request volume. Before deployment, the public pairing endpoint needs independently verified trusted gateway or platform request limiting. That evidence does not exist in this repository. Do not substitute throttling keyed on a forwarded-address header (spoofable) or a database failure bucket (lets invalid traffic deny valid codes); both are deliberately absent.
+**Unresolved deployment gate.** With `verify_jwt = false`, `bridge-pair` is reachable by anyone on the internet. Guessing a code is infeasible, but nothing in this patch limits request volume. The per-worker pending-claim limit below is database backpressure, not request-volume limiting, and does not satisfy this gate. Lovable support has reported in writing (not independently verified here) that Lovable Cloud has no configurable trusted gateway or per-function rate limiter that runs before the Edge Function handler. Before deployment, the public pairing endpoint needs independently verified trusted gateway or platform request limiting. That evidence does not exist in this repository. Do not substitute throttling keyed on a forwarded-address header (spoofable) or a database failure bucket (lets invalid traffic deny valid codes); both are deliberately absent.
 
 ## Pair response
 
@@ -107,8 +107,8 @@ A client must treat a `200` as a failure and store nothing unless `event_id`, `i
 
 | Category | Status | Body | Meaning | Client action |
 | --- | --- | --- | --- | --- |
-| Pairing unavailable | `404` | `{"error":"pairing_unavailable"}` | Malformed request or code, wrong protocol version, unknown, expired or already claimed. Deliberately indistinguishable. Any future throttle must use this same response | Ask for a new code. Do not retry the same code with a new nonce |
-| Service unavailable | `503` | `{"error":"service_unavailable"}` plus `x-correlation-id` when the database was reached | Backend not available, or not the staging backend | Retry the same code with the **same** nonce |
+| Pairing unavailable | `404` | `{"error":"pairing_unavailable"}` | Malformed request or code or wrong protocol version (refused before admission, so always `404`), or a well-formed code that the database reports unknown, expired or already claimed (only once the claim is admitted; while the worker is full it gets the `503` instead). Deliberately indistinguishable. Any future throttle that depends on the code, the nonce or past attempts must use this same response; load shedding that depends on none of them uses `503` | Ask for a new code. Do not retry the same code with a new nonce |
+| Service unavailable | `503` | `{"error":"service_unavailable"}` plus `x-correlation-id` when the database was reached | Backend not available or busy (including this worker's pending-claim limit being full), or not the staging backend. A busy `503` never reaches the database and carries no `x-correlation-id` | Retry the same code with the **same** nonce |
 | Origin not allowed | `403` | `{"error":"origin_not_allowed"}` | Browser origin outside the allowlist | None |
 | Method not allowed | `405` | `{"error":"method_not_allowed"}` | Not `POST`/`OPTIONS` | None |
 
@@ -116,8 +116,22 @@ A client must treat a `200` as a failure and store nothing unless `event_id`, `i
 
 - A code is claimable while `expires_at > now` and its event is active, not ended, and still owned by the user who generated it.
 - The claim locks the event row, then the code row, and marks the code claimed in the same transaction that rotates the token. Concurrent claims of one code with different nonces produce exactly one winner.
-- A refused attempt writes nothing. There is no failure counter, evidence row or budget, so invalid traffic cannot block a valid claim and nothing accumulates. The control is the 80-bit single-use code with a five-minute life: guessing one live code needs on the order of 2^79 requests. Persistent evidence was removed because it enforced nothing; `public.bridge_pair_attempts` is no longer written, and its existing rows age out under the installed 24-hour retention job. Request-volume limiting belongs at the gateway and is an unresolved deployment gate (see above).
+- A refused attempt writes nothing. There is no failure counter, evidence row or persistent budget, and invalid traffic can never make a valid claim return `404`. It can delay one: while a worker's pending-claim limit is full, a valid claim gets the retryable `503` (see below). Nothing accumulates. The control is the 80-bit single-use code with a five-minute life: guessing one live code needs on the order of 2^79 requests. Persistent evidence was removed because it enforced nothing; `public.bridge_pair_attempts` is no longer written, and its existing rows age out under the installed 24-hour retention job. Request-volume limiting belongs at the gateway and is an unresolved deployment gate (see above).
 - Cleanup of claimed rows is lazy. A claimed row is not removed when its retry window ends; it only stops being usable. It is deleted the next time a code is generated for the same event, if it is then more than one hour old, or when the owner rotates the token, or with its event. No scheduled job removes it, so an event that never generates another code keeps its last claimed row (hashes only) until the event is deleted. Unclaimed rows are deleted by the next generation for that event.
+
+## Pending-claim limit
+
+Status: source only, provisional and uncalibrated. Source: `supabase/functions/_shared/bridge-admission.ts`, used only by `bridge-pair`.
+
+- Each `bridge-pair` worker allows at most **four** claim calls in flight at once. This is database backpressure, not request-volume limiting: it bounds how many claim calls one worker has waiting on Postgres. It is not shared between workers (the total across the service is four times the number of workers, which is not known), keeps no counter of past requests or failures, reads no network address, and starts empty whenever a worker starts.
+- Malformed input (body, media type, query, protocol version, code or nonce) gets the `404` before admission. It takes no slot and makes no claim call, whether or not the worker is full.
+- A slot is taken only for a well-formed request, immediately before the claim call. When all four slots are taken, a well-formed request, whatever the state of its code, is answered at once with `503 {"error":"service_unavailable"}`: no queue, no database call, no log line and no `x-correlation-id`. Nothing about the code changes; it stays claimable until it expires.
+- An admitted claim that the database refuses (unknown, expired or already claimed) gets the `404`, and its slot is freed.
+- A slot is released exactly once, when the claim call itself settles (success, refusal, database error, invalid response or thrown error). A claim call that throws before returning a promise frees its slot immediately. A caller disconnect or a timer never frees a slot while its call is still pending.
+- If a claim call never settles, its slot stays taken for the life of that worker. Four hung calls make that worker answer every valid claim with `503` until the platform replaces the worker. How long a hung call can last depends on database, PostgREST and HTTP-client timeouts that are not verified from this repository. Freeing a slot early would instead let unbounded concurrent calls reach Postgres.
+- `bridge-revoke` has no such limit and never shares this one, so pairing overload never sheds a revoke at the function. Both still share the same database.
+
+**What a DJ with a valid code experiences.** If a worker is full, the desktop's claim gets the `503` and, under the client rule above, retries the same code with the same nonce until a slot is free. If a successful response is lost, a retry with the same nonce returns the same token within the two-minute retry window, provided it is admitted. Sustained overload can exhaust the five-minute first-claim window (the code then expires and the DJ must generate a new one) or the two-minute same-nonce recovery window (the claim has already rotated the event's token, so every earlier device has stopped working, and the desktop can no longer recover the issued token through pairing; the DJ must generate a new code and pair again). The server cannot tell whether a lost response reached anyone; the issued token remains the event's current token until the next pairing, owner rotation or revoke. Desktop retry and backoff behaviour is not verified from this repository.
 
 ## Idempotent retry
 
