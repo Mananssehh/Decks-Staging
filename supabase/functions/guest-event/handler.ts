@@ -21,10 +21,14 @@ export function diagnose(error: unknown, status?: number){
 const defaultLog: Log=(entry)=>console.error(JSON.stringify(entry));
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const secret = /^[0-9a-f]{64}$/;
-const headers = {'Access-Control-Allow-Origin':'https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app','Access-Control-Allow-Headers':'authorization,content-type,apikey,x-client-info','Access-Control-Allow-Methods':'POST,OPTIONS','Access-Control-Expose-Headers':'x-correlation-id','Content-Type':'application/json','Cache-Control':'no-store'};
+// Exact staging browser origins only: no wildcard, suffix, subdomain or substring matching.
+export const ALLOWED_ORIGINS: readonly string[] = ['https://decks-staging.lovable.app','https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app'];
+const base = {'Access-Control-Allow-Headers':'authorization,content-type,apikey,x-client-info','Access-Control-Allow-Methods':'POST,OPTIONS','Access-Control-Expose-Headers':'x-correlation-id','Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin'};
+/** null = no Origin header (non-browser caller, no CORS grant); false = browser origin outside the allowlist. */
+export function allowedOrigin(req: Request): string|null|false { const o=req.headers.get('origin'); if(o===null)return null; return ALLOWED_ORIGINS.includes(o)?o:false; }
 export function staging(url?: string) { try { const u=new URL(url ?? ''); return u.protocol==='https:' && u.hostname===HOST && !u.port && !u.username && !u.password && u.pathname==='/'; } catch {return false;} }
-const response=(status: number,body: unknown,extra: Record<string,string>={})=>new Response(JSON.stringify(body),{status,headers:{...headers,...extra}});
-const fail=(status: number,error: string,extra: Record<string,string>={})=>response(status,{ok:false,status,error},extra);
+type Cors=Record<string,string>;
+const response=(cors: Cors,status: number,body: unknown,extra: Record<string,string>={})=>new Response(JSON.stringify(body),{status,headers:{...cors,...extra}});
 const object=(v: unknown): v is Record<string,unknown> => !!v && typeof v==='object' && !Array.isArray(v);
 export function validate(action: Action,p: Record<string,unknown>): Record<string,unknown>|null {
  const out: Record<string,unknown>={};
@@ -48,7 +52,12 @@ export function validate(action: Action,p: Record<string,unknown>): Record<strin
  return out;
 }
 export function createHandler(deps: Dependencies){return async(req:Request):Promise<Response>=>{
- if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
+ const origin=allowedOrigin(req);
+ // Unsupported browser origins are refused before any body read, validation or backend call.
+ if(origin===false)return new Response(req.method==='OPTIONS'?null:JSON.stringify({ok:false,status:403,error:'origin_not_allowed'}),{status:403,headers:base});
+ const cors: Cors=origin?{...base,'Access-Control-Allow-Origin':origin}:base;
+ const fail=(status: number,error: string,extra: Record<string,string>={})=>response(cors,status,{ok:false,status,error},extra);
+ if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(!staging(deps.url)||!deps.rpc)return fail(503,'guest_unavailable');
  if(req.method!=='POST')return fail(405,'method_not_allowed');
  let b:unknown;try{b=await boundedBody(req);}catch(e){return e instanceof ActorError?fail(e.status,e.status===413?'payload_too_large':'invalid_json'):fail(503,'upstream_unavailable');}
@@ -59,7 +68,7 @@ export function createHandler(deps: Dependencies){return async(req:Request):Prom
   try{log({evt:'guest_event_upstream',cid,action,...d,ms:Date.now()-started});}catch{/* logging never changes the response */}
   return fail(503,'upstream_unavailable',{'x-correlation-id':cid});};
  try{const r=await deps.rpc(action,p);if(r.error)return upstream(diagnose(r.error,r.status));if(!object(r.data))return upstream({sqlstate:'none',category:'invalid_response',upstream_status:0});
- if(r.data.ok===true)return response(200,r.data);
+ if(r.data.ok===true)return response(cors,200,r.data);
  const status=Number(r.data.status);if(!Number.isInteger(status)||status<400||status>599)return upstream({sqlstate:'none',category:'invalid_response',upstream_status:0});
  const error=typeof r.data.error==='string'&&/^[a-z_]{1,64}$/.test(r.data.error)?r.data.error:'upstream_unavailable';
  return fail(status,error);
