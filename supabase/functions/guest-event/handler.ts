@@ -22,7 +22,7 @@ const defaultLog: Log=(entry)=>console.error(JSON.stringify(entry));
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const secret = /^[0-9a-f]{64}$/;
 // Exact staging browser origins only: no wildcard, suffix, subdomain or substring matching.
-export const ALLOWED_ORIGINS: readonly string[] = ['https://encore-request-rally.lovable.app','https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app'];
+export const ALLOWED_ORIGINS: readonly string[] = ['https://decks-staging.lovable.app','https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app'];
 const base = {'Access-Control-Allow-Headers':'authorization,content-type,apikey,x-client-info','Access-Control-Allow-Methods':'POST,OPTIONS','Access-Control-Expose-Headers':'x-correlation-id','Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin'};
 /** null = no Origin header (non-browser caller, no CORS grant); false = browser origin outside the allowlist. */
 export function allowedOrigin(req: Request): string|null|false { const o=req.headers.get('origin'); if(o===null)return null; return ALLOWED_ORIGINS.includes(o)?o:false; }
