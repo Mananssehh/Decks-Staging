@@ -45,8 +45,8 @@ Deno.test('logger failure never changes public response',async()=>{
  equal((await h(new Request('https://local',{method:'POST',body:'{"action":"contract"}'}))).status,503);
 });
 
-const PUBLISHED='https://encore-request-rally.lovable.app',PREVIEW='https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app';
-const REJECTED=['https://linku99.com','https://www.linku99.com','https://encore-request-rally.lovable.app.evil.com','https://evil-encore-request-rally.lovable.app','https://x.encore-request-rally.lovable.app','http://encore-request-rally.lovable.app','https://encore-request-rally.lovable.app:8443','https://encore-request-rally.lovable.app/','https://ENCORE-REQUEST-RALLY.lovable.app','https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app.evil.com','https://id-preview-evil--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app','https://lovable.app','null','*',''];
+const PUBLISHED='https://decks-staging.lovable.app',PREVIEW='https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app';
+const REJECTED=['https://encore-request-rally.lovable.app','https://linku99.com','https://www.linku99.com','https://decks-staging.lovable.app.evil.com','https://evil-decks-staging.lovable.app','https://x.decks-staging.lovable.app','http://decks-staging.lovable.app','https://decks-staging.lovable.app:8443','https://decks-staging.lovable.app/','https://DECKS-STAGING.lovable.app','https://id-preview--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app.evil.com','https://id-preview-evil--3bde3db6-ee77-4460-95f2-891bb19a0278.lovable.app','https://lovable.app','null','*',''];
 function corsHandler(){let calls=0;const h=createHandler({url,rpc:async()=>{calls++;return {data:{ok:true,contract:'guest-integration-v1'},error:null};}});return {h,calls:()=>calls};}
 const post=(origin?:string)=>new Request('https://local',{method:'POST',body:'{"action":"contract"}',headers:origin===undefined?{}:{origin}});
 const options=(origin?:string)=>new Request('https://local',{method:'OPTIONS',headers:origin===undefined?{}:{origin,'access-control-request-method':'POST','access-control-request-headers':'authorization,content-type,apikey,x-client-info'}});
